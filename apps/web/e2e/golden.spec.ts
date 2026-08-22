@@ -28,7 +28,13 @@ test("two users are isolated and a bot completes durable work", async ({ browser
 
   const composer = pageA.getByPlaceholder(/작업 지시/);
   await composer.fill("write a file in your home called notes/result.txt that says isolation-ok");
+  const sendResponse = pageA.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/threads/send") && response.request().method() === "POST",
+  );
   await pageA.keyboard.press("Enter");
+  const sent = await sendResponse;
+  expect(sent.ok()).toBe(true);
   await expect(
     pageA.getByText(/writing that into my home|isolation-ok|handled/i).first(),
   ).toBeVisible({
