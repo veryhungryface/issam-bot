@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadEnv } from "./env.js";
+import { deploymentModelKeyForProvider, loadEnv } from "./env.js";
 
 const base = {
   DATABASE_URL: "postgres://rakazo:rakazo@127.0.0.1:5433/rakazo",
@@ -24,6 +24,40 @@ describe("loadEnv", () => {
     expect(env.agentRuntime).toBe("scripted");
     expect(env.sandboxProvider).toBe("fake");
     expect(env.wakeupDriver).toBe("memory");
+  });
+
+  it("selects the deployment key for the configured model provider", () => {
+    expect(
+      loadEnv({
+        ...base,
+        PI_DEFAULT_PROVIDER: "openai",
+        OPENAI_API_KEY: "  test-openai-key  ",
+        OPENROUTER_API_KEY: "test-openrouter-key",
+      }),
+    ).toMatchObject({
+      defaultProvider: "openai",
+      openAiKey: "test-openai-key",
+      openRouterKey: "test-openrouter-key",
+      deploymentModelKey: "test-openai-key",
+    });
+
+    expect(
+      loadEnv({
+        ...base,
+        PI_DEFAULT_PROVIDER: "openrouter",
+        OPENAI_API_KEY: "test-openai-key",
+        OPENROUTER_API_KEY: "test-openrouter-key",
+      }).deploymentModelKey,
+    ).toBe("test-openrouter-key");
+  });
+
+  it("does not leak a deployment key across unrelated providers", () => {
+    expect(
+      deploymentModelKeyForProvider("qwen", {
+        openAiKey: "test-openai-key",
+        openRouterKey: "test-openrouter-key",
+      }),
+    ).toBeUndefined();
   });
 
   it("loads provider-specific Daytona configuration", () => {

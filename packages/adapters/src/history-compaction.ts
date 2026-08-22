@@ -73,6 +73,8 @@ export interface CompactHistoryDeps {
   runtime: AgentRuntime;
   jobs: JobPublisher;
   deploymentModelKey?: string;
+  deploymentModelProvider?: string;
+  deploymentModelId?: string;
   saveSupermemoryMemory?: typeof defaultSaveSupermemoryMemory;
 }
 
@@ -105,7 +107,7 @@ export async function compactHistory(deps: CompactHistoryDeps, threadId: string)
       ? fullTranscript.slice(-MAX_TRANSCRIPT_CHARS)
       : fullTranscript;
 
-  // Platform default (OpenRouter) when a usable cloud credential exists. Otherwise fall back to
+  // Platform default when a usable cloud credential exists. Otherwise fall back to
   // the deployment's own configured default model — this is how a keyless local-mlx/Ollama model
   // set up during onboarding gets used for compaction too, rather than silently doing nothing.
   // "scripted" means nothing at all is configured: ScriptedAgentRuntime answers by echoing canned
@@ -113,8 +115,8 @@ export async function compactHistory(deps: CompactHistoryDeps, threadId: string)
   // advance the cursor past messages that are then lost from both stores. Skip instead.
   const model = deps.deploymentModelKey
     ? {
-        provider: "openrouter",
-        id: process.env.PI_DEFAULT_MODEL ?? DEFAULT_SUMMARIZER_MODEL_ID,
+        provider: deps.deploymentModelProvider ?? process.env.PI_DEFAULT_PROVIDER ?? "openrouter",
+        id: deps.deploymentModelId ?? process.env.PI_DEFAULT_MODEL ?? DEFAULT_SUMMARIZER_MODEL_ID,
         apiKey: deps.deploymentModelKey,
       }
     : await (async () => {

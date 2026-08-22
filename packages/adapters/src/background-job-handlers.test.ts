@@ -13,7 +13,7 @@ import { compactHistory } from "./history-compaction.js";
 vi.mock("./history-compaction.js", () => ({ compactHistory: vi.fn(async () => undefined) }));
 
 describe("createBackgroundJobHandlers", () => {
-  it("compacts the requested thread with the runtime, job publisher, and model key it was given", async () => {
+  it("compacts the requested thread with the runtime, jobs, and deployment model it was given", async () => {
     const prisma = {} as unknown as PrismaClient;
     const runtime = {} as unknown as AgentRuntime;
     const jobs = {} as unknown as JobPublisher;
@@ -26,13 +26,22 @@ describe("createBackgroundJobHandlers", () => {
       events: {} as unknown as ThreadEvents,
       workerId: "worker-1",
       runtime,
-      deploymentModelKey: "openrouter-key",
+      deploymentModelKey: "openai-key",
+      deploymentModelProvider: "openai",
+      deploymentModelId: "gpt-5.6-luna",
     });
 
     await handlers["history.compact"]({ threadId: "thread-1" });
 
     expect(compactHistory).toHaveBeenCalledWith(
-      { prisma, runtime, jobs, deploymentModelKey: "openrouter-key" },
+      {
+        prisma,
+        runtime,
+        jobs,
+        deploymentModelKey: "openai-key",
+        deploymentModelProvider: "openai",
+        deploymentModelId: "gpt-5.6-luna",
+      },
       "thread-1",
     );
   });

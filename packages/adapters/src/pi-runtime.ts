@@ -57,7 +57,7 @@ export class PiAgentRuntime implements AgentRuntime {
           return;
         }
 
-        const deploymentApiKey = provider === "openai" ? process.env.OPENAI_API_KEY : process.env.OPENROUTER_API_KEY;
+        const deploymentApiKey = deploymentApiKeyForProvider(provider);
         const apiKey = request.model.oauth ? undefined : (request.model.apiKey ?? deploymentApiKey);
         const toolDefs = request.tools.length ? request.tools : builtinAgentTools;
         const nestedAgents = new Set<Agent>();
@@ -170,6 +170,19 @@ export class PiAgentRuntime implements AgentRuntime {
       running.delete(request.runId);
     }
   }
+}
+
+export function deploymentApiKeyForProvider(
+  provider: string,
+  source: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const value =
+    provider.trim().toLowerCase() === "openai"
+      ? source.OPENAI_API_KEY
+      : provider.trim().toLowerCase() === "openrouter"
+        ? source.OPENROUTER_API_KEY
+        : undefined;
+  return value?.trim() || undefined;
 }
 
 function modelsForRequest(request: AgentRunRequest, provider: string): Models {

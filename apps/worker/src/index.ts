@@ -10,6 +10,7 @@ import {
   createPostgresReconciliationLeadership,
   createRunExecutor,
   createRunSandbox,
+  deploymentApiKeyForProvider,
   EncryptedSecretStore,
   ExpoPushProvider,
   GraphileJobPublisher,
@@ -35,6 +36,9 @@ async function main() {
     publisher: pool,
   });
   const events = createThreadEvents(prisma, realtime);
+  const defaultModelProvider = process.env.PI_DEFAULT_PROVIDER ?? "openrouter";
+  const defaultModelId = process.env.PI_DEFAULT_MODEL ?? "deepseek/deepseek-v4-flash-0731";
+  const deploymentModelKey = deploymentApiKeyForProvider(defaultModelProvider);
   const runtime =
     process.env.AGENT_RUNTIME === "scripted" ? new ScriptedAgentRuntime() : new PiAgentRuntime();
   const dataDir = process.env.DATA_DIR ?? "./data";
@@ -67,11 +71,13 @@ async function main() {
     artifacts,
     connector: stack.connector,
     listConnectedPluginSlugs: stack.composio?.listConnectedSlugs.bind(stack.composio),
-    secrets: [process.env.OPENROUTER_API_KEY ?? "", process.env.COMPOSIO_API_KEY ?? ""].filter(
-      Boolean,
-    ),
+    secrets: [
+      process.env.OPENAI_API_KEY ?? "",
+      process.env.OPENROUTER_API_KEY ?? "",
+      process.env.COMPOSIO_API_KEY ?? "",
+    ].filter(Boolean),
     secretStore: secrets,
-    deploymentModelKey: process.env.OPENROUTER_API_KEY,
+    deploymentModelKey,
     dataDir,
     notifications: new ExpoPushProvider(dataDir),
     jobs,
@@ -87,7 +93,9 @@ async function main() {
     events,
     workerId: process.pid.toString(),
     runtime,
-    deploymentModelKey: process.env.OPENROUTER_API_KEY,
+    deploymentModelKey,
+    deploymentModelProvider: defaultModelProvider,
+    deploymentModelId: defaultModelId,
   });
   await jobHost.start(jobHandlers);
   const reconciler = createJobReconciler({

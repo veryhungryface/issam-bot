@@ -15,7 +15,9 @@ export interface AppEnv {
   sandboxSupervisorToken: string;
   sandboxProvider: string;
   agentRuntime: string;
+  openAiKey: string | undefined;
   openRouterKey: string | undefined;
+  deploymentModelKey: string | undefined;
   e2bApiKey: string | undefined;
   daytonaApiKey: string | undefined;
   daytonaApiUrl: string | undefined;
@@ -32,6 +34,9 @@ export interface AppEnv {
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   const authSecret = resolveAuthSecret(source);
+  const defaultProvider = source.PI_DEFAULT_PROVIDER ?? "openrouter";
+  const openAiKey = optional(source.OPENAI_API_KEY);
+  const openRouterKey = optional(source.OPENROUTER_API_KEY);
   return {
     databaseUrl: required(source, "DATABASE_URL"),
     realtimeDatabaseUrl: source.REALTIME_DATABASE_URL ?? required(source, "DATABASE_URL"),
@@ -47,7 +52,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     sandboxSupervisorToken: resolveSupervisorToken(source),
     sandboxProvider: source.SANDBOX_PROVIDER ?? "docker",
     agentRuntime: source.AGENT_RUNTIME ?? "pi",
-    openRouterKey: source.OPENROUTER_API_KEY,
+    openAiKey,
+    openRouterKey,
+    deploymentModelKey: deploymentModelKeyForProvider(defaultProvider, {
+      openAiKey,
+      openRouterKey,
+    }),
     e2bApiKey: source.E2B_API_KEY,
     daytonaApiKey: source.DAYTONA_API_KEY,
     daytonaApiUrl: source.DAYTONA_API_URL,
@@ -55,12 +65,26 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     boxApiKey: source.BOX_API_KEY,
     boxApiUrl: source.BOX_API_URL ?? source.BOX_BASE_URL,
     composioApiKey: source.COMPOSIO_API_KEY,
-    defaultProvider: source.PI_DEFAULT_PROVIDER ?? "openrouter",
+    defaultProvider,
     defaultModel: source.PI_DEFAULT_MODEL ?? "deepseek/deepseek-v4-flash-0731",
     wakeupDriver: source.WAKEUP_DRIVER ?? "graphile",
     port: Number(source.API_PORT ?? 3100),
     gitSha: optional(source.GIT_SHA) ?? optional(source.RAKAZO_GIT_SHA),
   };
+}
+
+export function deploymentModelKeyForProvider(
+  provider: string,
+  keys: Pick<AppEnv, "openAiKey" | "openRouterKey">,
+): string | undefined {
+  switch (provider.trim().toLowerCase()) {
+    case "openai":
+      return keys.openAiKey;
+    case "openrouter":
+      return keys.openRouterKey;
+    default:
+      return undefined;
+  }
 }
 
 function required(source: NodeJS.ProcessEnv, key: string): string {

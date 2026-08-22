@@ -97,6 +97,8 @@ type HarnessMessage = {
 function compactionHarness(
   options: {
     deploymentModelKey?: string;
+    deploymentModelProvider?: string;
+    deploymentModelId?: string;
     settings?: { defaultModelProvider: string | null; defaultModelId: string | null } | null;
     messages?: HarnessMessage[];
     nextMessageSeq?: number;
@@ -163,6 +165,8 @@ function compactionHarness(
       runtime: runtime as unknown as AgentRuntime,
       jobs: jobs as unknown as JobPublisher,
       deploymentModelKey: options.deploymentModelKey,
+      deploymentModelProvider: options.deploymentModelProvider,
+      deploymentModelId: options.deploymentModelId,
       saveSupermemoryMemory,
     },
   };
@@ -234,6 +238,23 @@ describe("compactHistory", () => {
       provider: "openrouter",
       id: "moonshotai/kimi-k2",
       apiKey: "openrouter-key",
+    });
+  });
+
+  it("uses the configured OpenAI deployment provider for compaction", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "openai-key",
+      deploymentModelProvider: "openai",
+      deploymentModelId: "gpt-5.6-luna",
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.model).toEqual({
+      provider: "openai",
+      id: "gpt-5.6-luna",
+      apiKey: "openai-key",
     });
   });
 

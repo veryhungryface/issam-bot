@@ -1,6 +1,11 @@
 import type { ConnectorTool } from "@rakazo/adapter-kit";
 import { describe, expect, it } from "vitest";
-import { normalizeAgentToolName, normalizeAgentToolNames, PiAgentRuntime } from "./pi-runtime.js";
+import {
+  deploymentApiKeyForProvider,
+  normalizeAgentToolName,
+  normalizeAgentToolNames,
+  PiAgentRuntime,
+} from "./pi-runtime.js";
 
 function tool(name: string): ConnectorTool {
   return { name, description: name, inputSchema: { type: "object" } };
@@ -32,6 +37,23 @@ describe("Pi agent runtime", () => {
       if (event.type === "text") events.push(event.text);
     }
     expect(events.join(" ")).toMatch(/Unknown model/i);
+  });
+});
+
+describe("Pi deployment credentials", () => {
+  const source = {
+    OPENAI_API_KEY: "  test-openai-key  ",
+    OPENROUTER_API_KEY: "test-openrouter-key",
+  };
+
+  it("selects only the key belonging to the requested provider", () => {
+    expect(deploymentApiKeyForProvider("openai", source)).toBe("test-openai-key");
+    expect(deploymentApiKeyForProvider("openrouter", source)).toBe("test-openrouter-key");
+  });
+
+  it("does not send an OpenRouter key to an unrelated provider", () => {
+    expect(deploymentApiKeyForProvider("qwen", source)).toBeUndefined();
+    expect(deploymentApiKeyForProvider("openai-codex", source)).toBeUndefined();
   });
 });
 

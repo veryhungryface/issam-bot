@@ -22,6 +22,8 @@ export function createBackgroundJobHandlers(deps: {
   workerId: string;
   runtime: AgentRuntime;
   deploymentModelKey?: string;
+  deploymentModelProvider?: string;
+  deploymentModelId?: string;
 }): BackgroundJobHandlers {
   return {
     "run.continue": async (payload) => {
@@ -48,6 +50,8 @@ export function createBackgroundJobHandlers(deps: {
           runtime: deps.runtime,
           jobs: deps.jobs,
           deploymentModelKey: deps.deploymentModelKey,
+          deploymentModelProvider: deps.deploymentModelProvider,
+          deploymentModelId: deps.deploymentModelId,
         },
         payload.threadId,
       );
