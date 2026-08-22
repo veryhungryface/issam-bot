@@ -74,8 +74,18 @@ export async function createApp(
   const events = createThreadEvents(prisma, realtime);
   await prisma.deploymentSettings.upsert({
     where: { id: "default" },
-    create: { id: "default" },
-    update: {},
+    create: {
+      id: "default",
+      defaultModelProvider: env.defaultProvider,
+      defaultModelId: env.defaultModel,
+    },
+    // Deployment model credentials live in server secrets. Keep the persisted
+    // selection synchronized with the provider that owns that secret so a
+    // stale OpenRouter default cannot route an OpenAI-only deployment.
+    update: {
+      defaultModelProvider: env.defaultProvider,
+      defaultModelId: env.defaultModel,
+    },
   });
 
   const jobKind = env.wakeupDriver;
@@ -162,6 +172,8 @@ export async function createApp(
     ),
     secretStore: secrets,
     deploymentModelKey: env.deploymentModelKey,
+    deploymentModelProvider: env.defaultProvider,
+    deploymentModelId: env.defaultModel,
     dataDir: env.dataDir,
     notifications,
     jobs,

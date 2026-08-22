@@ -83,6 +83,8 @@ async function main() {
     ].filter(Boolean),
     secretStore: secrets,
     deploymentModelKey,
+    deploymentModelProvider: defaultModelProvider,
+    deploymentModelId: defaultModelId,
     dataDir,
     notifications: new ExpoPushProvider(dataDir),
     jobs,

@@ -124,6 +124,8 @@ export interface ExecutorDeps {
   secrets: string[];
   secretStore?: EncryptedSecretStore;
   deploymentModelKey?: string;
+  deploymentModelProvider?: string;
+  deploymentModelId?: string;
   dataDir?: string;
   notifications?: NotificationProvider;
   jobs: JobPublisher;
@@ -138,6 +140,26 @@ export async function deferFutureRoutine(
   if (scheduledAt.getTime() <= Date.now() + 1_000) return false;
   await jobs.enqueue(routineWakeupJob(routineId, scheduledAt));
   return true;
+}
+
+export function resolveExecutionModel(input: {
+  credential?: { provider: string; defaultModel: string | null } | null;
+  settings?: { defaultModelProvider: string | null; defaultModelId: string | null } | null;
+  deploymentModelProvider?: string;
+  deploymentModelId?: string;
+}): { provider: string; id: string } {
+  return {
+    provider:
+      input.credential?.provider ??
+      input.settings?.defaultModelProvider ??
+      input.deploymentModelProvider ??
+      "scripted",
+    id:
+      input.credential?.defaultModel ??
+      input.settings?.defaultModelId ??
+      input.deploymentModelId ??
+      "scripted",
+  };
 }
 
 async function loadLivePluginSlugs(
@@ -898,8 +920,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
               currentTurnImages,
               tools,
               model: {
-                provider: credential?.provider ?? settings?.defaultModelProvider ?? "scripted",
-                id: credential?.defaultModel ?? settings?.defaultModelId ?? "scripted",
+                ...resolveExecutionModel({
+                  credential,
+                  settings,
+                  deploymentModelProvider: deps.deploymentModelProvider,
+                  deploymentModelId: deps.deploymentModelId,
+                }),
                 apiKey: resolved.oauth ? undefined : resolved.apiKey,
                 oauth: resolved.oauth
                   ? { credential: resolved.oauth, persist: resolved.persistOAuth }
