@@ -77,6 +77,27 @@ history, error tracking, or audit payloads.
 Direct user-to-Browserbase transport is intentional: proxying the stream through the 2 GB VPS would
 increase bandwidth, latency, and the blast radius of a credential leak.
 
+### Korean and other IME input
+
+Browserbase Live View forwards desktop key events, but cross-origin remote keyboard input does not
+reliably preserve browser IME composition. Direct Korean typing can therefore arrive as separated
+jamo. While the user holds computer control, the full-screen viewer exposes a local **한글/IME
+입력** field. The user first clicks the desired field in the remote browser, composes text locally,
+then presses Enter or **입력**. The server writes the completed Unicode string to the remote
+clipboard and sends `Control+V` through the existing authenticated computer-input endpoint. Input
+is capped at 10,000 characters and remains subject to the active takeover lease.
+
+ASCII keyboard input, pointer actions, and scrolling continue to use Live View directly.
+
+## Login context scope
+
+- **Shared login** (the default, internally `team`) uses one persistent Browserbase Context for all
+  bots in the same workspace.
+- **Bot-only login** (internally `dedicated`) assigns a separate persistent Context to that bot.
+- Context IDs are stored only in the server-side computer provider reference and every lookup is
+  constrained by the authenticated workspace and user.
+- Stopping or idling a session ends the Browserbase session but retains its Context.
+
 ## Validation checklist
 
 - Create a Context, create a session, navigate to `https://example.com`, and read the page title.

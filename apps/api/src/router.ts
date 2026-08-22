@@ -942,11 +942,18 @@ export function createRouter(deps: RouterDeps) {
           throw new ORPCError("FORBIDDEN");
         }
         if (!computer.providerRef) return { ok: true as const };
+        const clipboardText =
+          input.kind === "clipboard" ? String(input.payload.text ?? "") : undefined;
+        if (clipboardText !== undefined && (!clipboardText || clipboardText.length > 10_000)) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "clipboard text must contain between 1 and 10000 characters",
+          });
+        }
         const mapped =
           input.kind === "key"
             ? { kind: "key" as const, key: String(input.payload.key ?? "") }
             : input.kind === "clipboard"
-              ? { kind: "clipboard" as const, text: String(input.payload.text ?? "") }
+              ? { kind: "clipboard" as const, text: clipboardText! }
               : input.kind === "scroll"
                 ? {
                     kind: "scroll" as const,

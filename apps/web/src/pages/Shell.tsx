@@ -179,6 +179,9 @@ export function ShellPage() {
   const [screenUrl, setScreenUrl] = useState<string | null>(null);
   const [screenNotice, setScreenNotice] = useState<string | null>(null);
   const [computerOpen, setComputerOpen] = useState(false);
+  const [remoteText, setRemoteText] = useState("");
+  const [remoteTextBusy, setRemoteTextBusy] = useState(false);
+  const [remoteTextError, setRemoteTextError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [usage, setUsage] = useState<{
     inputTokens: number;
@@ -998,8 +1001,34 @@ export function ShellPage() {
   async function releaseComputer() {
     if (!active) return;
     setComputerOpen(false);
+    setRemoteText("");
+    setRemoteTextError(null);
     await rpc.computer.release({ botId: active.id }).catch(() => undefined);
     await refreshThread(active.id);
+  }
+
+  async function pasteRemoteText() {
+    if (!active || !hasControl || !remoteText || remoteTextBusy) return;
+    const text = remoteText;
+    setRemoteTextBusy(true);
+    setRemoteTextError(null);
+    try {
+      await rpc.computer.input({
+        botId: active.id,
+        kind: "clipboard",
+        payload: { text },
+      });
+      await rpc.computer.input({
+        botId: active.id,
+        kind: "key",
+        payload: { key: "Control+V" },
+      });
+      setRemoteText("");
+    } catch {
+      setRemoteTextError("입력하지 못했습니다. 원격 입력칸을 다시 클릭한 뒤 재시도하세요.");
+    } finally {
+      setRemoteTextBusy(false);
+    }
   }
 
   const embeddedScreenUrl = embeddableScreenUrl(screenUrl);
@@ -1912,6 +1941,45 @@ export function ShellPage() {
               </button>
             </div>
           </div>
+          {computer?.kind === "browserbase" && hasControl && !recordingSkill ? (
+            <div className="border-b border-[#171719] bg-[#0B0B0D] px-[18px] py-2.5">
+              <div className="flex items-center gap-2">
+                <input
+                  value={remoteText}
+                  maxLength={10_000}
+                  autoComplete="off"
+                  aria-label="한글 및 IME 원격 입력"
+                  placeholder="한글/IME 입력 — 원격 입력칸을 먼저 클릭하세요"
+                  onChange={(event) => {
+                    setRemoteText(event.target.value);
+                    setRemoteTextError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+                      return;
+                    }
+                    event.preventDefault();
+                    void pasteRemoteText();
+                  }}
+                  className="min-w-0 flex-1 rounded-[10px] border border-[#303035] bg-[#141416] px-3 py-2 text-[14px] text-[#ECECEE] outline-none placeholder:text-[#66666D] focus:border-[#66666D]"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!remoteText || remoteTextBusy}
+                  onClick={() => void pasteRemoteText()}
+                >
+                  {remoteTextBusy ? "입력 중…" : "입력"}
+                </Button>
+              </div>
+              <div
+                className={`mt-1.5 text-[12px] ${remoteTextError ? "text-[#F17171]" : "text-[#6C6C70]"}`}
+              >
+                {remoteTextError ?? "IME 조합이 필요한 문자는 여기서 완성한 뒤 Enter를 누르세요."}
+              </div>
+            </div>
+          ) : null}
           <div className="relative min-h-0 flex-1 bg-[#0E0E10]">
             {computer?.kind === "desktop" ? (
               <div className="grid h-full place-items-center px-8 text-center text-sm text-[#6C6C70]">
@@ -2592,9 +2660,14 @@ function ComputerModePicker({
                 : "border-[#26262A] text-[#85858A]"
             }`}
           >
-            {mode === "team" ? "Team" : "Private"}
+            {mode === "team" ? "Shared login" : "Bot-only login"}
           </button>
         ))}
+      </div>
+      <div className="mt-2 text-[12.5px] leading-5 text-[#6C6C70]">
+        {value === "team"
+          ? "All bots in this workspace share the same browser login context."
+          : "This bot keeps a separate browser login context."}
       </div>
     </div>
   );
