@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   computerPanelAutoBoot,
   isThreadSnapshotEvent,
+  matchesOptimisticUserMessage,
   mergeThreadSnapshot,
   prependThreadMessagePage,
   reduceComputerStatus,
@@ -16,6 +17,35 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it("only replaces an optimistic user message with its matching committed event", () => {
+    const optimistic: ThreadMessage = {
+      ...message("optimistic:nonce", [{ kind: "text", text: "새 요청" }]),
+      role: "user",
+      createdAt: "2026-08-16T00:00:02.000Z",
+    };
+
+    expect(
+      matchesOptimisticUserMessage(
+        optimistic,
+        event({
+          type: "thread.message.created",
+          createdAt: "2026-08-16T00:00:03.000Z",
+          payload: { role: "user", blocks: [{ kind: "text", text: "새 요청" }] },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      matchesOptimisticUserMessage(
+        optimistic,
+        event({
+          type: "thread.message.created",
+          createdAt: "2026-08-16T00:00:01.000Z",
+          payload: { role: "user", blocks: [{ kind: "text", text: "이전 요청" }] },
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it("prepends older pages in order, removes overlaps, and advances the history cursor", () => {
     const initial = snapshot([message("m-2", [], 2), message("m-3", [], 3)], 2);
 

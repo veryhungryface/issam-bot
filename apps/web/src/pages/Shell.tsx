@@ -82,6 +82,7 @@ import {
   computerPanelAutoBoot,
   isComputerStatusEvent,
   isThreadSnapshotEvent,
+  matchesOptimisticUserMessage,
   mergeThreadSnapshot,
   prependThreadMessagePage,
   reduceComputerStatus,
@@ -535,7 +536,7 @@ export function ShellPage() {
             applyThreadEvent(event, setSnapshot, setComputer);
             if (event.type === "thread.message.created" && event.payload.role === "user") {
               setOptimisticMessages((current) => {
-                if (!(event.botId in current)) return current;
+                if (!matchesOptimisticUserMessage(current[event.botId], event)) return current;
                 const next = { ...current };
                 delete next[event.botId];
                 return next;

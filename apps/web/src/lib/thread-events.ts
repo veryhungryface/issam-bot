@@ -47,6 +47,26 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
   );
 }
 
+export function matchesOptimisticUserMessage(
+  optimistic: ThreadMessage | undefined,
+  event: ProductEvent,
+): boolean {
+  if (!optimistic || event.type !== "thread.message.created" || event.payload.role !== "user") {
+    return false;
+  }
+  if (Date.parse(event.createdAt) < Date.parse(optimistic.createdAt)) return false;
+  const optimisticText = optimistic.blocks
+    .filter((block) => block.kind === "text")
+    .map((block) => block.text)
+    .join("\n");
+  const eventBlocks = (event.payload.blocks as ThreadMessage["blocks"] | undefined) ?? [];
+  const eventText = eventBlocks
+    .filter((block) => block.kind === "text")
+    .map((block) => block.text)
+    .join("\n");
+  return optimisticText.length > 0 && optimisticText === eventText;
+}
+
 export function reduceThreadSnapshot(
   prev: ThreadSnapshot | null,
   event: ProductEvent,
