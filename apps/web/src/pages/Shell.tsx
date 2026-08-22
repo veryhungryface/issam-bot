@@ -47,6 +47,7 @@ import {
   Puzzle,
   Settings,
   Square,
+  Trash2,
   Volume2,
   X,
 } from "lucide-react";
@@ -1234,6 +1235,32 @@ export function ShellPage() {
               >
                 <LogOut size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
                 <span className="text-[14.5px] text-[#ECECEE]">Log out</span>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "Delete this account and all of its data? This cannot be undone.",
+                    )
+                  ) {
+                    return;
+                  }
+                  const password = window.prompt(
+                    "Enter your password to confirm account deletion.",
+                  );
+                  if (!password) return;
+                  const result = await authClient.deleteUser({ password, callbackURL: "/" });
+                  if (result.error) {
+                    window.alert(result.error.message ?? "Could not delete the account.");
+                    return;
+                  }
+                  navigate("/");
+                }}
+                className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 text-[#F08B8B] hover:bg-[#2A1D20]"
+              >
+                <Trash2 size={16} strokeWidth={1.7} />
+                <span className="text-[14.5px]">Delete account</span>
               </button>
             </div>
           ) : null}

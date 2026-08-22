@@ -14,7 +14,13 @@ that the behavior exists.
 | OpenAI temporary provider | Pass, previously observed | `gpt-5.6-luna` returned a Responses API result and token usage. Agent tool loop is not proven by this canary. |
 | Company Qwen provider | Blocked | Source-IP allowlisting was not available; no production capability claim is made. |
 | Supabase Data API isolation | Pass | All 35 application tables have RLS enabled; `anon` and `authenticated` retain access to 0 tables. |
-| Public HTTPS web deployment | Not run | A domain is not configured. IP-based health only is allowed until then. |
+| IP-based VPS deployment | Pass | The immutable release served API/Web/Worker/Caddy, reported its exact revision from `/health`, and passed the deployment workflow. HTTPS remains blocked on a domain. |
+| Signup and bot onboarding | Pass | A disposable user signed up through the deployed web UI, selected the deployment model without entering a client key, and created a Korean-named Browserbase bot. |
+| OpenAI + Browserbase browser action | Pass | The deployment model interpreted a Korean instruction, opened `https://example.com` in Browserbase, and returned `Example Domain` in the chat. |
+| Browserbase Live View and takeover | Pass | The deployed UI embedded the active Browserbase address bar/screencast, entered human-control mode, and returned control to the bot. |
+| Browserbase idle cleanup | Pass | After the configured 180 seconds, the worker completed `computer.sleep`; the provider reported 0 active sessions and the newest session as `COMPLETED`. |
+| Account deletion | Pass | The enabled Better Auth deletion endpoint removed the disposable user, its personal workspace/bot data and Browserbase Context, cleared the owner pointer, and revoked the session. The web menu now exposes this path behind confirmation and password re-entry. |
+| Public HTTPS web deployment | Not run | A domain is not configured. IP-based access is for technical testing only. |
 
 Previously observed results above are operational notes from Phase 0 and are not reproduced by this
 documentation-only change. Provider secrets are intentionally absent from the repository.
@@ -30,7 +36,7 @@ Validation performed for this change:
 | Healthcheck against a local JSON health endpoint, including revision match | Pass |
 | `git diff --check` | Pass |
 | Full monorepo TypeScript checks | Pass; 19/19 Turbo tasks |
-| Unit/integration tests | Pass; 654 passed, 53 environment-dependent tests skipped |
+| Unit/integration tests | Pass; the latest adapters run passed 330 tests with 7 skipped, and the earlier full monorepo run passed 654 with 53 environment-dependent tests skipped |
 | Production Vite web build | Pass; 2,331 modules transformed |
 | Docker Compose render on the target VPS | Pass with Docker Compose 2.27.1 |
 | Caddy container configuration validation on the target VPS | Pass with Caddy 2.10.2 |
