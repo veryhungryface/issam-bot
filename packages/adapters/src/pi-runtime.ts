@@ -57,9 +57,8 @@ export class PiAgentRuntime implements AgentRuntime {
           return;
         }
 
-        const apiKey = request.model.oauth
-          ? undefined
-          : (request.model.apiKey ?? process.env.OPENROUTER_API_KEY);
+        const deploymentApiKey = provider === "openai" ? process.env.OPENAI_API_KEY : process.env.OPENROUTER_API_KEY;
+        const apiKey = request.model.oauth ? undefined : (request.model.apiKey ?? deploymentApiKey);
         const toolDefs = request.tools.length ? request.tools : builtinAgentTools;
         const nestedAgents = new Set<Agent>();
         const host: ToolHost = {
