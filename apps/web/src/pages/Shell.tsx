@@ -38,6 +38,7 @@ import {
   Cpu,
   Gauge,
   LogOut,
+  Menu as MenuIcon,
   Mic,
   Monitor,
   Paperclip,
@@ -177,6 +178,7 @@ export function ShellPage() {
   const [screenUrl, setScreenUrl] = useState<string | null>(null);
   const [screenNotice, setScreenNotice] = useState<string | null>(null);
   const [computerOpen, setComputerOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [usage, setUsage] = useState<{
     inputTokens: number;
     outputTokens: number;
@@ -591,6 +593,7 @@ export function ShellPage() {
   }, [showWorkspaceSearch, workspaceQuery]);
 
   async function jumpToSearchHit(hit: SearchHit) {
+    setMobileSidebarOpen(false);
     setQuery("");
     setSearchHits([]);
     const params = new URLSearchParams();
@@ -917,6 +920,7 @@ export function ShellPage() {
 
   useEffect(() => {
     setComputerOpen(false);
+    setMobileSidebarOpen(false);
   }, [active?.id]);
 
   // The routine panel copies a routine's data into local draft state at click time
@@ -1017,17 +1021,42 @@ export function ShellPage() {
       {bootstrapMe !== undefined ? (
         <HostComputerPrompt initialMe={bootstrapMe ?? undefined} />
       ) : null}
-      <aside className="flex w-[316px] shrink-0 flex-col border-r border-[#171719] bg-[#0B0B0C]">
+      {mobileSidebarOpen ? (
+        <button
+          type="button"
+          aria-label="Close bot navigation"
+          className="absolute inset-0 z-30 bg-black/60 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      ) : null}
+      <aside
+        id="bot-navigation"
+        data-testid="bot-sidebar"
+        className={`${mobileSidebarOpen ? "flex" : "hidden"} absolute inset-y-0 left-0 z-40 w-[min(316px,88vw)] shrink-0 flex-col border-r border-[#171719] bg-[#0B0B0C] md:relative md:z-auto md:flex md:w-[316px]`}
+      >
         <div className="app-drag flex items-center justify-between px-[18px] pb-3 pt-4">
           <WindowChrome />
-          <button
-            type="button"
-            onClick={() => setPanel("create")}
-            className="app-no-drag text-[21px] text-[#7A7A80] hover:text-[#C9C9CE]"
-            title="New bot"
-          >
-            +
-          </button>
+          <div className="app-no-drag flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileSidebarOpen(false);
+                setPanel("create");
+              }}
+              className="text-[21px] text-[#7A7A80] hover:text-[#C9C9CE]"
+              title="New bot"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              aria-label="Close bot navigation"
+              className="text-[#85858A] hover:text-[#ECECEE] md:hidden"
+              onClick={() => setMobileSidebarOpen(false)}
+            >
+              <X size={18} strokeWidth={1.8} />
+            </button>
+          </div>
         </div>
         <div className="mx-3.5 mb-3 flex items-center gap-2.5 rounded-xl border border-[#202023] bg-[#141416] px-3 py-2 text-[14px] text-[#6C6C70]">
           <span>⌕</span>
@@ -1057,7 +1086,10 @@ export function ShellPage() {
                   <button
                     key={bot.id}
                     type="button"
-                    onClick={() => navigate(`/app/${bot.id}`)}
+                    onClick={() => {
+                      setMobileSidebarOpen(false);
+                      navigate(`/app/${bot.id}`);
+                    }}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setBotMenu({
@@ -1219,20 +1251,32 @@ export function ShellPage() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-[#0D0D0E]">
-        <div className="flex items-center justify-between border-b border-[#141416] px-[22px] py-[17px]">
-          <button
-            type="button"
-            data-testid="bot-settings-trigger"
-            onClick={() => setPanel("settings")}
-            className="flex min-w-0 items-center gap-3"
-          >
-            {active ? <BotAvatar color={active.color} size={26} /> : null}
-            <span className="min-w-0">
-              <span className="block truncate text-[16px] font-medium text-[#ECECEE]">
-                {active?.name ?? "Select a bot"}
+        <div className="flex items-center justify-between border-b border-[#141416] px-3 py-[17px] sm:px-[22px]">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button
+              type="button"
+              aria-label="Open bot navigation"
+              aria-controls="bot-navigation"
+              aria-expanded={mobileSidebarOpen}
+              className="grid h-[30px] w-[34px] shrink-0 place-items-center rounded-[9px] hover:bg-[#1B1B1E] md:hidden"
+              onClick={() => setMobileSidebarOpen(true)}
+            >
+              <MenuIcon size={18} strokeWidth={1.8} className="text-[#A8A8AD]" />
+            </button>
+            <button
+              type="button"
+              data-testid="bot-settings-trigger"
+              onClick={() => setPanel("settings")}
+              className="flex min-w-0 items-center gap-3"
+            >
+              {active ? <BotAvatar color={active.color} size={26} /> : null}
+              <span className="min-w-0">
+                <span className="block truncate text-[16px] font-medium text-[#ECECEE]">
+                  {active?.name ?? "Select a bot"}
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+          </div>
           <div className="flex items-center gap-1">
             {active ? (
               <button
@@ -1317,12 +1361,14 @@ export function ShellPage() {
       <aside
         data-testid="side-panel"
         data-panel={panel ?? "closed"}
-        className={`relative z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-[#0A0A0B] transition-[width] duration-150 ease-out ${
-          panel && active ? "w-[384px] border-l border-[#141416]" : "pointer-events-none w-0"
+        className={`absolute inset-y-0 right-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-[#0A0A0B] transition-[width] duration-150 ease-out md:relative md:inset-auto ${
+          panel && active
+            ? "w-full border-l border-[#141416] md:w-[384px]"
+            : "pointer-events-none w-0"
         }`}
       >
         {panel && active ? (
-          <div className="rk-scroll h-full w-[384px] overflow-y-auto px-5 py-[17px]">
+          <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]">
             {panel !== "routine" && panel !== "create" ? (
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-[13.5px] text-[#85858A]">
