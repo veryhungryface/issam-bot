@@ -72,6 +72,7 @@ import { TeachRecordingChrome, TeachStopButton } from "../components/teach/Teach
 import { decodeArtifactBase64, openArtifact } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import { takeInitialBootstrap } from "../lib/bootstrap";
+import { createClientNonce } from "../lib/client-nonce";
 import { dictation } from "../lib/dictation";
 import { koreanStatusLabel } from "../lib/korean-labels";
 import { isBrowserbaseDisconnectedMessage, screenIframeSandbox } from "../lib/live-view";
@@ -785,7 +786,7 @@ export function ShellPage() {
       const attachments = attachmentsForBot(pendingAttachments, id);
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
-      const clientNonce = crypto.randomUUID();
+      const clientNonce = createClientNonce();
       const optimisticId = `optimistic:${clientNonce}`;
       if (trimmed) {
         setOptimisticMessages((current) => ({
