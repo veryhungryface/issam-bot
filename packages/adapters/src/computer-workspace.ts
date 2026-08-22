@@ -66,6 +66,10 @@ export async function ensureComputerWorkspaceLayout(
   botId: string | undefined,
   context: AdapterContext,
 ): Promise<void> {
+  // Browserbase persists the browser profile in its Context and intentionally
+  // has no shell-backed workspace. Team folders only apply to filesystem
+  // sandboxes; trying to mkdir here prevents cloud Chrome from ever starting.
+  if (computer.kind === "browserbase") return;
   if (scope !== "team" || !botId) return;
   let exitCode: number | undefined;
   let stderr = "";

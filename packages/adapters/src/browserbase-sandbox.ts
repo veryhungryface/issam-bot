@@ -397,14 +397,18 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     const box = this.boxes.get(computer.providerRef);
     const reference = decodeProviderRef(computer.providerRef);
     const contextId = box?.contextId ?? reference.contextId;
-    const errors: Promise<unknown>[] = [];
+    const results: PromiseSettledResult<unknown>[] = [];
     if (box) {
       this.boxes.delete(computer.providerRef);
-      errors.push(this.closeRuntime(box));
+      results.push(...(await Promise.allSettled([this.closeRuntime(box)])));
     }
-    if (reference.sessionId) errors.push(this.client.endSession(reference.sessionId));
-    errors.push(this.client.deleteContext(contextId));
-    throwCleanupError(await Promise.allSettled(errors), "destroy Browserbase context");
+    // Browserbase will reject Context deletion while its Session is still
+    // active. Request release first, then delete the persistent Context.
+    if (reference.sessionId) {
+      results.push(...(await Promise.allSettled([this.client.endSession(reference.sessionId)])));
+    }
+    results.push(...(await Promise.allSettled([this.client.deleteContext(contextId)])));
+    throwCleanupError(results, "destroy Browserbase context");
   }
 
   private requiredBox(computer: ComputerRef): BrowserbaseBox {

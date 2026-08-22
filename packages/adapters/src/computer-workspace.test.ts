@@ -41,6 +41,20 @@ describe("provider-neutral computer workspace", () => {
     );
   });
 
+  it("does not run shell workspace setup for Browserbase computers", async () => {
+    const provider = new FakeSandboxProvider();
+    const provisioned = await provider.provision(
+      { botId: "browser-workspace", homePath: "/ignored" },
+      context,
+    );
+    const browserComputer = { ...provisioned, kind: "browserbase" as const };
+    const execute = vi.spyOn(provider, "execute");
+
+    await ensureComputerWorkspaceLayout(provider, browserComputer, "team", "bot-1", context);
+
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("restores a checkpoint into a replacement provider machine", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
     roots.push(root);
