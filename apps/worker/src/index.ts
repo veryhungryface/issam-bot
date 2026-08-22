@@ -50,6 +50,11 @@ async function main() {
     daytonaTarget: process.env.DAYTONA_TARGET,
     boxApiKey: process.env.BOX_API_KEY,
     boxApiUrl: process.env.BOX_API_URL ?? process.env.BOX_BASE_URL,
+    browserbaseApiKey: process.env.BROWSERBASE_API_KEY,
+    browserbaseProjectId: process.env.BROWSERBASE_PROJECT_ID,
+    browserbaseTaskTimeoutSeconds: process.env.BROWSERBASE_TASK_TIMEOUT_SECONDS
+      ? Number(process.env.BROWSERBASE_TASK_TIMEOUT_SECONDS)
+      : undefined,
     dataDir,
     prisma,
   });

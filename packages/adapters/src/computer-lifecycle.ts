@@ -150,11 +150,13 @@ export async function provisionComputer(
 
 async function reconnectComputer(
   deps: {
+    prisma: PrismaClient;
     sandbox: SandboxProvider;
     home: AgentHomeStore;
     dataDir?: string;
   },
   computer: {
+    id: string;
     homeKey: string;
     providerRef: string | null;
     kind: string;
@@ -180,6 +182,37 @@ async function reconnectComputer(
     context.botId,
     context,
   );
+  if (computer.providerRef !== ref.providerRef || computer.kind !== ref.kind) {
+    const persisted = await deps.prisma.computer.updateMany({
+      where: {
+        id: computer.id,
+        state: "running",
+        providerRef: computer.providerRef,
+        kind: computer.kind,
+      },
+      data: { providerRef: ref.providerRef, kind: ref.kind },
+    });
+    if (persisted.count !== 1) {
+      const current = await deps.prisma.computer.findUniqueOrThrow({
+        where: { id: computer.id },
+      });
+      if (
+        current.state !== "running" ||
+        current.providerRef !== ref.providerRef ||
+        current.kind !== ref.kind
+      ) {
+        const busy = new ComputerBusyError();
+        const rollbackError = await rollbackProvisionedComputer(deps.sandbox, ref, context, busy);
+        if (rollbackError) {
+          throw new AggregateError(
+            [busy, rollbackError],
+            "Computer reconnect lost its claim and its sandbox could not be rolled back",
+          );
+        }
+        throw busy;
+      }
+    }
+  }
   return ref;
 }
 

@@ -24,6 +24,9 @@ export interface AppEnv {
   daytonaTarget: string | undefined;
   boxApiKey: string | undefined;
   boxApiUrl: string | undefined;
+  browserbaseApiKey: string | undefined;
+  browserbaseProjectId: string | undefined;
+  browserbaseTaskTimeoutSeconds: number | undefined;
   composioApiKey: string | undefined;
   defaultProvider: string;
   defaultModel: string;
@@ -64,6 +67,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     daytonaTarget: source.DAYTONA_TARGET,
     boxApiKey: source.BOX_API_KEY,
     boxApiUrl: source.BOX_API_URL ?? source.BOX_BASE_URL,
+    browserbaseApiKey: optional(source.BROWSERBASE_API_KEY),
+    browserbaseProjectId: optional(source.BROWSERBASE_PROJECT_ID),
+    browserbaseTaskTimeoutSeconds: optionalInteger(source.BROWSERBASE_TASK_TIMEOUT_SECONDS),
     composioApiKey: source.COMPOSIO_API_KEY,
     defaultProvider,
     defaultModel: source.PI_DEFAULT_MODEL ?? "deepseek/deepseek-v4-flash-0731",
@@ -96,4 +102,12 @@ function required(source: NodeJS.ProcessEnv, key: string): string {
 function optional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function optionalInteger(value: string | undefined): number | undefined {
+  const trimmed = optional(value);
+  if (trimmed === undefined) return undefined;
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed)) throw new Error(`Expected an integer, received "${trimmed}"`);
+  return parsed;
 }

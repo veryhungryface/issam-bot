@@ -90,6 +90,9 @@ export async function createApp(
     daytonaTarget: env.daytonaTarget,
     boxApiKey: env.boxApiKey,
     boxApiUrl: env.boxApiUrl,
+    browserbaseApiKey: env.browserbaseApiKey,
+    browserbaseProjectId: env.browserbaseProjectId,
+    browserbaseTaskTimeoutSeconds: env.browserbaseTaskTimeoutSeconds,
     dataDir: env.dataDir,
     prisma,
   });

@@ -20,12 +20,19 @@ describe("createSandboxProvider", () => {
     expect(() => createSandboxProvider("e2b", {})).toThrow(/E2B_API_KEY/);
     expect(() => createSandboxProvider("daytona", {})).toThrow(/DAYTONA_API_KEY/);
     expect(() => createSandboxProvider("box", {})).toThrow(/BOX_API_KEY/);
+    expect(() => createSandboxProvider("browserbase", {})).toThrow(/BROWSERBASE_API_KEY/);
     expect(createSandboxProvider("box", { boxApiKey: "test-box-key" }).describe().id).toBe("box");
+    expect(
+      createSandboxProvider("browserbase", {
+        browserbaseApiKey: "test-browserbase-key",
+        browserbaseProjectId: "test-project",
+      }).describe().id,
+    ).toBe("browserbase");
   });
 
   it("throws on unknown provider", () => {
     expect(() => createSandboxProvider("bogus", {})).toThrow(
-      'Unknown SANDBOX_PROVIDER "bogus". Use docker | e2b | daytona | box | e2b-emulator | daytona-emulator | box-emulator | desktop | fake.',
+      'Unknown SANDBOX_PROVIDER "bogus". Use docker | e2b | daytona | box | browserbase | e2b-emulator | daytona-emulator | box-emulator | desktop | fake.',
     );
   });
 });

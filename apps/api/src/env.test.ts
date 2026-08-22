@@ -90,6 +90,26 @@ describe("loadEnv", () => {
     });
   });
 
+  it("loads provider-specific Browserbase configuration", () => {
+    const env = loadEnv({
+      ...base,
+      SANDBOX_PROVIDER: "browserbase",
+      BROWSERBASE_API_KEY: "  test-browserbase-key  ",
+      BROWSERBASE_PROJECT_ID: "  test-project  ",
+      BROWSERBASE_TASK_TIMEOUT_SECONDS: "300",
+    });
+    expect(env).toMatchObject({
+      sandboxProvider: "browserbase",
+      browserbaseApiKey: "test-browserbase-key",
+      browserbaseProjectId: "test-project",
+      browserbaseTaskTimeoutSeconds: 300,
+    });
+  });
+
+  it("rejects a non-integer Browserbase timeout", () => {
+    expect(() => loadEnv({ ...base, BROWSERBASE_TASK_TIMEOUT_SECONDS: "ten" })).toThrow(/integer/);
+  });
+
   it("throws when production omits secrets", () => {
     expect(() =>
       loadEnv({

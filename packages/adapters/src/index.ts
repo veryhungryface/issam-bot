@@ -3,6 +3,7 @@ export * from "./background-job-handlers.js";
 export * from "./box-emulator.js";
 export * from "./box-sandbox.js";
 export * from "./browserbase-client.js";
+export * from "./browserbase-sandbox.js";
 export * from "./builtin-tools.js";
 export * from "./cartesia-voice.js";
 export * from "./child-bots.js";
