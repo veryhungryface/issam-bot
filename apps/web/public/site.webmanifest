@@ -2,7 +2,7 @@
   "name": "Issam Bot",
   "short_name": "Issam Bot",
   "id": "/",
-  "description": "Your team of always-on agents.",
+  "description": "언제나 일할 준비가 된 AI 웹 에이전트",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

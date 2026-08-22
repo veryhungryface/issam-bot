@@ -85,6 +85,7 @@ import { queryWorkspaceSearch } from "./search.js";
 import { withSerializableRetry } from "./serializable-retry.js";
 import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-skills.js";
 import { loadAllMessages, loadMessagePage } from "./thread-message-pages.js";
+import { checkThreadSendPreflight } from "./thread-send-preflight.js";
 import {
   listVoiceCatalog,
   loadDefaultVoiceCredential,
@@ -526,15 +527,22 @@ export function createRouter(deps: RouterDeps) {
       send: authed.threads.send.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.thread) throw new IsolationError();
-        await assertTeachingSendAllowed(deps.prisma, context.actor.workspaceId, bot.id);
-        if (input.clientNonce) {
-          const dup = await deps.prisma.run.findFirst({
-            where: {
-              workspaceId: context.actor.workspaceId,
-              clientNonce: input.clientNonce,
-            },
-          });
-          if (dup) return { taskId: dup.taskId, runId: dup.id, seq: 0 };
+        const duplicateRun = await checkThreadSendPreflight({
+          assertTeachingAllowed: () =>
+            assertTeachingSendAllowed(deps.prisma, context.actor.workspaceId, bot.id),
+          findDuplicateRun: input.clientNonce
+            ? () =>
+                deps.prisma.run.findFirst({
+                  where: {
+                    workspaceId: context.actor.workspaceId,
+                    clientNonce: input.clientNonce,
+                  },
+                  select: { id: true, taskId: true },
+                })
+            : undefined,
+        });
+        if (duplicateRun) {
+          return { taskId: duplicateRun.taskId, runId: duplicateRun.id, seq: 0 };
         }
         const { blocks: attachmentBlocks, artifacts } = await resolveSendAttachments(
           deps,
