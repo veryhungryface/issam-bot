@@ -72,6 +72,7 @@ import { decodeArtifactBase64, openArtifact } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import { takeInitialBootstrap } from "../lib/bootstrap";
 import { dictation } from "../lib/dictation";
+import { isBrowserbaseDisconnectedMessage, screenIframeSandbox } from "../lib/live-view";
 import { revokePendingAttachmentPreviews } from "../lib/pending-attachments";
 import { markAfterPaint, markOnce } from "../lib/performance";
 import { rpc } from "../lib/rpc";
@@ -174,6 +175,7 @@ export function ShellPage() {
   const [savingRoutine, setSavingRoutine] = useState(false);
   const [runningRoutine, setRunningRoutine] = useState(false);
   const [screenUrl, setScreenUrl] = useState<string | null>(null);
+  const [screenNotice, setScreenNotice] = useState<string | null>(null);
   const [computerOpen, setComputerOpen] = useState(false);
   const [usage, setUsage] = useState<{
     inputTokens: number;
@@ -197,6 +199,7 @@ export function ShellPage() {
   } | null>(null);
   const manuallyUnread = useRef(new Set<string>());
   const computerVisible = useRef(false);
+  const screenFrame = useRef<HTMLIFrameElement>(null);
   computerVisible.current = panel === "computer" || computerOpen;
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
@@ -336,6 +339,7 @@ export function ShellPage() {
       return null;
     }
     setScreenUrl(screen.url);
+    if (screen.url) setScreenNotice(null);
     return screen.url;
   }
 
@@ -483,6 +487,7 @@ export function ShellPage() {
     }
     screenRequest.current += 1;
     setScreenUrl(null);
+    setScreenNotice(null);
     expandedHistoryThread.current = null;
     historyEpoch.current += 1;
     const abort = new AbortController();
@@ -950,6 +955,30 @@ export function ShellPage() {
     return () => window.clearInterval(timer);
   }, [panel, computerOpen, active?.id, computer?.state]);
 
+  useEffect(() => {
+    if (computer?.kind !== "browserbase" || !screenUrl) return;
+    const visibleBotId = active?.id;
+    function onLiveViewMessage(event: MessageEvent) {
+      if (
+        !isBrowserbaseDisconnectedMessage(
+          event.data,
+          Boolean(
+            screenFrame.current?.contentWindow &&
+              event.source === screenFrame.current.contentWindow,
+          ),
+        )
+      ) {
+        return;
+      }
+      screenRequest.current += 1;
+      setScreenUrl(null);
+      setScreenNotice("Live View disconnected. Reopen the computer to reconnect.");
+      if (visibleBotId) void refreshThread(visibleBotId).catch(() => undefined);
+    }
+    window.addEventListener("message", onLiveViewMessage);
+    return () => window.removeEventListener("message", onLiveViewMessage);
+  }, [active?.id, computer?.kind, screenUrl]);
+
   async function openComputer() {
     if (!active) return;
     const needsTakeover = !userHoldsComputerControl(computer, active.id);
@@ -1327,20 +1356,26 @@ export function ShellPage() {
                     </div>
                   ) : computer?.state === "running" && embeddedScreenUrl ? (
                     <iframe
+                      ref={screenFrame}
                       title="Bot screen preview"
                       src={embeddedScreenUrl}
-                      sandbox={screenIframeSandbox(embeddedScreenUrl)}
+                      sandbox={screenIframeSandbox(
+                        embeddedScreenUrl,
+                        computer?.kind,
+                        window.location.href,
+                      )}
                       className="h-full w-full border-0 bg-black"
                       allow="clipboard-read; clipboard-write"
                       style={{ pointerEvents: "none" }}
                     />
                   ) : (
                     <div className="grid h-full place-items-center text-sm text-[#6C6C70]">
-                      {computerPlaceholder(
-                        computer?.state,
-                        booting,
-                        computerLabel(computer?.mode, active.name),
-                      )}
+                      {screenNotice ??
+                        computerPlaceholder(
+                          computer?.state,
+                          booting,
+                          computerLabel(computer?.mode, active.name),
+                        )}
                     </div>
                   )}
                   <button
@@ -1813,9 +1848,14 @@ export function ShellPage() {
             ) : computer?.state === "running" && embeddedScreenUrl ? (
               <>
                 <iframe
+                  ref={screenFrame}
                   title="Bot screen"
                   src={embeddedScreenUrl}
-                  sandbox={screenIframeSandbox(embeddedScreenUrl)}
+                  sandbox={screenIframeSandbox(
+                    embeddedScreenUrl,
+                    computer?.kind,
+                    window.location.href,
+                  )}
                   className="h-full w-full border-0 bg-black"
                   allow="clipboard-read; clipboard-write; fullscreen"
                   style={{
@@ -1834,9 +1874,10 @@ export function ShellPage() {
               </>
             ) : (
               <div className="grid h-full place-items-center text-sm text-[#6C6C70]">
-                {computer?.state === "suspended"
-                  ? "Computer is asleep"
-                  : computerLabel(computer?.mode, active.name)}
+                {screenNotice ??
+                  (computer?.state === "suspended"
+                    ? "Computer is asleep"
+                    : computerLabel(computer?.mode, active.name))}
               </div>
             )}
           </div>
@@ -3037,17 +3078,6 @@ function embeddableScreenUrl(url: string | null): string | null {
     return parsed.toString();
   } catch {
     return url;
-  }
-}
-
-function screenIframeSandbox(url: string | null) {
-  if (!url) return undefined;
-  try {
-    return new URL(url, window.location.href).pathname.startsWith("/novnc/")
-      ? "allow-scripts allow-pointer-lock"
-      : undefined;
-  } catch {
-    return undefined;
   }
 }
 
