@@ -44,6 +44,7 @@ describe("BrowserbaseSandboxProvider", () => {
           { kind: "open", path: "https://example.com/path" },
           { kind: "pointer", type: "click", x: 10, y: 20 },
           { kind: "key", key: "A", modifiers: ["Control"] },
+          { kind: "key", key: "Return" },
           { kind: "text", text: "한글 입력" },
           { kind: "scroll", direction: "down", amount: 200 },
         ],
@@ -57,6 +58,7 @@ describe("BrowserbaseSandboxProvider", () => {
     );
     expect(fixture.mouseClick).toHaveBeenCalledWith(10, 20, { button: "left" });
     expect(fixture.keyboardPress).toHaveBeenCalledWith("Control+A");
+    expect(fixture.keyboardPress).toHaveBeenCalledWith("Enter");
     expect(fixture.keyboardInsertText).toHaveBeenCalledWith("한글 입력");
     expect(fixture.mouseWheel).toHaveBeenCalledWith(0, 200);
 

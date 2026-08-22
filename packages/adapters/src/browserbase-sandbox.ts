@@ -480,7 +480,7 @@ async function applyBrowserAction(
       break;
     }
     case "key": {
-      const keys = [...(action.modifiers ?? []), action.key].join("+");
+      const keys = [...(action.modifiers ?? []), playwrightKeyName(action.key)].join("+");
       await page.keyboard.press(keys);
       break;
     }
@@ -529,6 +529,18 @@ async function applyBrowserAction(
       break;
   }
   throwIfAborted(context);
+}
+
+function playwrightKeyName(key: string): string {
+  const aliases: Record<string, string> = {
+    Return: "Enter",
+    BackSpace: "Backspace",
+    Left: "ArrowLeft",
+    Right: "ArrowRight",
+    Up: "ArrowUp",
+    Down: "ArrowDown",
+  };
+  return aliases[key] ?? key;
 }
 
 function encodeProviderRef(contextId: string, sessionId: string): string {
