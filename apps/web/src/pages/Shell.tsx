@@ -2660,7 +2660,7 @@ function ComputerModePicker({
                 : "border-[#26262A] text-[#85858A]"
             }`}
           >
-            {mode === "team" ? "Shared login" : "Bot-only login"}
+            {mode === "team" ? "Team" : "Private"}
           </button>
         ))}
       </div>
