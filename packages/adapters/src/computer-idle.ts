@@ -13,7 +13,12 @@ import { checkpointComputerWorkspace } from "./computer-workspace.js";
 export const DEFAULT_SANDBOX_IDLE_MS = 10 * 60 * 1000;
 
 export function sandboxIdleMs(): number {
-  const raw = Number(process.env.SANDBOX_IDLE_MS ?? DEFAULT_SANDBOX_IDLE_MS);
+  const browserbaseIdleSeconds = Number(process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS);
+  const providerDefault =
+    Number.isFinite(browserbaseIdleSeconds) && browserbaseIdleSeconds > 0
+      ? browserbaseIdleSeconds * 1000
+      : DEFAULT_SANDBOX_IDLE_MS;
+  const raw = Number(process.env.SANDBOX_IDLE_MS ?? providerDefault);
   return Number.isFinite(raw) && raw >= 30_000 ? raw : DEFAULT_SANDBOX_IDLE_MS;
 }
 

@@ -11,13 +11,32 @@ import {
 describe("sandbox idle", () => {
   it("defaults to ten minutes when SANDBOX_IDLE_MS is unset", () => {
     const previous = process.env.SANDBOX_IDLE_MS;
+    const previousBrowserbase = process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS;
     delete process.env.SANDBOX_IDLE_MS;
+    delete process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS;
     try {
       expect(sandboxIdleMs()).toBe(DEFAULT_SANDBOX_IDLE_MS);
       expect(DEFAULT_SANDBOX_IDLE_MS).toBe(10 * 60 * 1000);
     } finally {
       if (previous === undefined) delete process.env.SANDBOX_IDLE_MS;
       else process.env.SANDBOX_IDLE_MS = previous;
+      if (previousBrowserbase === undefined) delete process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS;
+      else process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS = previousBrowserbase;
+    }
+  });
+
+  it("uses the Browserbase idle timeout when no generic override is set", () => {
+    const previous = process.env.SANDBOX_IDLE_MS;
+    const previousBrowserbase = process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS;
+    delete process.env.SANDBOX_IDLE_MS;
+    process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS = "180";
+    try {
+      expect(sandboxIdleMs()).toBe(180_000);
+    } finally {
+      if (previous === undefined) delete process.env.SANDBOX_IDLE_MS;
+      else process.env.SANDBOX_IDLE_MS = previous;
+      if (previousBrowserbase === undefined) delete process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS;
+      else process.env.BROWSERBASE_IDLE_TIMEOUT_SECONDS = previousBrowserbase;
     }
   });
 

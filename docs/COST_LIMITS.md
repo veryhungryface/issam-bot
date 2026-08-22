@@ -10,7 +10,7 @@ checkpoint.
 | Global concurrent Chrome sessions | 3 | `BROWSERBASE_MAX_CONCURRENT_SESSIONS` |
 | Concurrent Chrome sessions per user | 1 | `BROWSERBASE_MAX_SESSIONS_PER_USER` |
 | Maximum task runtime | 600 seconds | `BROWSERBASE_TASK_TIMEOUT_SECONDS` |
-| Idle session timeout | 180 seconds | `BROWSERBASE_IDLE_TIMEOUT_SECONDS` |
+| Idle session timeout | 180 seconds | `BROWSERBASE_IDLE_TIMEOUT_SECONDS` (or `SANDBOX_IDLE_MS=180000`) |
 | Browser time per user per day | 1,200 seconds | `BROWSERBASE_DAILY_SECONDS_PER_USER` |
 | Monthly warning | 288,000 seconds (80 hours) | `BROWSERBASE_MONTHLY_WARNING_SECONDS` |
 | Monthly hard stop | 342,000 seconds (95 hours) | `BROWSERBASE_MONTHLY_HARD_LIMIT_SECONDS` |
