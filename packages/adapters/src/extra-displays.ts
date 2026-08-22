@@ -274,7 +274,7 @@ export function extraDisplayActionCommand(
     const keys = [...(action.modifiers ?? []), action.key].join("+");
     return `DISPLAY=${layout.display} xdotool key ${shellQuote(keys)}`;
   }
-  if (action.kind === "clipboard") {
+  if (action.kind === "clipboard" || action.kind === "text") {
     return `DISPLAY=${layout.display} xdotool type ${shellQuote(action.text)}`;
   }
   if (action.kind === "pointer") {
@@ -300,7 +300,7 @@ export function extraDisplayInputCommand(layout: ExtraDisplayLayout, input: Comp
   if (input.kind === "key") {
     return `DISPLAY=${layout.display} xdotool key ${shellQuote(input.key)}`;
   }
-  if (input.kind === "clipboard") {
+  if (input.kind === "clipboard" || input.kind === "text") {
     return `DISPLAY=${layout.display} xdotool type ${shellQuote(input.text)}`;
   }
   const button = input.button === "right" ? "3" : "1";

@@ -29,7 +29,10 @@ describe("BrowserbaseSandboxProvider", () => {
       expect.objectContaining({
         contextId: "context-1",
         timeoutSeconds: 300,
-        metadata: expect.objectContaining({ botId: "bot-1", workspaceId: "workspace-1" }),
+        metadata: expect.objectContaining({
+          botId: "bot-1",
+          workspaceId: "workspace-1",
+        }),
       }),
     );
     expect(fixture.connectOverCDP).toHaveBeenCalledWith("wss://cdp.example/session-1");
@@ -41,6 +44,7 @@ describe("BrowserbaseSandboxProvider", () => {
           { kind: "open", path: "https://example.com/path" },
           { kind: "pointer", type: "click", x: 10, y: 20 },
           { kind: "key", key: "A", modifiers: ["Control"] },
+          { kind: "text", text: "한글 입력" },
           { kind: "scroll", direction: "down", amount: 200 },
         ],
         observe: false,
@@ -53,6 +57,7 @@ describe("BrowserbaseSandboxProvider", () => {
     );
     expect(fixture.mouseClick).toHaveBeenCalledWith(10, 20, { button: "left" });
     expect(fixture.keyboardPress).toHaveBeenCalledWith("Control+A");
+    expect(fixture.keyboardInsertText).toHaveBeenCalledWith("한글 입력");
     expect(fixture.mouseWheel).toHaveBeenCalledWith(0, 200);
 
     const observation = await provider.observe(computer, adapterContext());
@@ -100,7 +105,10 @@ describe("BrowserbaseSandboxProvider", () => {
       { view: "stream", interactive: true, controlToken: "lease-1" },
       context,
     );
-    expect(screen).toMatchObject({ url: "https://live.example/full", mimeType: "text/html" });
+    expect(screen).toMatchObject({
+      url: "https://live.example/full",
+      mimeType: "text/html",
+    });
     await expect(
       provider.act(computer, { actions: [{ kind: "wait", ms: 1 }] }, context),
     ).rejects.toThrow(/held by the user/);
@@ -280,7 +288,9 @@ describe("BrowserbaseSandboxProvider", () => {
     await expect(
       provider.act(
         computer,
-        { actions: [{ kind: "open", path: "http://169.254.169.254/latest/meta-data" }] },
+        {
+          actions: [{ kind: "open", path: "http://169.254.169.254/latest/meta-data" }],
+        },
         adapterContext(),
       ),
     ).rejects.toThrow(/blocked/);
@@ -347,6 +357,7 @@ function browserFixture() {
   const mouseClick = vi.fn(async () => undefined);
   const mouseWheel = vi.fn(async () => undefined);
   const keyboardPress = vi.fn(async () => undefined);
+  const keyboardInsertText = vi.fn(async () => undefined);
   const page = {
     isClosed: vi.fn(() => false),
     setViewportSize: vi.fn(async () => undefined),
@@ -357,7 +368,9 @@ function browserFixture() {
     goto,
     waitForTimeout: vi.fn(async () => undefined),
     evaluate: vi.fn(async () => undefined),
-    locator: vi.fn(() => ({ ariaSnapshot: vi.fn(async () => '- heading "Example"') })),
+    locator: vi.fn(() => ({
+      ariaSnapshot: vi.fn(async () => '- heading "Example"'),
+    })),
     mouse: {
       move: vi.fn(async () => undefined),
       down: vi.fn(async () => undefined),
@@ -365,7 +378,7 @@ function browserFixture() {
       click: mouseClick,
       wheel: mouseWheel,
     },
-    keyboard: { press: keyboardPress },
+    keyboard: { press: keyboardPress, insertText: keyboardInsertText },
   } as unknown as Page;
   const browserContext = {
     pages: vi.fn(() => [page]),
@@ -387,5 +400,6 @@ function browserFixture() {
     mouseClick,
     mouseWheel,
     keyboardPress,
+    keyboardInsertText,
   };
 }

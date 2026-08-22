@@ -42,7 +42,7 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     void refresh()
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Could not load voice settings"),
+        setError(err instanceof Error ? err.message : "음성 설정을 불러오지 못했습니다."),
       )
       .finally(() => setLoading(false));
   }, []);
@@ -68,9 +68,9 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
       });
       setApiKey("");
       await refresh(selected.id);
-      setNotice(`Connected ${selected.name}.`);
+      setNotice(`${selected.name}에 연결했습니다.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not connect this voice provider");
+      setError(err instanceof Error ? err.message : "음성 공급자에 연결하지 못했습니다.");
     } finally {
       setPending(null);
     }
@@ -82,10 +82,13 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
     setPending("voice");
     setError(null);
     try {
-      await rpc.voice.setVoice({ voiceId: nextVoiceId, provider: selected?.id });
+      await rpc.voice.setVoice({
+        voiceId: nextVoiceId,
+        provider: selected?.id,
+      });
       await refresh(selected?.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save that voice");
+      setError(err instanceof Error ? err.message : "음성을 저장하지 못했습니다.");
     } finally {
       setPending(null);
     }
@@ -97,14 +100,14 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
     setPending("test");
     try {
       const { speaker } = await import("../lib/tts.js");
-      await speaker.speak("Hi, this is how I'll sound when I read replies out loud.");
+      await speaker.speak("안녕하세요. 답변을 읽을 때 이 목소리로 들려드립니다.");
       if (speaker.state.error) {
         setError(speaker.state.error);
         return;
       }
-      setNotice("If you heard that, voice is ready.");
+      setNotice("음성이 들렸다면 설정이 완료되었습니다.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not play a test clip");
+      setError(err instanceof Error ? err.message : "시험 음성을 재생하지 못했습니다.");
     } finally {
       setPending(null);
     }
@@ -118,16 +121,16 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-start justify-between px-6 pt-6 sm:px-8 sm:pt-7">
           <div>
-            <div className="text-2xl font-medium text-[#F1F1F2]">Voice</div>
+            <div className="text-2xl font-medium text-[#F1F1F2]">음성</div>
             <p className="mt-1 text-[13.5px] text-[#7A7A80]">
               {loading
-                ? "Loading voice providers…"
-                : "Bring your own key. The provider is swappable; your bots keep the same speak and call buttons."}
+                ? "음성 공급자를 불러오는 중…"
+                : "개인 API 키를 연결하세요. 공급자를 바꿔도 봇의 읽기와 통화 버튼은 그대로 유지됩니다."}
             </p>
           </div>
           <button
             type="button"
-            aria-label="Close voice settings"
+            aria-label="음성 설정 닫기"
             onClick={onClose}
             className="text-[#85858A]"
           >
@@ -136,24 +139,22 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="mx-6 mt-5 rounded-[14px] border border-[#26262A] bg-[#101012] px-4 py-3 sm:mx-8">
-          <div className="text-[12.5px] uppercase tracking-[0.08em] text-[#6C6C70]">
-            Active voice
-          </div>
+          <div className="text-[12.5px] uppercase tracking-[0.08em] text-[#6C6C70]">현재 음성</div>
           <div className="mt-1 text-[16px] text-[#F1F1F2]">
             {status?.ready
               ? voiceOptions.find((voice) => voice.id === status.voiceId)?.label || status.voiceId
               : status?.configured
-                ? "Pick a voice"
-                : "Not configured"}
+                ? "음성을 선택하세요"
+                : "설정되지 않음"}
           </div>
           <div className="mt-1 text-[13px] text-[#85858A]">
-            {selected?.name ?? status?.provider ?? "Connect ElevenLabs, OpenAI, or Cartesia"}
+            {selected?.name ?? status?.provider ?? "음성 공급자를 연결하세요"}
           </div>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-hidden px-6 py-6 sm:px-8 md:flex-row">
           <div className="flex min-h-0 shrink-0 flex-col md:w-[280px]">
-            <div className="mb-3 text-[13.5px] text-[#85858A]">Providers</div>
+            <div className="mb-3 text-[13.5px] text-[#85858A]">음성 공급자</div>
             <div className="rk-scroll overflow-y-auto rounded-[13px] border border-[#26262A]">
               {catalog.map((entry) => {
                 const connected = credentials.some((cred) => cred.provider === entry.id);
@@ -177,12 +178,10 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
                         {entry.name}
                       </span>
                       <span className="mt-0.5 block text-[12px] text-[#6C6C70]">
-                        {entry.transcribe ? "Speak + transcribe" : "Speak only"}
+                        {entry.transcribe ? "말하기 + 받아쓰기" : "말하기 전용"}
                       </span>
                     </span>
-                    {connected ? (
-                      <span className="text-[12px] text-[#4ECB71]">Connected</span>
-                    ) : null}
+                    {connected ? <span className="text-[12px] text-[#4ECB71]">연결됨</span> : null}
                   </button>
                 );
               })}
@@ -197,23 +196,23 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
                 <p className="text-[13.5px] leading-[1.5] text-[#85858A]">{selected.description}</p>
                 <div className="mt-5 rounded-[13px] border border-[#26262A] px-4 py-3">
                   <div className="text-[12.5px] uppercase tracking-[0.08em] text-[#6C6C70]">
-                    Personal credential
+                    개인 연결 정보
                   </div>
                   <div className="mt-1 text-[15px] text-[#ECECEE]">
-                    {credential ? `Connected · ${selected.name}` : "Not connected"}
+                    {credential ? `연결됨 · ${selected.name}` : "연결되지 않음"}
                   </div>
                   <div className="mt-1 text-[13px] text-[#85858A]">
-                    Keys stay on the server. The app only learns whether a provider is configured.
+                    API 키는 서버에만 보관되며 웹앱에는 연결 여부만 전달됩니다.
                   </div>
                 </div>
 
                 <label className="mt-5 block text-[13.5px] text-[#85858A]">
-                  API key
+                  API 키
                   <input
                     type="password"
                     value={apiKey}
                     onChange={(event) => setApiKey(event.target.value)}
-                    placeholder={credential ? "Paste a replacement key" : "Paste your API key"}
+                    placeholder={credential ? "교체할 API 키 붙여넣기" : "API 키 붙여넣기"}
                     className="mt-2 w-full rounded-[11px] border border-[#26262A] bg-[#101012] px-3.5 py-2.5 text-[14px] text-[#ECECEE] outline-none"
                   />
                 </label>
@@ -223,13 +222,13 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
                   disabled={busy || apiKey.trim().length < 8}
                   onClick={() => void connectKey()}
                 >
-                  {pending === "connect" ? "Connecting…" : credential ? "Replace key" : "Connect"}
+                  {pending === "connect" ? "연결 중…" : credential ? "키 교체" : "연결"}
                 </Button>
 
                 {credential ? (
                   <>
                     <label className="mt-6 block text-[13.5px] text-[#85858A]">
-                      Voice
+                      음성
                       <select
                         value={voiceId}
                         onChange={(event) => void chooseVoice(event.target.value)}
@@ -249,7 +248,7 @@ export function VoiceSettingsOverlay({ onClose }: { onClose: () => void }) {
                       onClick={() => void testVoice()}
                       className="mt-4 text-[14px] text-[#C9C9CE] disabled:opacity-40"
                     >
-                      {pending === "test" ? "Playing…" : "Hear a sample"}
+                      {pending === "test" ? "재생 중…" : "샘플 듣기"}
                     </button>
                   </>
                 ) : null}

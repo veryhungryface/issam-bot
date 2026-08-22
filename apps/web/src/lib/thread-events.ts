@@ -53,7 +53,13 @@ export function reduceThreadSnapshot(
 ): ThreadSnapshot | null {
   if (!prev) return prev;
   if (event.type === "thread.cleared") {
-    return { ...prev, cursor: event.seq, messages: [], olderCursor: null, run: null };
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: [],
+      olderCursor: null,
+      run: null,
+    };
   }
   if (event.type === "run.waiting_input") {
     const run = prev.run;
@@ -96,7 +102,11 @@ export function reduceThreadSnapshot(
       (message) => message.id !== next.id && !message.id.startsWith("progress:"),
     );
     const progress = prev.messages.filter((message) => message.id.startsWith("progress:"));
-    return { ...prev, cursor: event.seq, messages: [...without, next, ...progress] };
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: [...without, next, ...progress],
+    };
   }
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
     const role = (event.payload.role as ThreadMessage["role"]) ?? "bot";
@@ -117,6 +127,7 @@ export function reduceThreadSnapshot(
       (message) =>
         message.id !== next.id &&
         !message.id.startsWith("progress:") &&
+        !(role === "user" && message.id.startsWith("optimistic:")) &&
         !replacedSubagent(message, replacedSubagentIds),
     );
     return { ...prev, cursor: event.seq, messages: [...without, next] };

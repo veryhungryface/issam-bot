@@ -4,7 +4,6 @@ import {
   type CronPreset,
   type CronUnit,
   cronFromPreset,
-  describeCronPreset,
 } from "@rakazo/core";
 
 const UNITS: CronUnit[] = ["minutes", "hours", "days"];
@@ -22,6 +21,36 @@ const TIMES = [
 
 const TIMED: CronFreq[] = ["Every day", "Weekdays", "Every week", "Every month"];
 
+const FREQ_LABELS: Record<CronFreq, string> = {
+  Interval: "간격 반복",
+  "Every hour": "매시간",
+  "Every day": "매일",
+  Weekdays: "평일",
+  "Every week": "매주",
+  "Every month": "매월",
+  Advanced: "고급 설정",
+};
+
+const UNIT_LABELS: Record<CronUnit, string> = {
+  minutes: "분",
+  hours: "시간",
+  days: "일",
+};
+
+function describeKoreanSchedule(preset: CronPreset): { lead: string; detail: string } {
+  if (preset.freq === "Interval") {
+    return { lead: "반복", detail: `${preset.n}${UNIT_LABELS[preset.unit]}마다` };
+  }
+  if (preset.freq === "Every hour") return { lead: "매시간", detail: "" };
+  if (preset.freq === "Advanced") {
+    return { lead: "Cron", detail: preset.cron || "*/3 * * * *" };
+  }
+  if (preset.freq === "Weekdays") return { lead: "평일", detail: `${preset.time}에` };
+  if (preset.freq === "Every week") return { lead: "매주 월요일", detail: `${preset.time}에` };
+  if (preset.freq === "Every month") return { lead: "매월 1일", detail: `${preset.time}에` };
+  return { lead: "매일", detail: `${preset.time}에` };
+}
+
 export function RoutineSchedule({
   value,
   onChange,
@@ -29,7 +58,7 @@ export function RoutineSchedule({
   value: CronPreset;
   onChange: (next: CronPreset) => void;
 }) {
-  const { lead, detail } = describeCronPreset(value);
+  const { lead, detail } = describeKoreanSchedule(value);
   const times = TIMES.includes(value.time) ? TIMES : [...TIMES, value.time];
   const numbers = NUMBERS.includes(value.n) ? NUMBERS : [...NUMBERS, value.n].sort((a, b) => a - b);
 
@@ -62,7 +91,7 @@ export function RoutineSchedule({
         <select
           className="rk-schedule-select"
           value={value.freq}
-          aria-label="How often"
+          aria-label="실행 주기"
           onChange={(event) => {
             const freq = event.target.value as CronFreq;
             if (freq === "Advanced") {
@@ -74,17 +103,17 @@ export function RoutineSchedule({
         >
           {CRON_FREQS.map((freq) => (
             <option key={freq} value={freq}>
-              {freq}
+              {FREQ_LABELS[freq]}
             </option>
           ))}
         </select>
         {value.freq === "Interval" ? (
           <>
-            <span>every</span>
+            <span>매</span>
             <select
               className="rk-schedule-select"
               value={String(value.n)}
-              aria-label="Interval amount"
+              aria-label="반복 간격"
               onChange={(event) => patch({ n: Number(event.target.value) })}
             >
               {numbers.map((n) => (
@@ -96,12 +125,12 @@ export function RoutineSchedule({
             <select
               className="rk-schedule-select"
               value={value.unit}
-              aria-label="Interval unit"
+              aria-label="반복 단위"
               onChange={(event) => patch({ unit: event.target.value as CronUnit })}
             >
               {UNITS.map((unit) => (
                 <option key={unit} value={unit}>
-                  {unit}
+                  {UNIT_LABELS[unit]}
                 </option>
               ))}
             </select>
@@ -109,11 +138,11 @@ export function RoutineSchedule({
         ) : null}
         {TIMED.includes(value.freq) ? (
           <>
-            <span>at</span>
+            <span>오전/오후</span>
             <select
               className="rk-schedule-select"
               value={value.time}
-              aria-label="Time of day"
+              aria-label="실행 시간"
               onChange={(event) => patch({ time: event.target.value })}
             >
               {times.map((time) => (
@@ -128,7 +157,7 @@ export function RoutineSchedule({
           <input
             value={value.cron}
             placeholder="*/3 * * * *"
-            aria-label="Cron expression"
+            aria-label="Cron 표현식"
             onChange={(event) => patch({ cron: event.target.value })}
             className="min-w-[120px] flex-1 rounded-lg border-0 bg-[#24242A] px-2.5 py-1.5 font-mono text-[13.5px] text-[#ECECEE] outline-none"
           />

@@ -14,19 +14,19 @@ export function WelcomePage() {
             <span className="h-6 w-[11px] rounded-full bg-[#101012]" />
             <span className="h-6 w-[11px] rounded-full bg-[#101012]" />
           </div>
-          <div className="text-[76px] leading-none tracking-[-0.03em] text-white">Rakazo</div>
+          <div className="text-[76px] leading-none tracking-[-0.03em] text-white">Issam Bot</div>
         </div>
         <p className="max-w-[600px] text-center text-[27px] leading-[1.4] text-[#E4E4E6]">
-          Your team of always-on agents
+          언제나 일할 준비가 된 AI 에이전트
           <br />
-          that you can give real work to.
+          실제 웹 업무를 맡겨보세요.
         </p>
         <button
           type="button"
           onClick={() => navigate("/sign-in")}
           className="app-no-drag rounded-full bg-[#1B1B1F] px-[34px] py-[15px] text-[19px] text-[#F2F2F3] transition hover:scale-[1.04] hover:bg-[#26262B]"
         >
-          Sign in&nbsp;&nbsp;→
+          로그인&nbsp;&nbsp;→
         </button>
       </div>
     </div>

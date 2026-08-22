@@ -60,7 +60,7 @@ export function BotContextMenu({
     <div className="fixed inset-0 z-40">
       <button
         type="button"
-        aria-label="Close bot menu"
+        aria-label="봇 메뉴 닫기"
         className="absolute inset-0 cursor-default"
         onClick={onClose}
         onContextMenu={(event) => {
@@ -70,40 +70,40 @@ export function BotContextMenu({
       />
       <div
         role="menu"
-        aria-label={`Actions for ${bot.name}`}
+        aria-label={`${bot.name} 작업 메뉴`}
         className="fixed w-[264px] rounded-[18px] border border-[#343438] bg-[#1A1A1D] p-2 shadow-[0_24px_60px_rgba(0,0,0,.62)]"
         style={{ left: safeLeft, top: safeTop }}
       >
         <MenuItem
           buttonRef={firstItem}
           icon={<PinIcon />}
-          label={bot.pinned ? "Unpin" : "Pin"}
+          label={bot.pinned ? "고정 해제" : "고정"}
           onSelect={onTogglePinned}
         />
         <MenuItem
           icon={<FolderIcon />}
           endIcon={<ChevronIcon />}
-          label="Move to"
+          label="구역으로 이동"
           expanded={sectionMenuOpen}
           onSelect={() => setSectionMenuOpen((open) => !open)}
         />
         <MenuItem
           icon={<ReadStatusIcon unread={bot.unread} />}
-          label={bot.unread ? "Mark as Read" : "Mark as Unread"}
+          label={bot.unread ? "읽음으로 표시" : "읽지 않음으로 표시"}
           onSelect={onToggleUnread}
         />
         <div className="my-1 border-t border-[#343438]" />
-        <MenuItem icon={<EditIcon />} label="Edit Profile" onSelect={onEdit} />
-        <MenuItem icon={<DuplicateIcon />} label="Duplicate" onSelect={onDuplicate} />
+        <MenuItem icon={<EditIcon />} label="봇 설정" onSelect={onEdit} />
+        <MenuItem icon={<DuplicateIcon />} label="복제" onSelect={onDuplicate} />
         <div className="my-1 border-t border-[#343438]" />
-        <MenuItem icon={<ClearIcon />} label="Clear conversation" onSelect={onClear} />
-        <MenuItem icon={<ArchiveIcon />} label="Archive" onSelect={onArchive} />
-        <MenuItem icon={<TrashIcon />} label="Delete" tone="danger" onSelect={onDelete} />
+        <MenuItem icon={<ClearIcon />} label="대화 내용 지우기" onSelect={onClear} />
+        <MenuItem icon={<ArchiveIcon />} label="보관" onSelect={onArchive} />
+        <MenuItem icon={<TrashIcon />} label="삭제" tone="danger" onSelect={onDelete} />
       </div>
       {sectionMenuOpen ? (
         <div
           role="menu"
-          aria-label={`Move ${bot.name} to section`}
+          aria-label={`${bot.name} 구역 이동`}
           className="fixed max-h-[min(420px,calc(100vh-16px))] w-[264px] overflow-y-auto rounded-[18px] border border-[#343438] bg-[#1A1A1D] p-2 shadow-[0_24px_60px_rgba(0,0,0,.62)]"
           style={{ left: Math.max(margin, sectionLeft), top: safeTop }}
         >
@@ -119,11 +119,11 @@ export function BotContextMenu({
           <MenuItem
             icon={<FolderIcon />}
             endIcon={bot.sectionId === null ? <CheckIcon /> : null}
-            label="Unassigned"
+            label="미지정"
             onSelect={() => onMoveToSection(null)}
           />
           <div className="my-1 border-t border-[#343438]" />
-          <MenuItem icon={<NewFolderIcon />} label="New section" onSelect={onCreateSection} />
+          <MenuItem icon={<NewFolderIcon />} label="새 구역" onSelect={onCreateSection} />
         </div>
       ) : null}
     </div>

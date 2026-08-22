@@ -21,7 +21,7 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
   const chiefId = activeBotId(page);
 
   await openComputerPanel(page);
-  await expect(page.getByText("Team Computer", { exact: true }).last()).toBeVisible();
+  await expect(page.getByText("공유 브라우저", { exact: true }).last()).toBeVisible();
   await captureScreenshot(page, testInfo, "41-team-computer");
 
   const writerId = await createBot(page, "Writer", "team");
@@ -49,7 +49,9 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
 
   const privateId = await createBot(page, "Private Writer", "dedicated");
   await openComputerPanel(page);
-  await expect(page.getByText("Private Writer’s computer", { exact: true }).last()).toBeVisible();
+  await expect(
+    page.getByText("Private Writer 전용 브라우저", { exact: true }).last(),
+  ).toBeVisible();
   await captureScreenshot(page, testInfo, "43-private-computer");
   await expect(readFileResponse(page, privateId, "notes/result.txt")).resolves.toMatchObject({
     ok: false,
@@ -90,10 +92,10 @@ test("user control leaves another Team bot's screen available", async ({ page },
   const workerId = await createBot(page, "Worker", "team");
 
   await openBot(page, "Chief");
-  await page.getByTitle("Agent computer").click();
-  await page.getByRole("button", { name: "Take control", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
-  await page.getByRole("button", { name: "Close computer" }).click();
+  await page.getByTitle("에이전트 브라우저").click();
+  await page.getByRole("button", { name: "직접 제어", exact: true }).click();
+  await expect(page.getByRole("button", { name: "브라우저 닫기" })).toBeVisible();
+  await page.getByRole("button", { name: "브라우저 닫기" }).click();
 
   await openBot(page, "Worker");
   const workerRunId = await sendMessage(
@@ -158,24 +160,24 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
   await expect
     .poll(async () => (await rpcResponse(page, "computer/takeover", { botId: chiefId })).ok)
     .toBe(true);
-  await page.getByTitle("Agent computer").click();
-  await expect(page.getByText("You have control", { exact: true })).toBeVisible();
+  await page.getByTitle("에이전트 브라우저").click();
+  await expect(page.getByText("사용자가 제어 중", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "49-team-computer-takeover-after-stop");
   await rpc(page, "computer/release", { botId: chiefId });
 });
 
 async function createBot(page: Page, name: string, mode: "team" | "dedicated") {
-  await page.getByTitle("New bot").click();
-  await expect(page.getByText("New bot", { exact: true })).toBeVisible();
-  const team = page.getByRole("button", { name: "Team", exact: true });
-  const privateComputer = page.getByRole("button", { name: "Private", exact: true });
+  await page.getByTitle("새 봇").click();
+  await expect(page.getByText("새 봇", { exact: true })).toBeVisible();
+  const team = page.getByRole("button", { name: "공유", exact: true });
+  const privateComputer = page.getByRole("button", { name: "봇 전용", exact: true });
   await expect(team).toHaveAttribute("aria-pressed", "true");
   if (mode === "dedicated") await privateComputer.click();
   await expect(mode === "team" ? team : privateComputer).toHaveAttribute("aria-pressed", "true");
-  await page.getByPlaceholder("Name this bot").fill(name);
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByPlaceholder("봇 이름").fill(name);
+  await page.getByRole("button", { name: "만들기", exact: true }).click();
   await page.waitForURL(/\/app\/[^/]+$/);
-  await expect(page.getByPlaceholder(`Message ${name}`)).toBeVisible();
+  await expect(page.getByPlaceholder(`${name}에게 작업 지시`)).toBeVisible();
   return activeBotId(page);
 }
 
@@ -186,11 +188,11 @@ async function setComputerMode(
   mode: "team" | "dedicated",
 ) {
   await page.getByRole("button", { name: botName, exact: true }).last().click();
-  await expect(page.locator("label:has-text('Name') input")).toHaveValue(botName);
+  await expect(page.locator("label:has-text('이름') input")).toHaveValue(botName);
   await page
-    .getByRole("button", { name: mode === "team" ? "Team" : "Private", exact: true })
+    .getByRole("button", { name: mode === "team" ? "공유" : "봇 전용", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "저장", exact: true }).click();
   await expect
     .poll(async () => {
       const bots = await rpc<Array<{ id: string; computerMode: string }>>(page, "bots/list", {});
@@ -204,12 +206,12 @@ async function openBot(page: Page, name: string) {
     .getByRole("complementary")
     .getByRole("button", { name: new RegExp(`^${name}`) })
     .click();
-  await expect(page.getByPlaceholder(`Message ${name}`)).toBeVisible();
+  await expect(page.getByPlaceholder(`${name}에게 작업 지시`)).toBeVisible();
 }
 
 async function openComputerPanel(page: Page) {
-  await page.getByTitle("Agent computer").click();
-  await expect(page.getByRole("button", { name: "Take control", exact: true })).toBeVisible();
+  await page.getByTitle("에이전트 브라우저").click();
+  await expect(page.getByRole("button", { name: "직접 제어", exact: true })).toBeVisible();
 }
 
 async function sendAndWait(page: Page, botId: string, text: string) {
@@ -218,7 +220,7 @@ async function sendAndWait(page: Page, botId: string, text: string) {
 }
 
 async function sendMessage(page: Page, text: string) {
-  const composer = page.getByPlaceholder(/Message/);
+  const composer = page.getByPlaceholder(/작업 지시/);
   await composer.fill(text);
   const sent = page.waitForResponse(
     (response) =>

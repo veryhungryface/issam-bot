@@ -26,7 +26,7 @@ test("two users are isolated and a bot completes durable work", async ({ browser
   await expect(pageB.getByText("Chief").first()).toBeVisible();
   await expect(pageB.getByText("Ada")).toHaveCount(0);
 
-  const composer = pageA.getByPlaceholder(/Message/);
+  const composer = pageA.getByPlaceholder(/작업 지시/);
   await composer.fill("write a file in your home called notes/result.txt that says isolation-ok");
   await pageA.keyboard.press("Enter");
   await expect(
@@ -48,7 +48,7 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await signup(page, `flow-${stamp}@rakazo.test`, "password12", "Flow");
   await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
 
-  const composer = page.getByPlaceholder(/Message/);
+  const composer = page.getByPlaceholder(/작업 지시/);
   await composer.fill("install the gsc cli and sign in");
   await page.keyboard.press("Enter");
   await expect(page.getByText(/sign in to continue|protected input/i).first()).toBeVisible({
@@ -61,7 +61,7 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
     })
     .toBe("waiting_takeover");
   await captureScreenshot(page, testInfo, "08-protected-input-request");
-  await page.getByTitle("Agent computer").click();
+  await page.getByTitle("에이전트 브라우저").click();
   const sidePanel = page.getByTestId("side-panel");
   await expect(sidePanel).toHaveCSS("width", "384px");
   const [mainBox, panelBox] = await Promise.all([
@@ -71,27 +71,27 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   expect(mainBox).not.toBeNull();
   expect(panelBox).not.toBeNull();
   expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0)).toBeLessThanOrEqual(panelBox?.x ?? 0);
-  await page.getByRole("button", { name: "Take control" }).click();
-  await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  await page.getByRole("button", { name: "직접 제어" }).click();
+  await expect(page.getByRole("button", { name: "브라우저 닫기" })).toBeVisible();
   if (process.env.SANDBOX_PROVIDER === "box") await waitForBoxFramebuffer(page);
   await captureScreenshot(page, testInfo, "09-computer-takeover");
-  await page.getByRole("button", { name: "Release" }).last().click();
-  await expect(page.getByRole("button", { name: "Close computer" })).toBeHidden();
+  await page.getByRole("button", { name: "봇에게 제어권 반환" }).last().click();
+  await expect(page.getByRole("button", { name: "브라우저 닫기" })).toBeHidden();
   await expect(page.getByText(/signed in|session stays/i).first()).toBeVisible({
     timeout: realSandboxTimeout(90_000, 30_000),
   });
 
-  await page.getByText("+ New routine").click();
-  await page.locator("label:has-text('Name') input").fill("Monday briefing");
+  await page.getByText("+ 새 자동 작업").click();
+  await page.locator("label:has-text('이름') input").fill("Monday briefing");
   await page
-    .locator("label:has-text('Instruction') textarea")
+    .locator("label:has-text('작업 지시') textarea")
     .fill("write a file in your home called notes/result.txt that says routine-ok");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "저장" }).click();
   await expect(page.getByText("Monday briefing")).toBeVisible();
   await captureScreenshot(page, testInfo, "10-routine-created");
 
-  await page.getByText("Plugins").click();
-  await expect(page.getByPlaceholder("Search apps")).toBeVisible();
+  await page.getByText("플러그인").click();
+  await expect(page.getByPlaceholder("앱 검색")).toBeVisible();
   await expect(page.getByText("Gmail", { exact: true })).toBeVisible();
   await expect(page.getByText("Slack", { exact: true })).toBeVisible();
   await expect(page.getByText("GitHub", { exact: true })).toBeVisible();
@@ -99,46 +99,46 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await captureScreenshot(page, testInfo, "11-plugins-catalog");
 
   const gmailRow = page.getByText("Gmail", { exact: true }).locator("..").locator("..");
-  await gmailRow.getByRole("button", { name: "Connect", exact: true }).click();
-  await expect(gmailRow.getByRole("button", { name: "Revoke", exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "Connected", exact: true }).click();
+  await gmailRow.getByRole("button", { name: "연결", exact: true }).click();
+  await expect(gmailRow.getByRole("button", { name: "연결 해제", exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "연결됨", exact: true }).click();
   await expect(page.getByText("Slack", { exact: true })).toBeHidden();
   await captureScreenshot(page, testInfo, "11a-connected-plugins");
 
-  await gmailRow.getByRole("button", { name: "Revoke", exact: true }).click();
-  await expect(page.getByText("No connected apps yet.", { exact: true })).toBeVisible();
+  await gmailRow.getByRole("button", { name: "연결 해제", exact: true }).click();
+  await expect(page.getByText("연결된 앱이 없습니다.", { exact: true })).toBeVisible();
   await expect(page.getByText("Gmail", { exact: true })).toBeHidden();
   await captureScreenshot(page, testInfo, "11b-connected-plugins-empty");
 
-  await page.getByRole("tab", { name: "All", exact: true }).click();
+  await page.getByRole("tab", { name: "전체", exact: true }).click();
   await expect(page.getByText("Gmail", { exact: true })).toBeVisible();
-  await expect(gmailRow.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close plugins" }).click();
+  await expect(gmailRow.getByRole("button", { name: "연결", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "플러그인 닫기" }).click();
 
   await page.getByText("Chief").first().click();
-  const gear = page.getByRole("button", { name: "Bot settings" });
+  const gear = page.getByRole("button", { name: "봇 설정" });
   if (!(await gear.isVisible().catch(() => false))) {
-    await page.getByTitle("Agent computer").click();
+    await page.getByTitle("에이전트 브라우저").click();
   }
   await gear.click();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export" }).click();
+  await page.getByRole("button", { name: "내보내기" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/chief-export\.json/i);
   const settings = page.getByTestId("bot-settings");
   await expect(settings.getByRole("button", { name: "Archive bot" })).toHaveCount(0);
   await expect(settings.getByRole("button", { name: "Delete bot" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Close panel" }).click();
+  await page.getByRole("button", { name: "패널 닫기" }).click();
 
   await page.locator("aside").first().getByRole("button", { name: /Chief/ }).first().click({
     button: "right",
   });
-  const botMenu = page.getByRole("menu", { name: "Actions for Chief" });
-  await expect(botMenu.getByRole("menuitem", { name: "Archive" })).toBeVisible();
-  await botMenu.getByRole("menuitem", { name: "Delete" }).click();
-  await expect(page.getByRole("radio", { name: /Keep memories/ })).toBeChecked();
-  await expect(page.getByRole("radio", { name: /Delete memories too/ })).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
+  const botMenu = page.getByRole("menu", { name: "Chief 작업 메뉴" });
+  await expect(botMenu.getByRole("menuitem", { name: "보관" })).toBeVisible();
+  await botMenu.getByRole("menuitem", { name: "삭제" }).click();
+  await expect(page.getByRole("radio", { name: /메모리 유지/ })).toBeChecked();
+  await expect(page.getByRole("radio", { name: /메모리도 삭제/ })).toBeVisible();
+  await page.getByRole("button", { name: "취소" }).click();
   await captureScreenshot(page, testInfo, "12-bot-settings");
 });
 
@@ -148,7 +148,7 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   await signup(page, email, "password12", "Shell");
   await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
 
-  const composer = page.getByPlaceholder(/Message/);
+  const composer = page.getByPlaceholder(/작업 지시/);
   await composer.fill("spawn a bot named Scout to research venues");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("complementary").getByRole("button", { name: /Scout/ })).toBeVisible({
@@ -164,14 +164,14 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   await page.keyboard.press("Enter");
   await expect(page.getByText("still working").first()).toBeVisible({ timeout: 30_000 });
   await captureScreenshot(page, testInfo, "14-active-bot-work");
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Send" })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "작업 중지", exact: true }).click();
+  await expect(page.getByRole("button", { name: "전송" })).toBeVisible({ timeout: 30_000 });
 
   await page.context().clearCookies();
   await page.goto("/sign-in");
-  await page.getByPlaceholder("Your email address").fill(email);
-  await page.getByPlaceholder("Password").fill("password12");
-  await page.getByRole("button", { name: "Continue with email" }).click();
+  await page.getByPlaceholder("이메일 주소").fill(email);
+  await page.getByPlaceholder("비밀번호 (8자 이상)").fill("password12");
+  await page.getByRole("button", { name: "이메일로 로그인" }).click();
   await page.waitForURL(/\/app/, { timeout: 20_000 });
   await expect(
     page.getByRole("complementary").getByRole("button", { name: /^Chief/ }),
@@ -191,38 +191,40 @@ test("bot context menu pins, duplicates, edits, and confirms deletion", async ({
 
   const chief = page.getByRole("button", { name: /Chief/ }).first();
   await chief.click({ button: "right" });
-  await expect(page.getByRole("menu", { name: "Actions for Chief" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Edit Profile" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+  await expect(page.getByRole("menu", { name: "Chief 작업 메뉴" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "봇 설정" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "복제" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "삭제" })).toBeVisible();
   await captureScreenshot(page, testInfo, "16-bot-context-menu");
-  await page.getByRole("menuitem", { name: "Mark as Unread" }).click();
+  await page.getByRole("menuitem", { name: "읽지 않음으로 표시" }).click();
 
   // Chief is the open bot, so the auto-read on window focus must not undo the manual mark.
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await chief.click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "Mark as Read" })).toBeVisible();
-  await page.getByRole("menuitem", { name: "Mark as Read" }).click();
+  await expect(page.getByRole("menuitem", { name: "읽음으로 표시" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "읽음으로 표시" }).click();
 
   await chief.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+  await page.getByRole("menuitem", { name: "고정", exact: true }).click();
 
   await chief.click({ button: "right" });
-  await expect(page.getByRole("menuitem", { name: "Unpin", exact: true })).toBeVisible();
-  await page.getByRole("menuitem", { name: "Duplicate" }).click();
+  await expect(page.getByRole("menuitem", { name: "고정 해제", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: "복제" }).click();
   await expect(page.getByText("Chief copy").first()).toBeVisible();
   await captureScreenshot(page, testInfo, "17-pinned-and-duplicated-bot");
 
   const copy = page.getByRole("button", { name: /Chief copy/ }).first();
   await copy.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Delete" }).click();
-  await expect(page.getByRole("alertdialog", { name: "Delete Chief copy?" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "삭제" }).click();
+  await expect(
+    page.getByRole("alertdialog", { name: "Chief copy 봇을 삭제할까요?" }),
+  ).toBeVisible();
   await captureScreenshot(page, testInfo, "18-delete-confirmation");
-  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "취소" }).click();
 
   await chief.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Edit Profile" }).click();
-  await expect(page.locator("label:has-text('Name') input")).toHaveValue("Chief");
+  await page.getByRole("menuitem", { name: "봇 설정" }).click();
+  await expect(page.locator("label:has-text('이름') input")).toHaveValue("Chief");
   await captureScreenshot(page, testInfo, "19-edit-profile");
 });
 

@@ -140,12 +140,17 @@ function recordingEventKey(event: TeachRecordingEvent): string {
 async function mutateRecording(
   deps: TeachingSessionDeps,
   skillId: string,
-  mutate: (recording: TeachRecording) => { recording: TeachRecording; changed: boolean },
+  mutate: (recording: TeachRecording) => {
+    recording: TeachRecording;
+    changed: boolean;
+  },
   options?: { requireRecording?: boolean },
 ): Promise<TaughtSkillRow> {
   return deps.prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM taught_skills WHERE id = ${skillId} FOR UPDATE`;
-    const skill = await tx.taughtSkill.findUniqueOrThrow({ where: { id: skillId } });
+    const skill = await tx.taughtSkill.findUniqueOrThrow({
+      where: { id: skillId },
+    });
     if (options?.requireRecording !== false && skill.status !== "recording") {
       return skill;
     }
@@ -194,10 +199,15 @@ async function finalizeTeachingRecording(
   skillId: string,
   reason: "stopped" | "expired",
   stopSnapshot?: TeachSnapshot,
-): Promise<{ skill: TaughtSkillRow; stopped: { threadId: string; seq: number } | null }> {
+): Promise<{
+  skill: TaughtSkillRow;
+  stopped: { threadId: string; seq: number } | null;
+}> {
   return deps.prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM taught_skills WHERE id = ${skillId} FOR UPDATE`;
-    const skill = await tx.taughtSkill.findUniqueOrThrow({ where: { id: skillId } });
+    const skill = await tx.taughtSkill.findUniqueOrThrow({
+      where: { id: skillId },
+    });
     if (skill.status === "draft" || skill.status === "saved") {
       return { skill, stopped: null };
     }
@@ -414,7 +424,10 @@ async function emitSkillDraftMessages(
       threadId,
       botId: bot.id,
       type: "skill.draft.created",
-      payload: { skillId: skill.id, name: skill.name || skill.goal.slice(0, 80) },
+      payload: {
+        skillId: skill.id,
+        name: skill.name || skill.goal.slice(0, 80),
+      },
     });
     return draftEvent.seq;
   });
@@ -457,9 +470,14 @@ export async function expireTaughtSkillTeaching(
   deps: TeachingSessionDeps,
   skillId: string,
 ): Promise<TaughtSkillRow | null> {
-  const skill = await deps.prisma.taughtSkill.findUnique({ where: { id: skillId } });
+  const skill = await deps.prisma.taughtSkill.findUnique({
+    where: { id: skillId },
+  });
   if (!skill) return null;
-  const actor = { workspaceId: skill.workspaceId, userId: skill.userId } as Actor;
+  const actor = {
+    workspaceId: skill.workspaceId,
+    userId: skill.userId,
+  } as Actor;
   if (skill.status !== "recording") {
     const leaseId = parseRecording(skill.recording).controlLeaseId;
     if (leaseId) await releaseTeachingComputerControlForBot(deps, actor, skill.botId, leaseId);
@@ -509,7 +527,13 @@ export async function applyTeachingDesktopInput(
     await sandbox.act(
       toComputerRef(computer),
       {
-        actions: [{ kind: "scroll", direction: mapped.direction, amount: mapped.amount }],
+        actions: [
+          {
+            kind: "scroll",
+            direction: mapped.direction,
+            amount: mapped.amount,
+          },
+        ],
         observe: false,
       },
       context,
@@ -537,10 +561,10 @@ export async function recordTeachingInputEvent(
   }
   const event: TeachRecordingEvent = {
     at: new Date().toISOString(),
-    kind: mapped.kind === "scroll" ? "scroll" : mapped.kind,
+    kind: mapped.kind === "scroll" ? "scroll" : mapped.kind === "text" ? "clipboard" : mapped.kind,
     ...(mapped.kind === "key"
       ? { key: mapped.key }
-      : mapped.kind === "clipboard"
+      : mapped.kind === "clipboard" || mapped.kind === "text"
         ? { text: mapped.text }
         : mapped.kind === "scroll"
           ? { type: mapped.direction, text: String(mapped.amount ?? 3) }
@@ -553,7 +577,9 @@ export async function recordTeachingInputEvent(
   };
   const prepared = await deps.prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM taught_skills WHERE id = ${skill.id} FOR UPDATE`;
-    const current = await tx.taughtSkill.findUniqueOrThrow({ where: { id: skill.id } });
+    const current = await tx.taughtSkill.findUniqueOrThrow({
+      where: { id: skill.id },
+    });
     if (current.status !== "recording") return { kind: "stale" as const };
     if (current.expiresAt && current.expiresAt.getTime() <= Date.now()) {
       return { kind: "expired" as const };
@@ -579,7 +605,9 @@ export async function recordTeachingInputEvent(
   }
   const recorded = await deps.prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT id FROM taught_skills WHERE id = ${skill.id} FOR UPDATE`;
-    const current = await tx.taughtSkill.findUniqueOrThrow({ where: { id: skill.id } });
+    const current = await tx.taughtSkill.findUniqueOrThrow({
+      where: { id: skill.id },
+    });
     if (current.status !== "recording") return "stale" as const;
     if (current.expiresAt && current.expiresAt.getTime() <= Date.now()) return "expired" as const;
     const recording = parseRecording(current.recording);
@@ -600,14 +628,21 @@ export async function recordTeachingInputEvent(
 export async function captureTeachingSnapshot(
   deps: TeachingSessionDeps,
   actor: Actor,
-  bot: { id: string; computer: { id: string; kind: string; providerRef: string | null } | null },
+  bot: {
+    id: string;
+    computer: { id: string; kind: string; providerRef: string | null } | null;
+  },
   skill: TaughtSkillRow,
 ): Promise<TaughtSkillRow> {
   const snapshot = await observeStopSnapshot(deps, actor, bot);
   if (!snapshot) return skill;
   return mutateRecording(deps, skill.id, (recording) => {
     recording.snapshots.push(snapshot);
-    recording.events.push({ at: snapshot.at, kind: "snapshot", summary: snapshot.summary });
+    recording.events.push({
+      at: snapshot.at,
+      kind: "snapshot",
+      summary: snapshot.summary,
+    });
     return { recording, changed: true };
   });
 }

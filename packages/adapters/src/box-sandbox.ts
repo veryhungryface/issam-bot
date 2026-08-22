@@ -231,7 +231,10 @@ export class BoxSandboxProvider implements SandboxProvider {
       }
       if (result.stdout) yield { type: "stdout", data: result.stdout };
       if (result.timedOut) {
-        yield { type: "stderr", data: `command timed out after ${timeoutMs} ms\n` };
+        yield {
+          type: "stderr",
+          data: `command timed out after ${timeoutMs} ms\n`,
+        };
         yield { type: "exit", code: 124 };
         return;
       }
@@ -506,7 +509,10 @@ export class BoxSandboxProvider implements SandboxProvider {
       if (box.state === "ready" || box.state === "idle" || box.state === "running") return box;
       if (box.state === "archived" && !resumed) {
         await this.client.resume(
-          { boxId: id, resumeRequest: { noEnv: true, ttlSeconds: BOX_TTL_SECONDS } },
+          {
+            boxId: id,
+            resumeRequest: { noEnv: true, ttlSeconds: BOX_TTL_SECONDS },
+          },
           { signal: context.signal },
         );
         resumed = true;
@@ -541,7 +547,9 @@ export class BoxSandboxProvider implements SandboxProvider {
     context: AdapterContext,
   ): Promise<void> {
     if (action.kind === "wait") {
-      await delay(clampRounded(action.ms, 0, 5_000), undefined, { signal: context.signal });
+      await delay(clampRounded(action.ms, 0, 5_000), undefined, {
+        signal: context.signal,
+      });
       return;
     }
     const command = boxActionCommand(action);
@@ -650,7 +658,9 @@ export class BoxSandboxProvider implements SandboxProvider {
             cwd,
             ...(detached
               ? { detached: true }
-              : { timeoutSeconds: Math.min(timeoutSeconds + 5, BOX_API_COMMAND_TIMEOUT_SECONDS) }),
+              : {
+                  timeoutSeconds: Math.min(timeoutSeconds + 5, BOX_API_COMMAND_TIMEOUT_SECONDS),
+                }),
           },
         },
         signal ? { signal } : undefined,
@@ -701,7 +711,12 @@ export class BoxSandboxProvider implements SandboxProvider {
           `kill -TERM -- -${pid} 2>/dev/null || kill -TERM ${pid} 2>/dev/null || true`,
           10,
         ).catch(() => undefined);
-        return { stdout: status.stdout, stderr: status.stderr, exitCode: 124, timedOut: true };
+        return {
+          stdout: status.stdout,
+          stderr: status.stderr,
+          exitCode: 124,
+          timedOut: true,
+        };
       }
       await delay(500, undefined, signal ? { signal } : undefined);
     }
@@ -746,7 +761,11 @@ export class BoxSandboxProvider implements SandboxProvider {
 export function isUnrecoverableBoxError(error: unknown): boolean {
   if (error instanceof ResponseError) return error.response.status === 404;
   if (!error || typeof error !== "object") return false;
-  const value = error as { status?: unknown; statusCode?: unknown; code?: unknown };
+  const value = error as {
+    status?: unknown;
+    statusCode?: unknown;
+    code?: unknown;
+  };
   return value.status === 404 || value.statusCode === 404 || value.code === 404;
 }
 
@@ -806,7 +825,10 @@ function createBoxSdk(config: { apiKey: string; apiUrl?: string }): BoxSandboxSd
 async function boxErrorMessage(response: Response): Promise<string> {
   const fallback = `Box API request failed with ${response.status}`;
   try {
-    const body = (await response.json()) as { message?: unknown; requestId?: unknown };
+    const body = (await response.json()) as {
+      message?: unknown;
+      requestId?: unknown;
+    };
     const message = typeof body.message === "string" ? body.message : fallback;
     return typeof body.requestId === "string" ? `${message} (${body.requestId})` : message;
   } catch {
@@ -982,7 +1004,7 @@ function boxActionCommand(action: Exclude<ComputerAction, { kind: "wait" }>): st
     const keys = [...(action.modifiers ?? []), action.key].join("+");
     return `DISPLAY=:0 xdotool key ${shellQuote(keys)}`;
   }
-  if (action.kind === "clipboard") {
+  if (action.kind === "clipboard" || action.kind === "text") {
     return `DISPLAY=:0 xdotool type --delay 1 -- ${shellQuote(action.text)}`;
   }
   if (action.kind === "pointer") {

@@ -135,7 +135,10 @@ export interface RouterDeps {
 }
 
 export function createRouter(deps: RouterDeps) {
-  const os = implement(appContract).$context<{ actor: Actor | null; signal?: AbortSignal }>();
+  const os = implement(appContract).$context<{
+    actor: Actor | null;
+    signal?: AbortSignal;
+  }>();
   const repos = createRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
     prisma: deps.prisma,
@@ -152,7 +155,10 @@ export function createRouter(deps: RouterDeps) {
   });
 
   return os.router({
-    health: os.health.handler(async () => ({ ok: true as const, version: "0.1.0" })),
+    health: os.health.handler(async () => ({
+      ok: true as const,
+      version: "0.1.0",
+    })),
     me: authed.me.handler(async ({ context }): Promise<Me> => meDto(deps, context.actor)),
     bootstrap: authed.bootstrap.handler(async ({ context, input }) => {
       const actor = context.actor;
@@ -206,7 +212,10 @@ export function createRouter(deps: RouterDeps) {
       list: authed.models.list.handler(async () => [...listPiCatalog(), scriptedCatalogEntry]),
       credentials: authed.models.credentials.handler(async ({ context }) => {
         const rows = await deps.prisma.userModelCredential.findMany({
-          where: { userId: context.actor.userId, workspaceId: context.actor.workspaceId },
+          where: {
+            userId: context.actor.userId,
+            workspaceId: context.actor.workspaceId,
+          },
           orderBy: newestModelCredentialOrder,
         });
         return rows.map((row) => ({
@@ -251,7 +260,10 @@ export function createRouter(deps: RouterDeps) {
           async (login) => {
             return persistModelCredential(deps, context.actor, {
               provider: login.provider,
-              plaintext: serializeModelSecret({ kind: "oauth", credential: login.credential }),
+              plaintext: serializeModelSecret({
+                kind: "oauth",
+                credential: login.credential,
+              }),
               label: login.label ?? "ChatGPT Plus/Pro",
               modelId: login.modelId,
               signal: login.signal,
@@ -259,7 +271,9 @@ export function createRouter(deps: RouterDeps) {
           },
         );
         if (result.status === "pending") {
-          throw new ORPCError("CONFLICT", { message: "Sign-in has not finished yet." });
+          throw new ORPCError("CONFLICT", {
+            message: "Sign-in has not finished yet.",
+          });
         }
         if (result.status === "error") {
           throw new ORPCError("NOT_FOUND", { message: result.error });
@@ -377,14 +391,21 @@ export function createRouter(deps: RouterDeps) {
         if (claimed.count !== 1) throw new ORPCError("CONFLICT");
         try {
           const active = await deps.prisma.run.findFirst({
-            where: { botId: bot.id, status: { in: [...ACTIVE_RUN_STATUSES] } },
+            where: {
+              botId: bot.id,
+              status: { in: [...ACTIVE_RUN_STATUSES] },
+            },
             select: { id: true },
           });
           if (active) {
-            throw new ORPCError("BAD_REQUEST", { message: "Stop the bot first" });
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Stop the bot first",
+            });
           }
           if (bot.computer.controlBotId === bot.id && hasActiveComputerControl(bot.computer)) {
-            throw new ORPCError("BAD_REQUEST", { message: "Release the computer first" });
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Release the computer first",
+            });
           }
           if (bot.computer.scope === "dedicated" && bot.computer.providerRef) {
             const ctx = computerContext(context.actor, bot.id, "computer.switch");
@@ -419,7 +440,9 @@ export function createRouter(deps: RouterDeps) {
         }
       }),
       archive: authed.bots.archive.handler(async ({ context, input }) => {
-        const bot = await repos.getBot(context.actor, input.botId, { includeArchived: true });
+        const bot = await repos.getBot(context.actor, input.botId, {
+          includeArchived: true,
+        });
         await archiveBot(
           {
             prisma: deps.prisma,
@@ -434,13 +457,20 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
       restore: authed.bots.restore.handler(async ({ context, input }) => {
-        const bot = await repos.getBot(context.actor, input.botId, { includeArchived: true });
+        const bot = await repos.getBot(context.actor, input.botId, {
+          includeArchived: true,
+        });
         if (!bot.archivedAt) return { ok: true as const };
-        await deps.prisma.bot.update({ where: { id: bot.id }, data: { archivedAt: null } });
+        await deps.prisma.bot.update({
+          where: { id: bot.id },
+          data: { archivedAt: null },
+        });
         return { ok: true as const };
       }),
       remove: authed.bots.remove.handler(async ({ context, input }) => {
-        const bot = await repos.getBot(context.actor, input.botId, { includeArchived: true });
+        const bot = await repos.getBot(context.actor, input.botId, {
+          includeArchived: true,
+        });
         await destroyBot(
           {
             prisma: deps.prisma,
@@ -499,7 +529,10 @@ export function createRouter(deps: RouterDeps) {
         await assertTeachingSendAllowed(deps.prisma, context.actor.workspaceId, bot.id);
         if (input.clientNonce) {
           const dup = await deps.prisma.run.findFirst({
-            where: { workspaceId: context.actor.workspaceId, clientNonce: input.clientNonce },
+            where: {
+              workspaceId: context.actor.workspaceId,
+              clientNonce: input.clientNonce,
+            },
           });
           if (dup) return { taskId: dup.taskId, runId: dup.id, seq: 0 };
         }
@@ -553,7 +586,9 @@ export function createRouter(deps: RouterDeps) {
           },
           data: { status: "cancelled", completedAt: new Date() },
         });
-        await deps.prisma.computerExecutionLease.deleteMany({ where: { botId: bot.id } });
+        await deps.prisma.computerExecutionLease.deleteMany({
+          where: { botId: bot.id },
+        });
         await deps.prisma.computer.updateMany({
           where: { executionBotId: bot.id },
           data: {
@@ -753,7 +788,9 @@ export function createRouter(deps: RouterDeps) {
       takeover: authed.computer.takeover.handler(async ({ context, input }) => {
         let bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer?.providerRef || bot.computer.state !== "running") {
-          throw new ORPCError("BAD_REQUEST", { message: "computer must be running" });
+          throw new ORPCError("BAD_REQUEST", {
+            message: "computer must be running",
+          });
         }
         if (hasActiveComputerControl(bot.computer) && bot.computer.controlBotId === bot.id) {
           await scheduleComputerControlExpiry(
@@ -776,7 +813,10 @@ export function createRouter(deps: RouterDeps) {
             bot.computer.controlLeaseId ?? undefined,
           );
           await deps.prisma.computer.updateMany({
-            where: { id: bot.computer.id, controlLeaseId: bot.computer.controlLeaseId },
+            where: {
+              id: bot.computer.id,
+              controlLeaseId: bot.computer.controlLeaseId,
+            },
             data: {
               controlHolder: "none",
               controlLeaseId: null,
@@ -794,7 +834,9 @@ export function createRouter(deps: RouterDeps) {
         if (!bot.computer) throw new IsolationError();
 
         const executionLease = await deps.prisma.computerExecutionLease.findUnique({
-          where: { computerId_botId: { computerId: bot.computer.id, botId: bot.id } },
+          where: {
+            computerId_botId: { computerId: bot.computer.id, botId: bot.id },
+          },
         });
         const executionLeaseActive = Boolean(
           executionLease && executionLease.expiresAt.getTime() > Date.now(),
@@ -942,34 +984,38 @@ export function createRouter(deps: RouterDeps) {
           throw new ORPCError("FORBIDDEN");
         }
         if (!computer.providerRef) return { ok: true as const };
-        const clipboardText =
-          input.kind === "clipboard" ? String(input.payload.text ?? "") : undefined;
-        if (clipboardText !== undefined && (!clipboardText || clipboardText.length > 10_000)) {
+        const unicodeText =
+          input.kind === "clipboard" || input.kind === "text"
+            ? String(input.payload.text ?? "")
+            : undefined;
+        if (unicodeText !== undefined && (!unicodeText || unicodeText.length > 10_000)) {
           throw new ORPCError("BAD_REQUEST", {
-            message: "clipboard text must contain between 1 and 10000 characters",
+            message: "text input must contain between 1 and 10000 characters",
           });
         }
         const mapped =
           input.kind === "key"
             ? { kind: "key" as const, key: String(input.payload.key ?? "") }
-            : input.kind === "clipboard"
-              ? { kind: "clipboard" as const, text: clipboardText! }
-              : input.kind === "scroll"
-                ? {
-                    kind: "scroll" as const,
-                    direction:
-                      input.payload.direction === "up" ? ("up" as const) : ("down" as const),
-                    amount: Number(input.payload.amount ?? 3),
-                  }
-                : {
-                    kind: "pointer" as const,
-                    x: Number(input.payload.x ?? 0),
-                    y: Number(input.payload.y ?? 0),
-                    button: (input.payload.button as "left" | "right" | undefined) ?? "left",
-                    type:
-                      (input.payload.type as "move" | "down" | "up" | "click" | undefined) ??
-                      "click",
-                  };
+            : input.kind === "text"
+              ? { kind: "text" as const, text: unicodeText! }
+              : input.kind === "clipboard"
+                ? { kind: "clipboard" as const, text: unicodeText! }
+                : input.kind === "scroll"
+                  ? {
+                      kind: "scroll" as const,
+                      direction:
+                        input.payload.direction === "up" ? ("up" as const) : ("down" as const),
+                      amount: Number(input.payload.amount ?? 3),
+                    }
+                  : {
+                      kind: "pointer" as const,
+                      x: Number(input.payload.x ?? 0),
+                      y: Number(input.payload.y ?? 0),
+                      button: (input.payload.button as "left" | "right" | undefined) ?? "left",
+                      type:
+                        (input.payload.type as "move" | "down" | "up" | "click" | undefined) ??
+                        "click",
+                    };
         const outcome = await taughtSkills.recordInput(context.actor, bot.id, mapped);
         if (outcome === "stale") return { ok: true as const };
         if (outcome !== "recorded") {
@@ -1034,7 +1080,9 @@ export function createRouter(deps: RouterDeps) {
             });
           } catch (error) {
             if (error instanceof Error && error.message.startsWith("agent home file exceeds ")) {
-              throw new ORPCError("BAD_REQUEST", { message: "file is too large to preview" });
+              throw new ORPCError("BAD_REQUEST", {
+                message: "file is too large to preview",
+              });
             }
             throw error;
           }
@@ -1265,7 +1313,10 @@ export function createRouter(deps: RouterDeps) {
       }),
       remove: authed.routines.remove.handler(async ({ context, input }) => {
         const existing = await deps.prisma.routine.findFirst({
-          where: { id: input.routineId, workspaceId: context.actor.workspaceId },
+          where: {
+            id: input.routineId,
+            workspaceId: context.actor.workspaceId,
+          },
         });
         if (!existing) throw new IsolationError();
         await deps.prisma.routine.delete({ where: { id: existing.id } });
@@ -1274,7 +1325,10 @@ export function createRouter(deps: RouterDeps) {
       }),
       testRun: authed.routines.testRun.handler(async ({ context, input }) => {
         const routine = await deps.prisma.routine.findFirst({
-          where: { id: input.routineId, workspaceId: context.actor.workspaceId },
+          where: {
+            id: input.routineId,
+            workspaceId: context.actor.workspaceId,
+          },
         });
         if (!routine) throw new IsolationError();
         const bot = await repos.getBot(context.actor, routine.botId);
@@ -1344,7 +1398,10 @@ export function createRouter(deps: RouterDeps) {
     capabilities: {
       list: authed.capabilities.list.handler(async ({ context }) => {
         const rows = await deps.prisma.capabilityInstall.findMany({
-          where: { workspaceId: context.actor.workspaceId, userId: context.actor.userId },
+          where: {
+            workspaceId: context.actor.workspaceId,
+            userId: context.actor.userId,
+          },
         });
         return rows.map((row) => ({
           id: row.id,
@@ -1403,7 +1460,10 @@ export function createRouter(deps: RouterDeps) {
       }),
       list: authed.connections.list.handler(async ({ context }) => {
         const rows = await deps.prisma.connection.findMany({
-          where: { workspaceId: context.actor.workspaceId, userId: context.actor.userId },
+          where: {
+            workspaceId: context.actor.workspaceId,
+            userId: context.actor.userId,
+          },
         });
         return rows.map((row) => ({
           id: row.id,
@@ -1429,7 +1489,10 @@ export function createRouter(deps: RouterDeps) {
         }
         try {
           const auth = await deps.composio.begin(
-            { provider: input.provider, redirectUrl: `${deps.env.webOrigin}/app` },
+            {
+              provider: input.provider,
+              redirectUrl: `${deps.env.webOrigin}/app`,
+            },
             {
               operationId: "connections.begin",
               traceId: "connections.begin",
@@ -1446,13 +1509,18 @@ export function createRouter(deps: RouterDeps) {
               metadata: { state: auth.state },
             },
           });
-          return { connectionId: row.id, authorizationUrl: auth.authorizationUrl };
+          return {
+            connectionId: row.id,
+            authorizationUrl: auth.authorizationUrl,
+          };
         } catch (error) {
           await deps.prisma.connection.update({
             where: { id: row.id },
             data: { status: "error" },
           });
-          throw new ORPCError("BAD_REQUEST", { message: sanitizeComposioError(error) });
+          throw new ORPCError("BAD_REQUEST", {
+            message: sanitizeComposioError(error),
+          });
         }
       }),
       complete: authed.connections.complete.handler(async ({ context, input }) => {
@@ -1481,7 +1549,9 @@ export function createRouter(deps: RouterDeps) {
             data: { status: "connected" },
           });
         }
-        const row = await deps.prisma.connection.findFirstOrThrow({ where: { id: existing.id } });
+        const row = await deps.prisma.connection.findFirstOrThrow({
+          where: { id: existing.id },
+        });
         return {
           id: row.id,
           provider: row.provider,
@@ -1509,7 +1579,10 @@ export function createRouter(deps: RouterDeps) {
           });
         }
         await deps.prisma.connection.updateMany({
-          where: { id: input.connectionId, workspaceId: context.actor.workspaceId },
+          where: {
+            id: input.connectionId,
+            workspaceId: context.actor.workspaceId,
+          },
           data: { status: "revoked" },
         });
         return { ok: true as const };
@@ -1555,7 +1628,10 @@ export function createRouter(deps: RouterDeps) {
     usage: {
       list: authed.usage.list.handler(async ({ context }) => {
         const rows = await deps.prisma.usageRecord.findMany({
-          where: { workspaceId: context.actor.workspaceId, userId: context.actor.userId },
+          where: {
+            workspaceId: context.actor.workspaceId,
+            userId: context.actor.userId,
+          },
           orderBy: { createdAt: "desc" },
           take: 100,
         });
@@ -1572,7 +1648,10 @@ export function createRouter(deps: RouterDeps) {
       }),
       summary: authed.usage.summary.handler(async ({ context }) => {
         const result = await deps.prisma.usageRecord.aggregate({
-          where: { workspaceId: context.actor.workspaceId, userId: context.actor.userId },
+          where: {
+            workspaceId: context.actor.workspaceId,
+            userId: context.actor.userId,
+          },
           _sum: { inputTokens: true, outputTokens: true },
           _count: { _all: true },
         });
@@ -1597,10 +1676,16 @@ export function createRouter(deps: RouterDeps) {
         };
         const [memory, routines, files, history] = await Promise.all([
           deps.prisma.memoryDocument.findMany({
-            where: { botId: input.botId, workspaceId: context.actor.workspaceId },
+            where: {
+              botId: input.botId,
+              workspaceId: context.actor.workspaceId,
+            },
           }),
           deps.prisma.routine.findMany({
-            where: { botId: input.botId, workspaceId: context.actor.workspaceId },
+            where: {
+              botId: input.botId,
+              workspaceId: context.actor.workspaceId,
+            },
           }),
           (async () => {
             const exported: Array<{ path: string; content: string }> = [];
@@ -1654,7 +1739,10 @@ export function createRouter(deps: RouterDeps) {
       }),
       credentials: authed.voice.credentials.handler(async ({ context }) => {
         const rows = await deps.prisma.userVoiceCredential.findMany({
-          where: { userId: context.actor.userId, workspaceId: context.actor.workspaceId },
+          where: {
+            userId: context.actor.userId,
+            workspaceId: context.actor.workspaceId,
+          },
           orderBy: newestVoiceCredentialOrder,
         });
         return rows.map(toVoiceCredential);
@@ -1690,7 +1778,9 @@ export function createRouter(deps: RouterDeps) {
                     orderBy: newestVoiceCredentialOrder,
                   });
               if (!found) {
-                throw new ORPCError("BAD_REQUEST", { message: "Connect a voice provider first." });
+                throw new ORPCError("BAD_REQUEST", {
+                  message: "Connect a voice provider first.",
+                });
               }
               // Picking a voice also makes its provider the one speak/transcribe use.
               await tx.userVoiceCredential.updateMany({
@@ -1836,7 +1926,9 @@ async function computerStatus(
 async function expireStaleComputerControl(
   deps: RouterDeps,
   computer:
-    | (NonNullable<Parameters<typeof hasActiveComputerControl>[0]> & { id: string })
+    | (NonNullable<Parameters<typeof hasActiveComputerControl>[0]> & {
+        id: string;
+      })
     | null
     | undefined,
 ): Promise<boolean> {
@@ -1900,7 +1992,9 @@ function toComputerStatus(
 }
 
 async function deploymentDto(prisma: PrismaClient, sandboxProvider: string) {
-  const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
+  const settings = await prisma.deploymentSettings.findUnique({
+    where: { id: "default" },
+  });
   return {
     ownerUserId: settings?.ownerUserId ?? null,
     signupsEnabled: settings?.signupsEnabled ?? true,

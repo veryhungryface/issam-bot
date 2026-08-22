@@ -9,7 +9,7 @@ export function AuthPage({ mode }: { mode: "in" | "up" }) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const title = mode === "in" ? "Sign in to Rakazo" : "Create your Rakazo";
+  const title = mode === "in" ? "Issam Bot 로그인" : "Issam Bot 시작하기";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -20,12 +20,12 @@ export function AuthPage({ mode }: { mode: "in" | "up" }) {
         ? await authClient.signUp.email({
             email,
             password,
-            name: name || email.split("@")[0] || "User",
+            name: name || email.split("@")[0] || "사용자",
           })
         : await authClient.signIn.email({ email, password });
     setPending(false);
     if (result.error) {
-      setError(result.error.message ?? "Could not continue");
+      setError(result.error.message ?? "요청을 처리하지 못했습니다.");
       return;
     }
     navigate(mode === "up" ? "/onboarding" : "/app");
@@ -41,32 +41,32 @@ export function AuthPage({ mode }: { mode: "in" | "up" }) {
         <h1 className="mb-[38px] mt-[30px] text-[38px] tracking-[-0.02em]">{title}</h1>
         {mode === "up" ? (
           <label className="mb-4 w-full text-[16px] text-[#6E6E68]">
-            Name
+            이름
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
+              placeholder="이름을 입력하세요"
               className="mt-2 w-full rounded-[13px] border border-[#E4E4DE] bg-[#F1F1ED] px-[18px] py-[17px] text-[17px] text-[#1B1B1E] outline-none"
             />
           </label>
         ) : null}
         <label className="w-full text-[16px] text-[#6E6E68]">
-          Email
+          이메일
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Your email address"
+            placeholder="이메일 주소"
             type="email"
             required
             className="mt-2 w-full rounded-[13px] border border-[#E4E4DE] bg-[#F1F1ED] px-[18px] py-[17px] text-[17px] text-[#1B1B1E] outline-none"
           />
         </label>
         <label className="mt-4 w-full text-[16px] text-[#6E6E68]">
-          Password
+          비밀번호
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
+            placeholder="비밀번호 (8자 이상)"
             type="password"
             required
             minLength={8}
@@ -79,21 +79,21 @@ export function AuthPage({ mode }: { mode: "in" | "up" }) {
           disabled={pending}
           className="mt-3 w-full rounded-[13px] bg-[#121215] py-[18px] text-center text-[17px] font-medium text-[#FBFBF9] hover:bg-[#26262B]"
         >
-          {pending ? "Working…" : mode === "in" ? "Continue with email" : "Create account"}
+          {pending ? "처리 중…" : mode === "in" ? "이메일로 로그인" : "계정 만들기"}
         </button>
         <p className="mt-[30px] text-[16px] text-[#8C8C86]">
           {mode === "in" ? (
             <>
-              Don’t have an account?{" "}
+              계정이 없나요?{" "}
               <Link to="/sign-up" className="font-medium text-[#1B1B1E]">
-                Sign up
+                회원가입
               </Link>
             </>
           ) : (
             <>
-              Already have an account?{" "}
+              이미 계정이 있나요?{" "}
               <Link to="/sign-in" className="font-medium text-[#1B1B1E]">
-                Sign in
+                로그인
               </Link>
             </>
           )}

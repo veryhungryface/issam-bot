@@ -14,19 +14,19 @@ export function WindowChrome() {
       <button
         type="button"
         className="app-no-drag h-3 w-3 rounded-full bg-[#FF5F57]"
-        aria-label="Close"
+        aria-label="닫기"
         onClick={() => void desktop?.window.close()}
       />
       <button
         type="button"
         className="app-no-drag h-3 w-3 rounded-full bg-[#FEBC2E]"
-        aria-label="Minimize"
+        aria-label="최소화"
         onClick={() => void desktop?.window.minimize()}
       />
       <button
         type="button"
         className="app-no-drag h-3 w-3 rounded-full bg-[#28C840]"
-        aria-label="Fullscreen"
+        aria-label="전체 화면"
         onClick={() => void desktop?.window.toggleMaximize()}
       />
     </div>

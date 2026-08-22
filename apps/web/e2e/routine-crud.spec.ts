@@ -20,13 +20,13 @@ test("routine editing updates in place, preserves timezone, and deletion persist
     notify: true,
   });
   await page.reload();
-  await page.getByTitle("Agent computer").click();
+  await page.getByTitle("에이전트 브라우저").click();
 
   await page.getByRole("button", { name: /Tokyo check-in/ }).click();
-  await page.locator("label:has-text('Name') input").fill("Weekday check-in");
-  await page.locator("label:has-text('Instruction') textarea").fill("Send the revised update");
+  await page.locator("label:has-text('이름') input").fill("Weekday check-in");
+  await page.locator("label:has-text('작업 지시') textarea").fill("Send the revised update");
   await page.getByLabel("How often").selectOption("Weekdays");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "저장", exact: true }).click();
 
   const updatedButton = page.getByRole("button", { name: /Weekday check-in/ });
   await expect(updatedButton).toHaveCount(1);
@@ -42,24 +42,26 @@ test("routine editing updates in place, preserves timezone, and deletion persist
   });
 
   await updatedButton.click();
-  await page.getByRole("button", { name: "Delete routine" }).click();
-  const dialog = page.getByRole("alertdialog", { name: "Delete Weekday check-in?" });
+  await page.getByRole("button", { name: "자동 작업 삭제" }).click();
+  const dialog = page.getByRole("alertdialog", {
+    name: "Weekday check-in 자동 작업을 삭제할까요?",
+  });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await dialog.getByRole("button", { name: "취소" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator("label:has-text('Name') input")).toHaveValue("Weekday check-in");
+  await expect(page.locator("label:has-text('이름') input")).toHaveValue("Weekday check-in");
 
-  await page.getByRole("button", { name: "Delete routine" }).click();
+  await page.getByRole("button", { name: "자동 작업 삭제" }).click();
   const removeResponse = page.waitForResponse(
     (response) => response.url().includes("/rpc/routines/remove") && response.ok(),
   );
-  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await dialog.getByRole("button", { name: "삭제", exact: true }).click();
   await removeResponse;
   await expect(updatedButton).toHaveCount(0);
   expect(await rpc<Routine[]>(page, "routines/list", { botId })).toEqual([]);
 
   await page.reload();
-  await page.getByTitle("Agent computer").click();
+  await page.getByTitle("에이전트 브라우저").click();
   await expect(updatedButton).toHaveCount(0);
 });
 
@@ -99,9 +101,9 @@ test("switching bots while a routine save is pending does not reopen stale state
   ]);
   await page.reload();
 
-  await page.getByTitle("Agent computer").click();
+  await page.getByTitle("에이전트 브라우저").click();
   await page.getByRole("button", { name: /First routine/ }).click();
-  await page.locator("label:has-text('Name') input").fill("First routine updated");
+  await page.locator("label:has-text('이름') input").fill("First routine updated");
 
   let releaseUpdate!: () => void;
   let sawUpdate!: () => void;
@@ -124,7 +126,7 @@ test("switching bots while a routine save is pending does not reopen stale state
     (response) => response.url().includes("/rpc/routines/update") && response.ok(),
   );
 
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "저장", exact: true }).click();
   await updateIntercepted;
   await page
     .locator("aside")
@@ -138,7 +140,7 @@ test("switching bots while a routine save is pending does not reopen stale state
   await updateResponse;
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
 
-  await page.getByTitle("Agent computer").click();
+  await page.getByTitle("에이전트 브라우저").click();
   await expect(page.getByRole("button", { name: /Second routine/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /First routine/ })).toHaveCount(0);
 

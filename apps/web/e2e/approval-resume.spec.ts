@@ -8,7 +8,7 @@ test("approval input resumes durable work", async ({ page }, testInfo) => {
   await signup(page, `approval-${stamp}@rakazo.test`, "password12", "Approval");
   await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
 
-  const composer = page.getByPlaceholder(/Message/);
+  const composer = page.getByPlaceholder(/작업 지시/);
   await composer.fill("ask me which city to use");
   await page.keyboard.press("Enter");
 

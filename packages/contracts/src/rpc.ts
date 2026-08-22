@@ -168,7 +168,14 @@ export const appContract = {
       .input(z.object({ botId: Id, text: z.string().min(1) }))
       .output(z.object({ ok: z.literal(true) })),
     answer: oc
-      .input(z.object({ botId: Id, runId: Id, messageId: Id, answer: z.string().min(1) }))
+      .input(
+        z.object({
+          botId: Id,
+          runId: Id,
+          messageId: Id,
+          answer: z.string().min(1),
+        }),
+      )
       .output(z.object({ ok: z.literal(true) })),
     markRead: oc.input(botId).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(botId).output(z.object({ ok: z.literal(true) })),
@@ -183,16 +190,20 @@ export const appContract = {
       .input(
         z.object({
           botId: Id,
-          kind: z.enum(["key", "pointer", "clipboard", "scroll"]),
+          kind: z.enum(["key", "text", "pointer", "clipboard", "scroll"]),
           payload: z.record(z.string(), z.unknown()),
         }),
       )
       .output(z.object({ ok: z.literal(true) })),
-    files: oc
-      .input(z.object({ botId: Id, path: z.string().default("/") }))
-      .output(
-        z.array(z.object({ path: z.string(), kind: z.enum(["file", "dir"]), size: z.number() })),
+    files: oc.input(z.object({ botId: Id, path: z.string().default("/") })).output(
+      z.array(
+        z.object({
+          path: z.string(),
+          kind: z.enum(["file", "dir"]),
+          size: z.number(),
+        }),
       ),
+    ),
     readFile: oc
       .input(z.object({ botId: Id, path: z.string() }))
       .output(z.object({ path: z.string(), content: z.string() })),
@@ -201,7 +212,12 @@ export const appContract = {
   },
   memory: {
     list: oc
-      .input(z.object({ botId: Id.optional(), scope: z.enum(["bot", "user"]).optional() }))
+      .input(
+        z.object({
+          botId: Id.optional(),
+          scope: z.enum(["bot", "user"]).optional(),
+        }),
+      )
       .output(z.array(MemoryDocumentSchema)),
     update: oc
       .input(z.object({ documentId: Id, content: z.string() }))
@@ -331,7 +347,12 @@ export const appContract = {
       )
       .output(VoiceCredentialSchema),
     setVoice: oc
-      .input(z.object({ voiceId: z.string().min(1).max(120), provider: z.string().optional() }))
+      .input(
+        z.object({
+          voiceId: z.string().min(1).max(120),
+          provider: z.string().optional(),
+        }),
+      )
       .output(VoiceStatusSchema),
     voices: oc
       .input(z.object({ provider: z.string().optional() }))

@@ -484,6 +484,10 @@ async function applyBrowserAction(
       await page.keyboard.press(keys);
       break;
     }
+    case "text": {
+      await page.keyboard.insertText(action.text);
+      break;
+    }
     case "clipboard": {
       const origin = safeOrigin(page.url());
       if (origin) {
@@ -495,7 +499,9 @@ async function applyBrowserAction(
         (text) =>
           (
             globalThis as unknown as {
-              navigator: { clipboard: { writeText(value: string): Promise<void> } };
+              navigator: {
+                clipboard: { writeText(value: string): Promise<void> };
+              };
             }
           ).navigator.clipboard.writeText(text),
         action.text,
@@ -544,7 +550,9 @@ function decodeProviderRef(providerRef: string): BrowserbaseProviderRef {
       assertProviderId(parsed.sessionId, "session");
       return { contextId: parsed.contextId, sessionId: parsed.sessionId };
     } catch (error) {
-      throw new Error("Invalid Browserbase provider reference", { cause: error });
+      throw new Error("Invalid Browserbase provider reference", {
+        cause: error,
+      });
     }
   }
   const contextId = providerRef.startsWith(LEGACY_CONTEXT_REF_PREFIX)

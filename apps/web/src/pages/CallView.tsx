@@ -66,7 +66,7 @@ export function CallView({
         onFinal: (text) => void handleTranscript(text),
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Microphone failed");
+      setError(err instanceof Error ? err.message : "마이크를 사용할 수 없습니다.");
     }
   }
 
@@ -91,7 +91,7 @@ export function CallView({
         await onSend(text);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send that");
+      setError(err instanceof Error ? err.message : "메시지를 전송하지 못했습니다.");
       void listen();
     }
   }
@@ -184,7 +184,10 @@ export function CallView({
         }
       }
       if (phrases.length) {
-        void speaker.speak(phrases.join(". "), { botId, messageId: `narrate:${lastKey}` });
+        void speaker.speak(phrases.join(". "), {
+          botId,
+          messageId: `narrate:${lastKey}`,
+        });
       }
     }
   }, [snapshot, botId]);
@@ -195,13 +198,15 @@ export function CallView({
         data-testid="call-view"
         className="w-full max-w-[420px] rounded-[24px] border border-[#2A2A2F] bg-[#141416] p-6 text-center shadow-[0_30px_80px_rgba(0,0,0,.55)]"
       >
-        <div className="text-[13px] uppercase tracking-[0.12em] text-[#6C6C70]">Call</div>
+        <div className="text-[13px] uppercase tracking-[0.12em] text-[#6C6C70]">음성 통화</div>
         <div className="mt-2 text-[22px] font-medium text-[#F1F1F2]">{botName}</div>
         <div className="mt-5 text-[15px] text-[#C9C9CE]">
-          {phase === "listening" ? "Listening…" : phase === "speaking" ? "Speaking…" : "Working…"}
+          {phase === "listening" ? "듣는 중…" : phase === "speaking" ? "말하는 중…" : "작업 중…"}
         </div>
         <p className="mt-3 min-h-[3.2em] text-[14.5px] leading-[1.5] text-[#85858A]">
-          {phase === "listening" ? heard || "Say something. Silence sends it." : caption}
+          {phase === "listening"
+            ? heard || "말씀하세요. 말이 끝나면 자동으로 전송됩니다."
+            : caption}
         </p>
         {error ? <p className="mt-2 text-[13px] text-[#C94244]">{error}</p> : null}
         <div className="mt-6 flex justify-center gap-3">
@@ -210,17 +215,17 @@ export function CallView({
             onClick={interrupt}
             className="rounded-full border border-[#2A2A2F] px-4 py-2 text-[14px] text-[#C9C9CE]"
           >
-            Interrupt
+            끼어들기
           </button>
           <button
             type="button"
             onClick={hangUp}
             className="rounded-full bg-[#FF5364] px-4 py-2 text-[14px] font-medium text-white"
           >
-            Hang up
+            통화 종료
           </button>
         </div>
-        <p className="mt-4 text-[12px] text-[#6C6C70]">Space interrupts · Esc hangs up</p>
+        <p className="mt-4 text-[12px] text-[#6C6C70]">Space: 끼어들기 · Esc: 통화 종료</p>
       </div>
     </div>
   );

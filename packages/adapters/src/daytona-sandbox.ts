@@ -644,7 +644,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
       await sandbox.computerUse.keyboard.press(action.key, action.modifiers);
       return;
     }
-    if (action.kind === "clipboard") {
+    if (action.kind === "clipboard" || action.kind === "text") {
       await sandbox.computerUse.keyboard.type(action.text);
       return;
     }

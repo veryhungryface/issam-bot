@@ -22,7 +22,7 @@ function newId(): string {
 
 export function createAuth(prisma: PrismaClient, env: AuthEnv) {
   return betterAuth({
-    appName: "Rakazo",
+    appName: "Issam Bot",
     secret: env.secret,
     baseURL: env.baseURL,
     trustedOrigins: [env.webOrigin, env.baseURL, ...(env.extraOrigins ?? [])],
@@ -40,7 +40,9 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             where: { userId: user.id },
             select: {
               organizationId: true,
-              organization: { select: { members: { select: { userId: true } } } },
+              organization: {
+                select: { members: { select: { userId: true } } },
+              },
             },
           });
           const personalOrganizationIds = memberships
@@ -78,7 +80,9 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             ? String((ctx.body as { email?: string }).email ?? "")
             : "";
         if (email && !emailAllowed(email, allowlist)) {
-          throw new APIError("BAD_REQUEST", { message: "Email is not allowed to register" });
+          throw new APIError("BAD_REQUEST", {
+            message: "Email is not allowed to register",
+          });
         }
       },
     },

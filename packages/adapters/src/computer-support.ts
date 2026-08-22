@@ -46,7 +46,7 @@ export function placeholderObservation(label = "ready"): ComputerObservation {
 }
 
 export function applyPlaceholderAction(box: { screen: string }, action: ComputerAction): void {
-  if (action.kind === "clipboard") box.screen = action.text;
+  if (action.kind === "clipboard" || action.kind === "text") box.screen = action.text;
   else if (action.kind === "open") box.screen = `opened ${action.path}`;
   else if (action.kind === "launch") box.screen = `launched ${action.application}`;
   else box.screen = action.kind;

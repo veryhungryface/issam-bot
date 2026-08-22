@@ -8,19 +8,19 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
 
   await page.getByRole("button", { name: new RegExp(userName) }).click();
-  await page.getByRole("button", { name: "Models", exact: true }).click();
+  await page.getByRole("button", { name: "모델", exact: true }).click();
   await expect(page.getByRole("button", { name: "Close model settings" })).toBeVisible();
 
-  const providerSearch = page.getByPlaceholder("Search providers");
+  const providerSearch = page.getByPlaceholder("공급자 검색");
   await providerSearch.fill("scripted");
   await page.getByRole("button", { name: /Scripted/ }).click();
   await page.getByLabel("API key").fill("fake-scripted-key-one");
-  await page.getByRole("button", { name: "Connect API key" }).click();
-  await expect(page.getByText(/Connected and using Scripted runtime/)).toBeVisible();
+  await page.getByRole("button", { name: "API 키 연결" }).click();
+  await expect(page.getByText(/Scripted runtime에 연결했으며 이 모델을 사용합니다/)).toBeVisible();
 
   await page.getByLabel("Replace API key").fill("fake-scripted-key-two");
   await page.getByRole("button", { name: "Replace API key" }).click();
-  await expect(page.getByText(/Connected and using Scripted runtime/)).toBeVisible();
+  await expect(page.getByText(/Scripted runtime에 연결했으며 이 모델을 사용합니다/)).toBeVisible();
 
   await page.route("**/rpc/models/beginOAuth", async (route) => {
     await route.fulfill({

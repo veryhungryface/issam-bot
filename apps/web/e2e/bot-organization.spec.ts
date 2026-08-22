@@ -12,12 +12,12 @@ test("pinned bots and sidebar sections persist", async ({ page }, testInfo) => {
   const bot = sidebar.getByRole("button", { name: /^Chief/ });
 
   await bot.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+  await page.getByRole("menuitem", { name: "고정", exact: true }).click();
   await expect(sidebar.locator('[data-sidebar-group="pinned"]')).toContainText("Chief");
   await captureScreenshot(page, testInfo, "pinned-bots");
 
   await bot.click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Unpin", exact: true }).click();
+  await page.getByRole("menuitem", { name: "고정 해제", exact: true }).click();
   await expect(sidebar.locator('[data-sidebar-group="pinned"]')).toHaveCount(0);
 
   await bot.click({ button: "right" });
@@ -29,7 +29,7 @@ test("pinned bots and sidebar sections persist", async ({ page }, testInfo) => {
     .click();
   const dialog = page.getByRole("dialog", { name: "New section" });
   await dialog.getByLabel("Name").fill("Projects");
-  await dialog.getByRole("button", { name: "Create" }).click();
+  await dialog.getByRole("button", { name: "만들기" }).click();
 
   const projects = sidebar.locator('[data-sidebar-group^="section:"]');
   await expect(projects).toContainText("Projects");

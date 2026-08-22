@@ -95,19 +95,29 @@ import { WindowChrome } from "./WindowChrome";
 import { WorkspaceSearchResults } from "./WorkspaceSearch";
 
 const BotContextMenu = lazy(() =>
-  import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
+  import("./BotContextMenu").then((module) => ({
+    default: module.BotContextMenu,
+  })),
 );
 const ModelSettingsOverlay = lazy(() =>
-  import("./ModelSettingsOverlay").then((module) => ({ default: module.ModelSettingsOverlay })),
+  import("./ModelSettingsOverlay").then((module) => ({
+    default: module.ModelSettingsOverlay,
+  })),
 );
 const PluginsOverlay = lazy(() =>
-  import("./PluginsOverlay").then((module) => ({ default: module.PluginsOverlay })),
+  import("./PluginsOverlay").then((module) => ({
+    default: module.PluginsOverlay,
+  })),
 );
 const RoutineSchedule = lazy(() =>
-  import("./RoutineSchedule").then((module) => ({ default: module.RoutineSchedule })),
+  import("./RoutineSchedule").then((module) => ({
+    default: module.RoutineSchedule,
+  })),
 );
 const VoiceSettingsOverlay = lazy(() =>
-  import("./VoiceSettingsOverlay").then((module) => ({ default: module.VoiceSettingsOverlay })),
+  import("./VoiceSettingsOverlay").then((module) => ({
+    default: module.VoiceSettingsOverlay,
+  })),
 );
 const CallView = lazy(() => import("./CallView").then((module) => ({ default: module.CallView })));
 
@@ -723,11 +733,11 @@ export function ShellPage() {
       const skipped: string[] = [];
       for (const file of Array.from(files)) {
         if (existing.length + next.length >= ATTACHMENT_MAX_COUNT) {
-          skipped.push(`${file.name} (max ${ATTACHMENT_MAX_COUNT} attachments)`);
+          skipped.push(`${file.name} (첨부는 최대 ${ATTACHMENT_MAX_COUNT}개)`);
           continue;
         }
         if (file.size > ATTACHMENT_MAX_BYTES) {
-          skipped.push(`${file.name} (over 10 MiB)`);
+          skipped.push(`${file.name} (10 MiB 초과)`);
           continue;
         }
         const mimeType = inferAttachmentMimeType(file.name, file.type);
@@ -743,7 +753,7 @@ export function ShellPage() {
         });
       }
       if (next.length) setPendingAttachments((current) => [...current, ...next]);
-      setAttachmentNotice(skipped.length ? `Skipped ${skipped.join(", ")}` : null);
+      setAttachmentNotice(skipped.length ? `첨부 제외: ${skipped.join(", ")}` : null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     },
     [pendingAttachments],
@@ -759,6 +769,27 @@ export function ShellPage() {
       const attachments = attachmentsForBot(pendingAttachments, id);
       const trimmed = text.trim();
       if (!trimmed && attachments.length === 0) return;
+      const clientNonce = crypto.randomUUID();
+      const optimisticId = `optimistic:${clientNonce}`;
+      if (trimmed) {
+        setSnapshot((current) => {
+          if (!current || current.botId !== id) return current;
+          return {
+            ...current,
+            messages: [
+              ...current.messages,
+              {
+                id: optimisticId,
+                threadId: current.threadId,
+                seq: current.cursor + 1,
+                role: "user",
+                blocks: [{ kind: "text", text: trimmed }],
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          };
+        });
+      }
       setSending(true);
       setSendError(null);
       try {
@@ -766,7 +797,7 @@ export function ShellPage() {
         for (const pending of attachments) {
           const mimeType = inferAttachmentMimeType(pending.file.name, pending.file.type);
           if (!mimeType) {
-            throw new Error(`Unsupported file type: ${pending.file.name}`);
+            throw new Error(`지원하지 않는 파일 형식: ${pending.file.name}`);
           }
           const contentBase64 = await readFileAsBase64(pending.file);
           const artifact = await rpc.artifacts.create({
@@ -781,14 +812,30 @@ export function ShellPage() {
           botId: id,
           text: trimmed || undefined,
           artifactIds: artifactIds.length ? artifactIds : undefined,
+          clientNonce,
         });
         revokePendingAttachmentPreviews(attachments);
         setPendingAttachments((current) => current.filter((attachment) => attachment.botId !== id));
         if (activeBotId.current === id) setAttachmentNotice(null);
-        await refreshThreadRef.current(id);
+        // The live event stream normally replaces the optimistic bubble. Keep a delayed,
+        // non-blocking refresh only as a recovery path so the composer is not held hostage by
+        // another high-latency database round trip.
+        window.setTimeout(() => {
+          if (activeBotId.current === id) {
+            void refreshThreadRef.current(id).catch(() => undefined);
+          }
+        }, 1_500);
       } catch (error) {
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                messages: current.messages.filter((message) => message.id !== optimisticId),
+              }
+            : current,
+        );
         if (activeBotId.current === id) {
-          setSendError(error instanceof Error ? error.message : "Failed to send message");
+          setSendError(error instanceof Error ? error.message : "메시지를 보내지 못했습니다.");
         }
       } finally {
         setSending(false);
@@ -980,7 +1027,7 @@ export function ShellPage() {
       }
       screenRequest.current += 1;
       setScreenUrl(null);
-      setScreenNotice("Live View disconnected. Reopen the computer to reconnect.");
+      setScreenNotice("실시간 화면 연결이 끊어졌습니다. 브라우저를 다시 열어 연결하세요.");
       if (visibleBotId) void refreshThread(visibleBotId).catch(() => undefined);
     }
     window.addEventListener("message", onLiveViewMessage);
@@ -1015,13 +1062,8 @@ export function ShellPage() {
     try {
       await rpc.computer.input({
         botId: active.id,
-        kind: "clipboard",
+        kind: "text",
         payload: { text },
-      });
-      await rpc.computer.input({
-        botId: active.id,
-        kind: "key",
-        payload: { key: "Control+V" },
       });
       setRemoteText("");
     } catch {
@@ -1034,7 +1076,7 @@ export function ShellPage() {
   const embeddedScreenUrl = embeddableScreenUrl(screenUrl);
   const hasControl = userHoldsComputerControl(computer, active?.id);
 
-  const userName = session.data?.user.name ?? "You";
+  const userName = session.data?.user.name ?? "사용자";
   const initials = userName
     .split(" ")
     .map((p) => p[0])
@@ -1054,7 +1096,7 @@ export function ShellPage() {
       {mobileSidebarOpen ? (
         <button
           type="button"
-          aria-label="Close bot navigation"
+          aria-label="봇 목록 닫기"
           className="absolute inset-0 z-30 bg-black/60 md:hidden"
           onClick={() => setMobileSidebarOpen(false)}
         />
@@ -1074,13 +1116,13 @@ export function ShellPage() {
                 setPanel("create");
               }}
               className="text-[21px] text-[#7A7A80] hover:text-[#C9C9CE]"
-              title="New bot"
+              title="새 봇"
             >
               +
             </button>
             <button
               type="button"
-              aria-label="Close bot navigation"
+              aria-label="봇 목록 닫기"
               className="text-[#85858A] hover:text-[#ECECEE] md:hidden"
               onClick={() => setMobileSidebarOpen(false)}
             >
@@ -1093,7 +1135,7 @@ export function ShellPage() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search"
+            placeholder="검색"
             className="w-full bg-transparent outline-none"
           />
         </div>
@@ -1141,7 +1183,7 @@ export function ShellPage() {
                           }`}
                         >
                           {bot.name}
-                          {bot.unread ? <span className="sr-only"> (unread)</span> : null}
+                          {bot.unread ? <span className="sr-only"> (읽지 않음)</span> : null}
                         </span>
                         <span className="flex shrink-0 items-center gap-1.5 text-[12.5px] text-[#6C6C70]">
                           {bot.status === "idle" ? "" : bot.status}
@@ -1174,7 +1216,7 @@ export function ShellPage() {
                 onClick={() => setArchivedOpen((open) => !open)}
                 className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-[13.5px] text-[#85858A] hover:bg-[#131315]"
               >
-                <span>Archived</span>
+                <span>보관된 봇</span>
                 <span>{archivedBots.length}</span>
               </button>
               {archivedOpen
@@ -1191,15 +1233,15 @@ export function ShellPage() {
                         }
                         className="text-[12.5px] text-[#C9C9CE] hover:text-white"
                       >
-                        Restore
+                        복원
                       </button>
                       <button
                         type="button"
-                        aria-label={`Delete ${bot.name}`}
+                        aria-label={`${bot.name} 삭제`}
                         onClick={() => setDeleteTarget(bot)}
                         className="text-[12.5px] text-[#FF5364]"
                       >
-                        Delete
+                        삭제
                       </button>
                     </div>
                   ))
@@ -1215,7 +1257,7 @@ export function ShellPage() {
           <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-[#17171A] text-[#9A9AA0]">
             <Puzzle size={15} strokeWidth={1.7} />
           </span>
-          <span className="text-[14.5px] text-[#C9C9CE]">Plugins</span>
+          <span className="text-[14.5px] text-[#C9C9CE]">플러그인</span>
         </button>
         <div className="relative">
           {menuOpen ? (
@@ -1229,7 +1271,7 @@ export function ShellPage() {
                 className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 hover:bg-[#232327]"
               >
                 <Cpu size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
-                <span className="flex-1 text-left text-[14.5px] text-[#ECECEE]">Models</span>
+                <span className="flex-1 text-left text-[14.5px] text-[#ECECEE]">모델</span>
               </button>
               <button
                 type="button"
@@ -1240,7 +1282,7 @@ export function ShellPage() {
                 className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 hover:bg-[#232327]"
               >
                 <Volume2 size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
-                <span className="flex-1 text-left text-[14.5px] text-[#ECECEE]">Voice</span>
+                <span className="flex-1 text-left text-[14.5px] text-[#ECECEE]">음성</span>
               </button>
               <button
                 type="button"
@@ -1250,11 +1292,11 @@ export function ShellPage() {
                 }}
               >
                 <Gauge size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
-                <span className="flex-1 text-left text-[14.5px] text-[#ECECEE]">Weekly usage</span>
+                <span className="flex-1 text-left text-[14.5px] text-[#ECECEE]">주간 사용량</span>
               </button>
               {usage ? (
                 <p className="px-3 pb-2 text-[12.5px] text-[#85858A]">
-                  {usage.runs} runs · {usage.inputTokens + usage.outputTokens} tokens
+                  작업 {usage.runs}회 · 토큰 {usage.inputTokens + usage.outputTokens}개
                 </p>
               ) : null}
               <button
@@ -1263,25 +1305,26 @@ export function ShellPage() {
                 className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 hover:bg-[#232327]"
               >
                 <LogOut size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
-                <span className="text-[14.5px] text-[#ECECEE]">Log out</span>
+                <span className="text-[14.5px] text-[#ECECEE]">로그아웃</span>
               </button>
               <button
                 type="button"
                 onClick={async () => {
                   if (
                     !window.confirm(
-                      "Delete this account and all of its data? This cannot be undone.",
+                      "계정과 모든 데이터를 삭제할까요? 삭제 후에는 복구할 수 없습니다.",
                     )
                   ) {
                     return;
                   }
-                  const password = window.prompt(
-                    "Enter your password to confirm account deletion.",
-                  );
+                  const password = window.prompt("계정 삭제를 확인하려면 비밀번호를 입력하세요.");
                   if (!password) return;
-                  const result = await authClient.deleteUser({ password, callbackURL: "/" });
+                  const result = await authClient.deleteUser({
+                    password,
+                    callbackURL: "/",
+                  });
                   if (result.error) {
-                    window.alert(result.error.message ?? "Could not delete the account.");
+                    window.alert(result.error.message ?? "계정을 삭제하지 못했습니다.");
                     return;
                   }
                   navigate("/");
@@ -1289,7 +1332,7 @@ export function ShellPage() {
                 className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 text-[#F08B8B] hover:bg-[#2A1D20]"
               >
                 <Trash2 size={16} strokeWidth={1.7} />
-                <span className="text-[14.5px]">Delete account</span>
+                <span className="text-[14.5px]">계정 삭제</span>
               </button>
             </div>
           ) : null}
@@ -1311,7 +1354,7 @@ export function ShellPage() {
           <div className="flex min-w-0 items-center gap-1.5">
             <button
               type="button"
-              aria-label="Open bot navigation"
+              aria-label="봇 목록 열기"
               aria-controls="bot-navigation"
               aria-expanded={mobileSidebarOpen}
               className="grid h-[30px] w-[34px] shrink-0 place-items-center rounded-[9px] hover:bg-[#1B1B1E] md:hidden"
@@ -1328,7 +1371,7 @@ export function ShellPage() {
               {active ? <BotAvatar color={active.color} size={26} /> : null}
               <span className="min-w-0">
                 <span className="block truncate text-[16px] font-medium text-[#ECECEE]">
-                  {active?.name ?? "Select a bot"}
+                  {active?.name ?? "봇을 선택하세요"}
                 </span>
               </span>
             </button>
@@ -1337,8 +1380,8 @@ export function ShellPage() {
             {active ? (
               <button
                 type="button"
-                title={voiceStatus?.ready ? "Call" : "Set up voice to call"}
-                aria-label="Call"
+                title={voiceStatus?.ready ? "통화" : "통화하려면 음성을 설정하세요"}
+                aria-label="통화"
                 onClick={() => {
                   if (!voiceStatus?.ready) {
                     setVoiceOpen(true);
@@ -1354,7 +1397,7 @@ export function ShellPage() {
             ) : null}
             <button
               type="button"
-              title="Agent computer"
+              title="에이전트 브라우저"
               onClick={() => setPanel((p) => (p === "computer" ? null : "computer"))}
               className="grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-[#1B1B1E]"
               style={{ background: panel ? "#1B1B1E" : "transparent" }}
@@ -1384,7 +1427,7 @@ export function ShellPage() {
         />
         {recordingSkill ? (
           <div className="px-6 pb-2 text-center text-[13px] text-[#E65707]">
-            Teaching in progress — stop teaching before sending a new message.
+            동작 학습 중입니다. 새 메시지를 보내려면 먼저 학습을 중지하세요.
           </div>
         ) : null}
         <Composer
@@ -1431,14 +1474,10 @@ export function ShellPage() {
                   {computer?.state ?? active.status}
                 </span>
                 <div className="flex gap-3.5">
-                  <button
-                    type="button"
-                    aria-label="Bot settings"
-                    onClick={() => setPanel("settings")}
-                  >
+                  <button type="button" aria-label="봇 설정" onClick={() => setPanel("settings")}>
                     <Settings size={16} strokeWidth={1.7} />
                   </button>
-                  <button type="button" aria-label="Close panel" onClick={() => setPanel(null)}>
+                  <button type="button" aria-label="패널 닫기" onClick={() => setPanel(null)}>
                     <X size={16} strokeWidth={1.8} />
                   </button>
                 </div>
@@ -1449,17 +1488,17 @@ export function ShellPage() {
                 <div className="relative aspect-[16/10] overflow-hidden rounded-[14px] bg-[#0E0E10]">
                   {computerOpen ? (
                     <div className="grid h-full place-items-center text-sm text-[#6C6C70]">
-                      Open in full window
+                      전체 화면에서 열려 있습니다
                     </div>
                   ) : computer?.kind === "desktop" ? (
                     <div className="grid h-full place-items-center px-6 text-center text-sm text-[#6C6C70]">
-                      This bot runs on this computer, not a Linux desktop. Shell and files use your
-                      home folder.
+                      이 봇은 Linux 데스크톱이 아니라 현재 컴퓨터에서 실행됩니다. 셸과 파일은 홈
+                      폴더를 사용합니다.
                     </div>
                   ) : computer?.state === "running" && embeddedScreenUrl ? (
                     <iframe
                       ref={screenFrame}
-                      title="Bot screen preview"
+                      title="봇 화면 미리보기"
                       src={embeddedScreenUrl}
                       sandbox={screenIframeSandbox(
                         embeddedScreenUrl,
@@ -1483,18 +1522,18 @@ export function ShellPage() {
                   <button
                     type="button"
                     className="absolute inset-0 cursor-pointer"
-                    aria-label="Open computer"
+                    aria-label="브라우저 열기"
                     onClick={() => void openComputer()}
                   />
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <span className="text-[13.5px] text-[#85858A]">
                     {computer?.busyBotName
-                      ? `${computer.busyBotName} is using it`
+                      ? `${computer.busyBotName} 봇이 사용 중`
                       : hasControl
-                        ? "You have control"
+                        ? "사용자가 제어 중"
                         : computer?.state === "suspended"
-                          ? "Asleep"
+                          ? "절전 상태"
                           : computerLabel(computer?.mode, active.name)}
                   </span>
                   {hasControl ? (
@@ -1504,7 +1543,7 @@ export function ShellPage() {
                       size="sm"
                       onClick={() => void releaseComputer()}
                     >
-                      Release
+                      봇에게 제어권 반환
                     </Button>
                   ) : (
                     <Button
@@ -1513,11 +1552,11 @@ export function ShellPage() {
                       size="sm"
                       onClick={() => void openComputer()}
                     >
-                      Take control
+                      직접 제어
                     </Button>
                   )}
                 </div>
-                <div className="mt-[30px] mb-3 text-[14px] text-[#85858A]">Routines</div>
+                <div className="mt-[30px] mb-3 text-[14px] text-[#85858A]">자동 작업</div>
                 {activeRoutines.map((routine) => (
                   <button
                     key={routine.id}
@@ -1543,13 +1582,17 @@ export function ShellPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setRoutineDraft({ name: "", prompt: "", schedule: defaultCronPreset() });
+                    setRoutineDraft({
+                      name: "",
+                      prompt: "",
+                      schedule: defaultCronPreset(),
+                    });
                     setEditingRoutine(null);
                     setPanel("routine");
                   }}
                   className="mt-1 flex items-center gap-2.5 px-2.5 py-2.5 text-[14.5px] text-[#7A7A80]"
                 >
-                  + New routine
+                  + 새 자동 작업
                 </button>
                 {active ? (
                   <TeachComputerSection
@@ -1618,13 +1661,13 @@ export function ShellPage() {
                   >
                     <ChevronLeft size={18} strokeWidth={1.8} />
                   </button>
-                  <div className="text-[15.5px] font-medium text-[#F1F1F2]">Routine</div>
+                  <div className="text-[15.5px] font-medium text-[#F1F1F2]">자동 작업</div>
                   <button type="button" onClick={() => setPanel(null)} className="text-[#6C6C70]">
                     <X size={16} strokeWidth={1.8} />
                   </button>
                 </div>
                 <label className="text-[14px] text-[#85858A]">
-                  Name
+                  이름
                   <input
                     value={routineDraft.name}
                     onChange={(e) => setRoutineDraft((s) => ({ ...s, name: e.target.value }))}
@@ -1632,7 +1675,7 @@ export function ShellPage() {
                   />
                 </label>
                 <label className="mt-5 block text-[14px] text-[#85858A]">
-                  Instruction
+                  작업 지시
                   <textarea
                     value={routineDraft.prompt}
                     onChange={(e) => setRoutineDraft((s) => ({ ...s, prompt: e.target.value }))}
@@ -1641,7 +1684,7 @@ export function ShellPage() {
                   />
                 </label>
                 <div className="mt-5 text-[14px] text-[#85858A]">
-                  When to run
+                  실행 시점
                   <Suspense fallback={null}>
                     <RoutineSchedule
                       value={routineDraft.schedule}
@@ -1689,7 +1732,7 @@ export function ShellPage() {
                     }}
                     className="rounded-[11px] bg-[#F1F1EF] px-4 py-2 text-[#17171A] disabled:opacity-40"
                   >
-                    {savingRoutine ? "Saving…" : "Save"}
+                    {savingRoutine ? "저장 중…" : "저장"}
                   </button>
                   {editingRoutine?.botId === active.id ? (
                     <>
@@ -1703,7 +1746,9 @@ export function ShellPage() {
                           routineRunPending.current = true;
                           setRunningRoutine(true);
                           try {
-                            await rpc.routines.testRun({ routineId: targetRoutine.id });
+                            await rpc.routines.testRun({
+                              routineId: targetRoutine.id,
+                            });
                             await refreshThread(targetBotId);
                           } finally {
                             routineRunPending.current = false;
@@ -1712,7 +1757,7 @@ export function ShellPage() {
                         }}
                         className="rounded-[11px] border border-[#26262A] px-4 py-2 text-[14px] text-[#ECECEE] disabled:opacity-40"
                       >
-                        {runningRoutine ? "Running…" : "Run now"}
+                        {runningRoutine ? "실행 중…" : "지금 실행"}
                       </button>
                       <button
                         type="button"
@@ -1720,7 +1765,7 @@ export function ShellPage() {
                         onClick={() => setDeleteRoutineTarget(editingRoutine)}
                         className="rounded-[11px] px-4 py-2 text-[14px] text-[#FF5364] disabled:opacity-40"
                       >
-                        Delete routine
+                        자동 작업 삭제
                       </button>
                     </>
                   ) : null}
@@ -1880,7 +1925,7 @@ export function ShellPage() {
       {booting ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-[22px] bg-[rgba(4,4,5,.96)]">
           <div className="text-[19px] font-medium text-[#F1F1F2]">
-            Booting up {active?.name}’s computer
+            {active?.name} 브라우저를 시작하는 중
           </div>
           <div className="h-[5px] w-[min(420px,70%)] overflow-hidden rounded-full bg-[#232327]">
             <div className="h-full w-2/3 rounded-full bg-[#F1F1EF]" />
@@ -1905,7 +1950,7 @@ export function ShellPage() {
               )}
               {!recordingSkill && hasControl ? (
                 <span className="rounded-full bg-[rgba(48,162,75,.14)] px-[11px] py-1 text-[13px] text-[#4ECB71]">
-                  You have control
+                  사용자가 제어 중
                 </span>
               ) : null}
             </div>
@@ -1919,7 +1964,7 @@ export function ShellPage() {
                   size="sm"
                   onClick={() => void releaseComputer()}
                 >
-                  Release
+                  봇에게 제어권 반환
                 </Button>
               ) : (
                 <Button
@@ -1928,13 +1973,13 @@ export function ShellPage() {
                   size="sm"
                   onClick={() => void bootComputer({ takeControl: true, overlay: false })}
                 >
-                  Take control
+                  직접 제어
                 </Button>
               )}
               <button
                 type="button"
                 className="text-[16px] text-[#85858A] hover:text-[#ECECEE]"
-                aria-label="Close computer"
+                aria-label="브라우저 닫기"
                 onClick={() => setComputerOpen(false)}
               >
                 <X size={16} strokeWidth={1.8} />
@@ -1990,7 +2035,7 @@ export function ShellPage() {
               <>
                 <iframe
                   ref={screenFrame}
-                  title="Bot screen"
+                  title="봇 브라우저 화면"
                   src={embeddedScreenUrl}
                   sandbox={screenIframeSandbox(
                     embeddedScreenUrl,
@@ -2017,7 +2062,7 @@ export function ShellPage() {
               <div className="grid h-full place-items-center text-sm text-[#6C6C70]">
                 {screenNotice ??
                   (computer?.state === "suspended"
-                    ? "Computer is asleep"
+                    ? "브라우저가 절전 상태입니다"
                     : computerLabel(computer?.mode, active.name))}
               </div>
             )}
@@ -2074,7 +2119,7 @@ const Transcript = memo(function Transcript({
           onClick={() => void onLoadOlder()}
           className="self-center rounded-lg px-3 py-1.5 text-[13px] text-[#85858A] hover:bg-[#1A1A1D] hover:text-[#C9C9CE] disabled:opacity-50"
         >
-          {loadingOlder ? "Loading…" : "Load earlier messages"}
+          {loadingOlder ? "불러오는 중…" : "이전 메시지 보기"}
         </button>
       ) : null}
       {messages.map((message) => (
@@ -2099,7 +2144,7 @@ const Transcript = memo(function Transcript({
             className="rounded-[20px] bg-[#1A1A1D] px-[18px] py-[13px] text-[14.5px] text-[#85858A]"
             style={{ animation: "rkPulse 1.2s ease-in-out infinite" }}
           >
-            working…
+            작업 중…
           </div>
         </div>
       ) : null}
@@ -2185,7 +2230,7 @@ const Composer = memo(function Composer({
               <span className="max-w-[180px] truncate">{attachment.file.name}</span>
               <button
                 type="button"
-                aria-label={`Remove ${attachment.file.name}`}
+                aria-label={`${attachment.file.name} 첨부 취소`}
                 onClick={() => onRemoveAttachment(attachment)}
                 className="text-[#85858A] hover:text-[#ECECEE]"
               >
@@ -2206,7 +2251,7 @@ const Composer = memo(function Composer({
         />
         <button
           type="button"
-          aria-label="Attach file"
+          aria-label="파일 첨부"
           disabled={disabled}
           onClick={() => fileInputRef.current?.click()}
           className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full border border-[#26262A] text-[#9A9AA0] disabled:opacity-40"
@@ -2215,7 +2260,7 @@ const Composer = memo(function Composer({
         </button>
         <button
           type="button"
-          aria-label={dictating ? "Stop dictation" : "Dictate"}
+          aria-label={dictating ? "음성 입력 중지" : "음성 입력"}
           onMouseDown={(event) => {
             event.preventDefault();
             onDictateStart((text) => setDraft((current) => `${current} ${text}`.trim()));
@@ -2234,7 +2279,7 @@ const Composer = memo(function Composer({
               ? "border-[#4ECB71] bg-[rgba(48,162,75,.16)] text-[#4ECB71]"
               : "border-[#26262A] text-[#9A9AA0]"
           }`}
-          title={transcribe ? "Hold to talk" : "Hold to talk (on-device dictation)"}
+          title={transcribe ? "누르고 말하기" : "누르고 말하기(기기 내 음성 인식)"}
         >
           <Mic size={16} strokeWidth={1.8} />
         </button>
@@ -2248,13 +2293,13 @@ const Composer = memo(function Composer({
             }
           }}
           disabled={disabled}
-          placeholder={activeName ? `Message ${activeName}` : "Message…"}
+          placeholder={activeName ? `${activeName}에게 작업 지시` : "메시지 입력…"}
           className="flex-1 bg-transparent text-[15.5px] text-[#E9E9EA] outline-none disabled:opacity-40"
         />
         {running ? (
           <button
             type="button"
-            aria-label="Stop"
+            aria-label="작업 중지"
             onClick={() => void onStop()}
             className="grid h-9 w-9 place-items-center rounded-full bg-[#F1F1EF] text-[#17171A]"
           >
@@ -2263,7 +2308,7 @@ const Composer = memo(function Composer({
         ) : (
           <button
             type="button"
-            aria-label="Send"
+            aria-label="전송"
             disabled={sending || !canSend || disabled}
             onClick={send}
             className="grid h-9 w-9 place-items-center rounded-full bg-[#F1F1EF] text-[#17171A] disabled:opacity-50"
@@ -2369,7 +2414,7 @@ const MessageView = memo(function MessageView({
                     animation: running ? "rkPulse 1.2s ease-in-out infinite" : undefined,
                   }}
                 >
-                  {running ? "subagent" : block.status}
+                  {running ? "하위 에이전트" : block.status}
                 </span>
               </div>
               <div className="mt-2 text-[13.5px] text-[#85858A]">{block.task}</div>
@@ -2403,18 +2448,18 @@ const MessageView = memo(function MessageView({
                   }}
                 >
                   {block.status === "archived"
-                    ? "archived"
+                    ? "보관됨"
                     : block.status === "deleted"
-                      ? "deleted"
-                      : "bot"}
+                      ? "삭제됨"
+                      : "봇"}
                 </span>
               </div>
               <div className="mt-2 text-[14.5px] leading-[1.5] text-[#A8A8AD]">
                 {removed
                   ? block.status === "archived"
-                    ? "Archived this bot. Its chat, memory, and files are preserved."
-                    : "Removed this bot, including its chat, computer, and memory."
-                  : block.title || "Opened its own thread. Tap to switch."}
+                    ? "이 봇을 보관했습니다. 대화, 메모리, 파일은 유지됩니다."
+                    : "이 봇과 대화, 브라우저, 메모리를 삭제했습니다."
+                  : block.title || "별도 대화를 열었습니다. 눌러서 전환하세요."}
               </div>
             </button>
           );
@@ -2451,10 +2496,16 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "text" && message.role === "user") {
+          const optimistic = message.id.startsWith("optimistic:");
           return (
             <div key={i} className="flex justify-end">
-              <div className="max-w-[70%] rounded-[20px] bg-[#F1F1EF] px-[18px] py-3 text-[15.5px] leading-[1.45] text-[#1A1A1A]">
-                {block.text}
+              <div
+                className={`max-w-[70%] rounded-[20px] bg-[#F1F1EF] px-[18px] py-3 text-[15.5px] leading-[1.45] text-[#1A1A1A] ${optimistic ? "opacity-75" : ""}`}
+              >
+                <div>{block.text}</div>
+                {optimistic ? (
+                  <div className="mt-1 text-right text-[11px] text-[#6C6C70]">전송 중…</div>
+                ) : null}
               </div>
             </div>
           );
@@ -2467,11 +2518,11 @@ const MessageView = memo(function MessageView({
                 {voiceReady ? (
                   <button
                     type="button"
-                    aria-label={speaking ? "Stop speaking" : "Speak this reply"}
+                    aria-label={speaking ? "읽기 중지" : "답변 읽기"}
                     onClick={onSpeak}
                     className="mt-2 text-[12px] text-[#85858A] hover:text-[#ECECEE]"
                   >
-                    {speaking ? "Stop" : "Speak"}
+                    {speaking ? "중지" : "읽기"}
                   </button>
                 ) : null}
               </div>
@@ -2518,7 +2569,7 @@ const MessageView = memo(function MessageView({
               className="w-[340px] rounded-[18px] border border-[#232326] bg-[#17171A] px-[18px] py-4"
             >
               <div className="flex items-center justify-between">
-                <span className="text-[15px] font-medium text-[#ECECEE]">Computer</span>
+                <span className="text-[15px] font-medium text-[#ECECEE]">브라우저</span>
                 <span className="rounded-full bg-[rgba(48,162,75,.14)] px-[11px] py-1 text-[13px] text-[#4ECB71]">
                   {block.state}
                 </span>
@@ -2573,10 +2624,10 @@ function AskCard({
       ) : null}
       {block.status === "answered" ? (
         <div className="mt-3.5 text-[13.5px] font-medium text-[#4ECB71]">
-          {block.answer ? `Answered: ${block.answer}` : "Answered"}
+          {block.answer ? `답변 완료: ${block.answer}` : "답변 완료"}
         </div>
       ) : !canAnswer ? (
-        <div className="mt-3.5 text-[13.5px] font-medium text-[#85858A]">No longer active</div>
+        <div className="mt-3.5 text-[13.5px] font-medium text-[#85858A]">더 이상 유효하지 않음</div>
       ) : editing ? (
         <form
           className="mt-3.5 flex flex-col gap-2"
@@ -2586,10 +2637,10 @@ function AskCard({
           }}
         >
           <input
-            aria-label="Answer"
+            aria-label="답변"
             value={answer}
             onChange={(event) => setAnswer(event.target.value)}
-            placeholder="Type your answer"
+            placeholder="답변 입력"
             className="rounded-[11px] border border-[#303035] bg-[#0E0E10] px-3.5 py-2.5 text-[14.5px] text-[#ECECEE] outline-none focus:border-[#66666D]"
           />
           <div className="flex gap-2">
@@ -2598,7 +2649,7 @@ function AskCard({
               disabled={!answer.trim() || submitting}
               className="rounded-[11px] bg-[#F1F1EF] px-[17px] py-2 text-[14.5px] font-medium text-[#17171A] disabled:opacity-50"
             >
-              {submitting ? "Sending…" : "Send answer"}
+              {submitting ? "전송 중…" : "답변 전송"}
             </button>
             <button
               type="button"
@@ -2609,7 +2660,7 @@ function AskCard({
               }}
               className="rounded-[11px] border border-[#26262A] px-[17px] py-2 text-[14.5px] text-[#C9C9CE] disabled:opacity-50"
             >
-              Cancel
+              취소
             </button>
           </div>
         </form>
@@ -2621,7 +2672,7 @@ function AskCard({
             onClick={() => void submitAnswer("approved")}
             className="rounded-[11px] bg-[#F1F1EF] px-[17px] py-2 text-[14.5px] font-medium text-[#17171A] disabled:opacity-50"
           >
-            {submitting ? "Sending…" : "Send it"}
+            {submitting ? "전송 중…" : "승인"}
           </button>
           <button
             type="button"
@@ -2629,7 +2680,7 @@ function AskCard({
             onClick={() => setEditing(true)}
             className="rounded-[11px] border border-[#26262A] px-[17px] py-2 text-[14.5px] text-[#C9C9CE] disabled:opacity-50"
           >
-            Edit first
+            수정 후 전송
           </button>
         </div>
       )}
@@ -2646,7 +2697,7 @@ function ComputerModePicker({
 }) {
   return (
     <div className="mt-4">
-      <div className="text-[14px] text-[#85858A]">Computer</div>
+      <div className="text-[14px] text-[#85858A]">브라우저 로그인</div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         {(["team", "dedicated"] as const).map((mode) => (
           <button
@@ -2660,14 +2711,14 @@ function ComputerModePicker({
                 : "border-[#26262A] text-[#85858A]"
             }`}
           >
-            {mode === "team" ? "Team" : "Private"}
+            {mode === "team" ? "공유" : "봇 전용"}
           </button>
         ))}
       </div>
       <div className="mt-2 text-[12.5px] leading-5 text-[#6C6C70]">
         {value === "team"
-          ? "All bots in this workspace share the same browser login context."
-          : "This bot keeps a separate browser login context."}
+          ? "이 워크스페이스의 모든 봇이 같은 브라우저 로그인 상태를 공유합니다."
+          : "이 봇만 사용하는 별도의 브라우저 로그인 상태를 유지합니다."}
       </div>
     </div>
   );
@@ -2693,35 +2744,35 @@ function CreateBotForm({
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-[13.5px] text-[#85858A]">New bot</span>
+        <span className="text-[13.5px] text-[#85858A]">새 봇</span>
         <button type="button" onClick={onCancel}>
           <X size={16} strokeWidth={1.8} />
         </button>
       </div>
       <label className="mt-6 block text-[14px] text-[#85858A]">
-        Name
+        이름
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Name this bot"
+          placeholder="봇 이름"
           className="mt-2 w-full rounded-[11px] border border-[#26262A] bg-transparent px-3.5 py-3 text-[#ECECEE]"
         />
       </label>
       <label className="mt-4 block text-[14px] text-[#85858A]">
-        Title
+        역할
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Describe what this bot does"
+          placeholder="이 봇이 하는 일을 짧게 설명하세요"
           className="mt-2 w-full rounded-[11px] border border-[#26262A] bg-transparent px-3.5 py-3 text-[#ECECEE]"
         />
       </label>
       <label className="mt-4 block text-[14px] text-[#85858A]">
-        Description
+        상세 지시
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="What this bot is for"
+          placeholder="봇의 목적과 수행 방식을 설명하세요"
           rows={4}
           className="mt-2 w-full rounded-[11px] border border-[#26262A] bg-transparent px-3.5 py-3 text-[#ECECEE]"
         />
@@ -2733,7 +2784,7 @@ function CreateBotForm({
         onClick={() => onCreate({ name, title, description, computerMode })}
         className="mt-5 rounded-[11px] bg-[#F1F1EF] px-4 py-2 text-[#17171A] disabled:opacity-40"
       >
-        Create
+        만들기
       </button>
     </div>
   );
@@ -2781,7 +2832,7 @@ function BotSettings({
         <BotAvatar color={bot.color} size={64} />
       </div>
       <label className="mt-6 block text-[14px] text-[#85858A]">
-        Name
+        이름
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -2789,7 +2840,7 @@ function BotSettings({
         />
       </label>
       <label className="mt-4 block text-[14px] text-[#85858A]">
-        Title
+        역할
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -2797,7 +2848,7 @@ function BotSettings({
         />
       </label>
       <label className="mt-4 block text-[14px] text-[#85858A]">
-        Description
+        상세 지시
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -2812,17 +2863,17 @@ function BotSettings({
           checked={autoSpeak}
           onChange={(event) => setAutoSpeak(event.target.checked)}
         />
-        Read replies aloud
+        답변을 음성으로 읽기
       </label>
       {voices.length ? (
         <label className="mt-4 block text-[14px] text-[#85858A]">
-          Voice
+          음성
           <select
             value={voiceId}
             onChange={(event) => setVoiceId(event.target.value)}
             className="mt-2 w-full rounded-[11px] border border-[#26262A] bg-transparent px-3.5 py-3 text-[#ECECEE]"
           >
-            <option value="">Account default</option>
+            <option value="">계정 기본값</option>
             {voices.map((voice) => (
               <option key={voice.id} value={voice.id}>
                 {voice.label}
@@ -2848,22 +2899,22 @@ function BotSettings({
               autoSpeak,
               voiceId: voiceId || null,
             })
-              .catch((err) => setError(err instanceof Error ? err.message : "Could not save"))
+              .catch((err) => setError(err instanceof Error ? err.message : "저장하지 못했습니다."))
               .finally(() => setSaving(false));
           }}
           className="rounded-[11px] bg-[#F1F1EF] px-4 py-2 text-[#17171A] disabled:opacity-40"
         >
-          Save
+          저장
         </button>
         <button
           type="button"
           onClick={() => void onExport()}
           className="text-[14px] text-[#85858A]"
         >
-          Export
+          내보내기
         </button>
         <button type="button" onClick={onClear} className="text-[14px] text-[#E65707]">
-          Clear conversation
+          대화 내용 지우기
         </button>
       </div>
     </div>
@@ -2912,19 +2963,19 @@ function NewBotSectionDialog({
           setSaving(true);
           setError(null);
           void onConfirm(trimmed).catch((err: unknown) => {
-            setError(err instanceof Error ? err.message : "Could not create section");
+            setError(err instanceof Error ? err.message : "구역을 만들지 못했습니다.");
             setSaving(false);
           });
         }}
       >
         <h2 id="new-bot-section-title" className="text-[17px] font-medium text-[#F1F1F2]">
-          New section
+          새 구역
         </h2>
         <p className="mt-2 text-[14px] leading-6 text-[#9A9AA0]">
-          Create a section and move {bot.name} into it.
+          구역을 만들고 {bot.name} 봇을 이곳으로 이동합니다.
         </p>
         <label className="mt-4 block text-[13.5px] text-[#C9C9CE]">
-          Name
+          이름
           <input
             maxLength={60}
             value={name}
@@ -2940,14 +2991,14 @@ function NewBotSectionDialog({
             onClick={onCancel}
             className="rounded-[10px] px-3.5 py-2 text-[14px] text-[#C9C9CE] hover:bg-[#29292D] disabled:opacity-40"
           >
-            Cancel
+            취소
           </button>
           <button
             type="submit"
             disabled={saving || !name.trim()}
             className="rounded-[10px] bg-[#F1F1EF] px-3.5 py-2 text-[14px] font-medium text-[#17171A] disabled:opacity-40"
           >
-            {saving ? "Creating…" : "Create"}
+            {saving ? "만드는 중…" : "만들기"}
           </button>
         </div>
       </form>
@@ -2992,14 +3043,14 @@ function ClearConversationDialog({
         onPointerDown={(event) => event.stopPropagation()}
       >
         <h2 id="clear-conversation-title" className="text-[17px] font-medium text-[#F1F1F2]">
-          Clear {bot.name}’s conversation?
+          {bot.name}의 대화를 지울까요?
         </h2>
         <p
           id="clear-conversation-description"
           className="mt-2 text-[14px] leading-6 text-[#9A9AA0]"
         >
-          This permanently removes every message and stops current work. The bot, computer, memory,
-          and routines are kept.
+          모든 메시지를 영구 삭제하고 현재 작업을 중지합니다. 봇, 브라우저 로그인 상태, 메모리와
+          자동 작업은 유지됩니다.
         </p>
         {error ? <p className="mt-3 text-[13.5px] text-[#FF5364]">{error}</p> : null}
         <div className="mt-5 flex justify-end gap-2.5">
@@ -3009,7 +3060,7 @@ function ClearConversationDialog({
             onClick={onCancel}
             className="rounded-[10px] px-3.5 py-2 text-[14px] text-[#C9C9CE] hover:bg-[#29292D] disabled:opacity-40"
           >
-            Cancel
+            취소
           </button>
           <button
             type="button"
@@ -3018,13 +3069,13 @@ function ClearConversationDialog({
               setClearing(true);
               setError(null);
               void onConfirm().catch((err: unknown) => {
-                setError(err instanceof Error ? err.message : "Could not clear conversation");
+                setError(err instanceof Error ? err.message : "대화를 지우지 못했습니다.");
                 setClearing(false);
               });
             }}
             className="rounded-[10px] bg-[#FF5364] px-3.5 py-2 text-[14px] font-medium text-white disabled:opacity-40"
           >
-            {clearing ? "Clearing…" : "Clear"}
+            {clearing ? "지우는 중…" : "대화 지우기"}
           </button>
         </div>
       </div>
@@ -3070,14 +3121,13 @@ function DeleteBotDialog({
         onPointerDown={(event) => event.stopPropagation()}
       >
         <h2 id="delete-bot-title" className="text-[17px] font-medium text-[#F1F1F2]">
-          Delete {bot.name}?
+          {bot.name} 봇을 삭제할까요?
         </h2>
         <p id="delete-bot-description" className="mt-2 text-[14px] leading-6 text-[#9A9AA0]">
-          Its conversation, files, and routines will be permanently deleted. Bots it created stay in
-          your list.
+          이 봇의 대화, 파일, 자동 작업이 영구 삭제됩니다. 이 봇이 만든 다른 봇은 목록에 유지됩니다.
         </p>
         <fieldset className="mt-4 space-y-2">
-          <legend className="mb-2 text-[13.5px] text-[#C9C9CE]">What about its memories?</legend>
+          <legend className="mb-2 text-[13.5px] text-[#C9C9CE]">메모리는 어떻게 할까요?</legend>
           <label className="flex cursor-pointer gap-3 rounded-[11px] border border-[#343438] p-3">
             <input
               type="radio"
@@ -3086,9 +3136,9 @@ function DeleteBotDialog({
               onChange={() => setDeleteMemories(false)}
             />
             <span>
-              <span className="block text-[14px] text-[#ECECEE]">Keep memories</span>
+              <span className="block text-[14px] text-[#ECECEE]">메모리 유지</span>
               <span className="mt-0.5 block text-[12.5px] text-[#85858A]">
-                Move them to your shared memory.
+                공유 메모리로 이동합니다.
               </span>
             </span>
           </label>
@@ -3100,9 +3150,9 @@ function DeleteBotDialog({
               onChange={() => setDeleteMemories(true)}
             />
             <span>
-              <span className="block text-[14px] text-[#ECECEE]">Delete memories too</span>
+              <span className="block text-[14px] text-[#ECECEE]">메모리도 삭제</span>
               <span className="mt-0.5 block text-[12.5px] text-[#85858A]">
-                This cannot be undone.
+                삭제 후에는 복구할 수 없습니다.
               </span>
             </span>
           </label>
@@ -3115,7 +3165,7 @@ function DeleteBotDialog({
             onClick={onCancel}
             className="rounded-[10px] px-3.5 py-2 text-[14px] text-[#C9C9CE] hover:bg-[#29292D] disabled:opacity-40"
           >
-            Cancel
+            취소
           </button>
           <button
             type="button"
@@ -3124,13 +3174,13 @@ function DeleteBotDialog({
               setDeleting(true);
               setError(null);
               void onConfirm(deleteMemories).catch((err: unknown) => {
-                setError(err instanceof Error ? err.message : "Could not delete bot");
+                setError(err instanceof Error ? err.message : "봇을 삭제하지 못했습니다.");
                 setDeleting(false);
               });
             }}
             className="rounded-[10px] bg-[#FF5364] px-3.5 py-2 text-[14px] font-medium text-white disabled:opacity-40"
           >
-            {deleting ? "Deleting…" : "Delete"}
+            {deleting ? "삭제 중…" : "삭제"}
           </button>
         </div>
       </div>
@@ -3175,10 +3225,10 @@ function DeleteRoutineDialog({
         onPointerDown={(event) => event.stopPropagation()}
       >
         <h2 id="delete-routine-title" className="text-[17px] font-medium text-[#F1F1F2]">
-          Delete {routine.name}?
+          {routine.name} 자동 작업을 삭제할까요?
         </h2>
         <p id="delete-routine-description" className="mt-2 text-[14px] leading-6 text-[#9A9AA0]">
-          This cannot be undone.
+          삭제 후에는 복구할 수 없습니다.
         </p>
         {error ? <p className="mt-3 text-[13.5px] text-[#FF5364]">{error}</p> : null}
         <div className="mt-5 flex justify-end gap-2.5">
@@ -3188,7 +3238,7 @@ function DeleteRoutineDialog({
             onClick={onCancel}
             className="rounded-[10px] px-3.5 py-2 text-[14px] text-[#C9C9CE] hover:bg-[#29292D] disabled:opacity-40"
           >
-            Cancel
+            취소
           </button>
           <button
             type="button"
@@ -3197,13 +3247,13 @@ function DeleteRoutineDialog({
               setDeleting(true);
               setError(null);
               void onConfirm().catch((err: unknown) => {
-                setError(err instanceof Error ? err.message : "Could not delete routine");
+                setError(err instanceof Error ? err.message : "자동 작업을 삭제하지 못했습니다.");
                 setDeleting(false);
               });
             }}
             className="rounded-[10px] bg-[#FF5364] px-3.5 py-2 text-[14px] font-medium text-white disabled:opacity-40"
           >
-            {deleting ? "Deleting…" : "Delete"}
+            {deleting ? "삭제 중…" : "삭제"}
           </button>
         </div>
       </div>
@@ -3232,15 +3282,15 @@ function computerPlaceholder(
   booting: boolean,
   label: string,
 ) {
-  if (state === "booting" || booting) return "Booting live desktop…";
+  if (state === "booting" || booting) return "원격 브라우저를 시작하는 중…";
   if (state === "running") return label;
-  if (state === "suspended") return "Computer is asleep — take control to wake it";
-  if (state === "error") return "Computer failed to boot";
-  return "Computer is stopped";
+  if (state === "suspended") return "브라우저가 절전 상태입니다. 직접 제어하면 다시 시작됩니다.";
+  if (state === "error") return "브라우저를 시작하지 못했습니다.";
+  return "브라우저가 종료되었습니다.";
 }
 
 function computerLabel(mode: ComputerStatus["mode"] | undefined, botName: string) {
-  return mode === "dedicated" ? `${botName}’s computer` : "Team Computer";
+  return mode === "dedicated" ? `${botName} 전용 브라우저` : "공유 브라우저";
 }
 
 function ArtifactImage({
@@ -3316,7 +3366,7 @@ function ArtifactImage({
       {open && src ? (
         <button
           type="button"
-          aria-label="Close image preview"
+          aria-label="이미지 미리보기 닫기"
           className="fixed inset-0 z-50 grid place-items-center bg-[rgba(4,4,5,.82)] p-6"
           onClick={() => setOpen(false)}
         >

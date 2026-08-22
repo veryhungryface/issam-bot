@@ -23,6 +23,6 @@ test("mobile shell uses a bot drawer and full-width work panels", async ({ page 
   const panel = page.getByTestId("side-panel");
   await expect(panel).toHaveAttribute("data-panel", "settings");
   await expect.poll(async () => Math.round((await panel.boundingBox())?.width ?? 0)).toBe(390);
-  await panel.getByRole("button", { name: "Close panel" }).click();
+  await panel.getByRole("button", { name: "패널 닫기" }).click();
   await expect(panel).toHaveAttribute("data-panel", "closed");
 });

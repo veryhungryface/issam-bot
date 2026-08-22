@@ -786,7 +786,7 @@ async function applyE2BAction(desktop: Sandbox, action: ComputerAction): Promise
     }
     return;
   }
-  if (action.kind === "clipboard") {
+  if (action.kind === "clipboard" || action.kind === "text") {
     await desktop.write(action.text);
     return;
   }

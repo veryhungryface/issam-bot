@@ -62,11 +62,21 @@ describe("thread event reduction", () => {
 
     const first = reduceThreadSnapshot(
       initial,
-      event({ type: "thread.progress", seq: 4, runId: "run-1", payload: { delta: "Hel" } }),
+      event({
+        type: "thread.progress",
+        seq: 4,
+        runId: "run-1",
+        payload: { delta: "Hel" },
+      }),
     );
     const second = reduceThreadSnapshot(
       first,
-      event({ type: "thread.progress", seq: 5, runId: "run-1", payload: { delta: "lo" } }),
+      event({
+        type: "thread.progress",
+        seq: 5,
+        runId: "run-1",
+        payload: { delta: "lo" },
+      }),
     );
 
     expect(second?.cursor).toBe(5);
@@ -154,12 +164,42 @@ describe("thread event reduction", () => {
         id: "event-message",
         type: "thread.message.created",
         seq: 9,
-        payload: { messageId: "durable", role: "bot", blocks: [completedBlock] },
+        payload: {
+          messageId: "durable",
+          role: "bot",
+          blocks: [completedBlock],
+        },
       }),
     );
 
     expect(next?.messages.map((item) => item.id)).toEqual(["subagent:other", "durable"]);
     expect(next?.messages[1]?.blocks).toEqual([completedBlock]);
+  });
+
+  it("replaces an optimistic user bubble with the committed user message", () => {
+    const initial = snapshot([
+      message("message-1", [{ kind: "text", text: "older" }], 1),
+      {
+        ...message("optimistic:nonce-1", [{ kind: "text", text: "안녕하세요" }], 2),
+        role: "user",
+      },
+    ]);
+
+    const next = reduceThreadSnapshot(
+      initial,
+      event({
+        id: "event-user-message",
+        type: "thread.message.created",
+        seq: 2,
+        payload: {
+          messageId: "message-2",
+          role: "user",
+          blocks: [{ kind: "text", text: "안녕하세요" }],
+        },
+      }),
+    );
+
+    expect(next?.messages.map((item) => item.id)).toEqual(["message-1", "message-2"]);
   });
 
   it("clears durable and transient history when another client clears the thread", () => {
@@ -189,7 +229,12 @@ describe("thread event reduction", () => {
       event({ type: "thread.cleared", seq: 12, runId: undefined }),
     );
 
-    expect(next).toMatchObject({ cursor: 12, messages: [], olderCursor: null, run: null });
+    expect(next).toMatchObject({
+      cursor: 12,
+      messages: [],
+      olderCursor: null,
+      run: null,
+    });
   });
 
   it("routes live clear events through the snapshot reducer", () => {
@@ -254,7 +299,10 @@ describe("thread event reduction", () => {
     );
 
     expect(next?.messages).toHaveLength(1);
-    expect(next?.messages[0]?.blocks[0]).toMatchObject({ status: "answered", answer: "Paris" });
+    expect(next?.messages[0]?.blocks[0]).toMatchObject({
+      status: "answered",
+      answer: "Paris",
+    });
   });
 });
 

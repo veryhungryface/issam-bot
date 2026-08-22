@@ -10,10 +10,10 @@ export function WorkspaceSearchResults({
   onSelect: (hit: SearchHit) => void;
 }) {
   if (loading) {
-    return <div className="px-3 py-4 text-[14px] text-[#85858A]">Searching…</div>;
+    return <div className="px-3 py-4 text-[14px] text-[#85858A]">검색 중…</div>;
   }
   if (!hits.length) {
-    return <div className="px-3 py-4 text-[14px] text-[#85858A]">No results</div>;
+    return <div className="px-3 py-4 text-[14px] text-[#85858A]">검색 결과 없음</div>;
   }
   return (
     <div className="flex flex-col gap-0.5">

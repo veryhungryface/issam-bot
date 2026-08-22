@@ -38,12 +38,12 @@ export function TeachRecordingChrome({
         data-testid="teach-recording-overlay"
         className="flex min-w-0 flex-1 flex-col gap-1 px-3"
       >
-        <div className="truncate text-[13px] text-[#ECECEE]">Recording: {recording.goal}</div>
+        <div className="truncate text-[13px] text-[#ECECEE]">기록 중: {recording.goal}</div>
         <div className="text-[12px] text-[#85858A]">
-          {remaining} left · bot is watching, not acting
+          {remaining} 남음 · 봇은 화면만 관찰하며 조작하지 않습니다
         </div>
         <div className="text-[12px] text-[#E65707]">
-          Do not type passwords into the demo. Use Take control for credentials.
+          시연 중에는 비밀번호를 입력하지 마세요. 로그인은 직접 제어를 사용하세요.
         </div>
       </div>
     );
@@ -54,12 +54,12 @@ export function TeachRecordingChrome({
       data-testid="teach-recording"
       className="rounded-[11px] border border-[#232326] bg-[#121214] px-3 py-3"
     >
-      <div className="text-[14px] text-[#ECECEE]">Recording: {recording.goal}</div>
+      <div className="text-[14px] text-[#ECECEE]">기록 중: {recording.goal}</div>
       <div className="mt-1 text-[13px] text-[#85858A]">
-        {remaining} left · bot is watching, not acting
+        {remaining} 남음 · 봇은 화면만 관찰하며 조작하지 않습니다
       </div>
       <div className="mt-2 text-[13px] text-[#E65707]">
-        Do not type passwords into the demo. Use Take control for credentials.
+        시연 중에는 비밀번호를 입력하지 마세요. 로그인은 직접 제어를 사용하세요.
       </div>
       <Button
         type="button"
@@ -70,7 +70,7 @@ export function TeachRecordingChrome({
         data-testid="teach-stop-button"
         onClick={() => void onStop()}
       >
-        Stop teaching
+        학습 중지
       </Button>
     </div>
   );
@@ -92,7 +92,7 @@ export function TeachStopButton({
       data-testid="teach-stop-overlay"
       onClick={() => void onStop()}
     >
-      Stop teaching
+      학습 중지
     </Button>
   );
 }

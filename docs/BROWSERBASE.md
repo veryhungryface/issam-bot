@@ -83,9 +83,10 @@ Browserbase Live View forwards desktop key events, but cross-origin remote keybo
 reliably preserve browser IME composition. Direct Korean typing can therefore arrive as separated
 jamo. While the user holds computer control, the full-screen viewer exposes a local **한글/IME
 입력** field. The user first clicks the desired field in the remote browser, composes text locally,
-then presses Enter or **입력**. The server writes the completed Unicode string to the remote
-clipboard and sends `Control+V` through the existing authenticated computer-input endpoint. Input
-is capped at 10,000 characters and remains subject to the active takeover lease.
+then presses Enter or **입력**. The server sends the completed Unicode string through Playwright's
+`keyboard.insertText()` over the existing authenticated computer-input endpoint. This does not
+depend on clipboard permission or page origin. Input is capped at 10,000 characters and remains
+subject to the active takeover lease.
 
 ASCII keyboard input, pointer actions, and scrolling continue to use Live View directly.
 

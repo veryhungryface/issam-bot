@@ -78,6 +78,7 @@ export interface ScreenSession {
 
 export type ComputerInput =
   | { kind: "key"; key: string; modifiers?: string[] }
+  | { kind: "text"; text: string }
   | {
       kind: "pointer";
       x: number;
@@ -279,10 +280,21 @@ export interface ScriptedTurn {
 export type AgentRuntimeEvent =
   | { type: "text"; text: string }
   | { type: "progress"; text: string }
-  | { type: "tool"; name: string; args: Record<string, unknown>; executionId: string }
+  | {
+      type: "tool";
+      name: string;
+      args: Record<string, unknown>;
+      executionId: string;
+    }
   | { type: "ask"; text: string; detail?: string }
   | { type: "takeover"; reason: string }
-  | { type: "usage"; inputTokens: number; outputTokens: number; provider: string; model: string }
+  | {
+      type: "usage";
+      inputTokens: number;
+      outputTokens: number;
+      provider: string;
+      model: string;
+    }
   | { type: "checkpoint"; blob: string }
   | {
       type: "subagent";
