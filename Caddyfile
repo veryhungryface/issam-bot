@@ -1,0 +1,34 @@
+{
+	admin off
+}
+
+{$APP_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+		Permissions-Policy "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+	}
+
+	@health path /health
+	handle @health {
+		reverse_proxy api:3100
+	}
+
+	@api path /api/* /rpc/*
+	handle @api {
+		reverse_proxy api:3100
+	}
+
+	handle {
+		reverse_proxy web:5173
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

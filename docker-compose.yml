@@ -1,0 +1,154 @@
+name: issam-bot
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app-security: &app-security
+  init: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - backend
+  logging: *default-logging
+
+services:
+  api:
+    <<: *app-security
+    image: ${ISSAM_BOT_IMAGE:?Set ISSAM_BOT_IMAGE to a prebuilt immutable image tag}
+    env_file:
+      - /opt/issam-bot/secret.env
+    command:
+      - bash
+      - -lc
+      - pnpm --filter @rakazo/db exec prisma migrate deploy && exec pnpm --filter @rakazo/api start
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      SANDBOX_PROVIDER: browserbase
+      WAKEUP_DRIVER: graphile
+      AGENT_RUNTIME: pi
+      GIT_SHA: ${GIT_SHA:-}
+    expose:
+      - "3100"
+    volumes:
+      - appdata:/data
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    pids_limit: 192
+    mem_limit: 512m
+    cpus: 0.60
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  worker:
+    <<: *app-security
+    image: ${ISSAM_BOT_IMAGE:?Set ISSAM_BOT_IMAGE to a prebuilt immutable image tag}
+    env_file:
+      - /opt/issam-bot/secret.env
+    command: ["pnpm", "--filter", "@rakazo/worker", "start"]
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      SANDBOX_PROVIDER: browserbase
+      WAKEUP_DRIVER: graphile
+      AGENT_RUNTIME: pi
+      GIT_SHA: ${GIT_SHA:-}
+    volumes:
+      - appdata:/data
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    pids_limit: 256
+    mem_limit: 640m
+    cpus: 0.70
+    stop_grace_period: 60s
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    <<: *app-security
+    image: ${ISSAM_BOT_IMAGE:?Set ISSAM_BOT_IMAGE to a prebuilt immutable image tag}
+    command: ["pnpm", "--filter", "@rakazo/web", "preview", "--host", "0.0.0.0", "--port", "5173"]
+    environment:
+      NODE_ENV: production
+      API_PROXY_TARGET: http://api:3100
+      WEB_PORT: "5173"
+      RAKAZO_HOST: ${RAKAZO_HOST:?Set RAKAZO_HOST in the secret environment}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in the secret environment}
+    expose:
+      - "5173"
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    pids_limit: 96
+    mem_limit: 256m
+    cpus: 0.35
+    stop_grace_period: 20s
+    depends_on:
+      api:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    environment:
+      APP_ADDRESS: ${APP_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    networks:
+      - edge
+      - backend
+    pids_limit: 96
+    mem_limit: 128m
+    cpus: 0.20
+    stop_grace_period: 20s
+    logging: *default-logging
+    depends_on:
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  appdata:
+    name: issam-bot-appdata
+  caddydata:
+    name: issam-bot-caddydata
+  caddyconfig:
+    name: issam-bot-caddyconfig
+
+networks:
+  edge:
+  backend:
