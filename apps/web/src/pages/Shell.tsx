@@ -149,6 +149,7 @@ export function ShellPage() {
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [optimisticMessages, setOptimisticMessages] = useState<Record<string, ThreadMessage>>({});
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
@@ -222,6 +223,11 @@ export function ShellPage() {
   const autoSpokenBotId = useRef<string | null>(null);
 
   const active = bots.find((b) => b.id === botId) ?? bots[0];
+  const transcriptMessages = useMemo(() => {
+    const messages = snapshot?.messages ?? [];
+    const optimistic = active ? optimisticMessages[active.id] : undefined;
+    return optimistic ? [...messages, optimistic] : messages;
+  }, [active, optimisticMessages, snapshot?.messages]);
   const activePendingAttachments = useMemo(
     () => attachmentsForBot(pendingAttachments, active?.id),
     [active?.id, pendingAttachments],
@@ -527,6 +533,14 @@ export function ShellPage() {
             cursor = Math.max(cursor, event.seq);
             retryMs = 250;
             applyThreadEvent(event, setSnapshot, setComputer);
+            if (event.type === "thread.message.created" && event.payload.role === "user") {
+              setOptimisticMessages((current) => {
+                if (!(event.botId in current)) return current;
+                const next = { ...current };
+                delete next[event.botId];
+                return next;
+              });
+            }
             if (event.type === "thread.cleared") {
               expandedHistoryThread.current = null;
               pinnedAroundRef.current = null;
@@ -773,23 +787,17 @@ export function ShellPage() {
       const clientNonce = crypto.randomUUID();
       const optimisticId = `optimistic:${clientNonce}`;
       if (trimmed) {
-        setSnapshot((current) => {
-          if (!current || current.botId !== id) return current;
-          return {
-            ...current,
-            messages: [
-              ...current.messages,
-              {
-                id: optimisticId,
-                threadId: current.threadId,
-                seq: current.cursor + 1,
-                role: "user",
-                blocks: [{ kind: "text", text: trimmed }],
-                createdAt: new Date().toISOString(),
-              },
-            ],
-          };
-        });
+        setOptimisticMessages((current) => ({
+          ...current,
+          [id]: {
+            id: optimisticId,
+            threadId: `pending:${id}`,
+            seq: 0,
+            role: "user",
+            blocks: [{ kind: "text", text: trimmed }],
+            createdAt: new Date().toISOString(),
+          },
+        }));
       }
       setSending(true);
       setSendError(null);
@@ -822,19 +830,30 @@ export function ShellPage() {
         // non-blocking refresh only as a recovery path so the composer is not held hostage by
         // another high-latency database round trip.
         window.setTimeout(() => {
+          const clearOptimistic = () => {
+            setOptimisticMessages((current) => {
+              if (!(id in current)) return current;
+              const next = { ...current };
+              delete next[id];
+              return next;
+            });
+          };
           if (activeBotId.current === id) {
-            void refreshThreadRef.current(id).catch(() => undefined);
+            void refreshThreadRef
+              .current(id)
+              .catch(() => undefined)
+              .finally(clearOptimistic);
+          } else {
+            clearOptimistic();
           }
         }, 1_500);
       } catch (error) {
-        setSnapshot((current) =>
-          current
-            ? {
-                ...current,
-                messages: current.messages.filter((message) => message.id !== optimisticId),
-              }
-            : current,
-        );
+        setOptimisticMessages((current) => {
+          if (current[id]?.id !== optimisticId) return current;
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
         if (activeBotId.current === id) {
           setSendError(error instanceof Error ? error.message : "메시지를 보내지 못했습니다.");
         }
@@ -1410,7 +1429,7 @@ export function ShellPage() {
         <Transcript
           scrollRef={messageScroll}
           botId={active?.id ?? ""}
-          messages={snapshot?.messages ?? []}
+          messages={transcriptMessages}
           olderCursor={snapshot?.olderCursor ?? null}
           loadingOlder={loadingOlder}
           answerableAskMessageId={answerableAskMessageId}
