@@ -1,0 +1,67 @@
+name: Deploy VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable GHCR image tag
+        required: true
+        default: sha-840385d
+      git_sha:
+        description: Full Git revision reported by /health
+        required: true
+        default: 840385d222f7fa8b25dc6bf990d1e5d7d6a93ef1
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate immutable revision
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          GIT_SHA: ${{ inputs.git_sha }}
+        run: |
+          [[ "$IMAGE_TAG" =~ ^sha-[0-9a-f]{7,40}$ ]]
+          [[ "$GIT_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Configure deploy SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/issam_bot_deploy
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/issam_bot_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Pull and start immutable image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          GIT_SHA: ${{ inputs.git_sha }}
+        run: |
+          ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes deploy@172.245.30.225)
+          printf '%s' "$GHCR_TOKEN" | ssh "${ssh_args[@]}" \
+            'sudo -n docker login ghcr.io -u veryhungryface --password-stdin'
+          ssh "${ssh_args[@]}" \
+            "sudo -n sed -i 's|^ISSAM_BOT_IMAGE=.*|ISSAM_BOT_IMAGE=ghcr.io/veryhungryface/issam-bot:${IMAGE_TAG}|' /opt/issam-bot/secret.env && sudo -n sed -i 's|^GIT_SHA=.*|GIT_SHA=${GIT_SHA}|' /opt/issam-bot/secret.env && cd /opt/issam-bot && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml pull && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --remove-orphans"
+
+      - name: Verify health and remove registry token
+        if: always()
+        run: |
+          ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes deploy@172.245.30.225)
+          ssh "${ssh_args[@]}" 'sudo -n docker logout ghcr.io >/dev/null 2>&1 || true' || true
+          if [[ "${{ job.status }}" == "success" ]]; then
+            for attempt in {1..18}; do
+              if curl --fail --silent --show-error --max-time 10 http://172.245.30.225/health | grep -Fq '"revision":"${{ inputs.git_sha }}"'; then
+                exit 0
+              fi
+              sleep 5
+            done
+            exit 1
+          fi

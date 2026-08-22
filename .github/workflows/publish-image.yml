@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - "docs/**"
       - "README.md"
+      - ".github/workflows/deploy-vps.yml"
   workflow_dispatch:
 
 permissions:
