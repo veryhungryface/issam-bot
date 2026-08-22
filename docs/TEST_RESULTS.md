@@ -13,6 +13,7 @@ that the behavior exists.
 | Managed PostgreSQL connectivity | Pass, previously observed | TLS connection through the IPv4 Session Pooler was confirmed. Schema migration and restore remain separate checks. |
 | OpenAI temporary provider | Pass, previously observed | `gpt-5.6-luna` returned a Responses API result and token usage. Agent tool loop is not proven by this canary. |
 | Company Qwen provider | Blocked | Source-IP allowlisting was not available; no production capability claim is made. |
+| Supabase Data API isolation | Pass | All 35 application tables have RLS enabled; `anon` and `authenticated` retain access to 0 tables. |
 | Public HTTPS web deployment | Not run | A domain is not configured. IP-based health only is allowed until then. |
 
 Previously observed results above are operational notes from Phase 0 and are not reproduced by this
@@ -28,7 +29,11 @@ Validation performed for this change:
 | YAML parse and exact service set (`api`, `worker`, `web`, `caddy`) | Pass |
 | Healthcheck against a local JSON health endpoint, including revision match | Pass |
 | `git diff --check` | Pass |
-| Full Docker Compose render and Caddy container validation | Not run locally; Docker is unavailable in the authoring environment and remains a deployment gate. |
+| Full monorepo TypeScript checks | Pass; 19/19 Turbo tasks |
+| Unit/integration tests | Pass; 654 passed, 53 environment-dependent tests skipped |
+| Production Vite web build | Pass; 2,331 modules transformed |
+| Docker Compose render on the target VPS | Pass with Docker Compose 2.27.1 |
+| Caddy container configuration validation on the target VPS | Pass with Caddy 2.10.2 |
 
 Run these checks in CI or from a clean checkout:
 

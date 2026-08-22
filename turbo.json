@@ -1,5 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "BROWSERBASE_API_KEY",
+    "BROWSERBASE_PROJECT_ID",
+    "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "QWEN_API_KEY"
+  ],
   "tasks": {
     "generate": {
       "cache": false

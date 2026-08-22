@@ -21,14 +21,20 @@ async function request(path, init = {}) {
   });
   const text = await response.text();
   const body = text ? JSON.parse(text) : null;
-  if (!response.ok) throw new Error(`${init.method ?? "GET"} ${path} failed: HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(`${init.method ?? "GET"} ${path} failed: HTTP ${response.status}`);
   return body;
 }
 
 let context;
 let session;
 let browser;
-const result = { contextCreated: false, sessionCreated: false, cdpConnected: false, liveViewAvailable: false };
+const result = {
+  contextCreated: false,
+  sessionCreated: false,
+  cdpConnected: false,
+  liveViewAvailable: false,
+};
 
 try {
   context = await request("/contexts", {
@@ -41,7 +47,10 @@ try {
     method: "POST",
     body: JSON.stringify({
       projectId,
-      browserSettings: { context: { id: context.id, persist: true }, viewport: { width: 1280, height: 720 } },
+      browserSettings: {
+        context: { id: context.id, persist: true },
+        viewport: { width: 1280, height: 720 },
+      },
       timeout: 120,
     }),
   });
@@ -58,8 +67,14 @@ try {
   result.liveViewAvailable = Boolean(debug.debuggerUrl || debug.debuggerFullscreenUrl);
 } finally {
   await browser?.close().catch(() => undefined);
-  if (session?.id) result.sessionDeleted = await request(`/sessions/${session.id}`, { method: "DELETE" }).then(() => true).catch(() => false);
-  if (context?.id) result.contextDeleted = await request(`/contexts/${context.id}`, { method: "DELETE" }).then(() => true).catch(() => false);
+  if (session?.id)
+    result.sessionDeleted = await request(`/sessions/${session.id}`, { method: "DELETE" })
+      .then(() => true)
+      .catch(() => false);
+  if (context?.id)
+    result.contextDeleted = await request(`/contexts/${context.id}`, { method: "DELETE" })
+      .then(() => true)
+      .catch(() => false);
 }
 
 console.log(JSON.stringify(result));

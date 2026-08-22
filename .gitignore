@@ -33,5 +33,6 @@ verify-report
 .astro
 .deploy.lock
 .last-deployed-revision
+supabase/.temp/
 design/
 PRODUCT_PLAN.md
