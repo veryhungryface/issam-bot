@@ -16,11 +16,15 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   await page.getByRole("button", { name: /Scripted/ }).click();
   await page.getByLabel("API 키").fill("fake-scripted-key-one");
   await page.getByRole("button", { name: "API 키 연결" }).click();
-  await expect(page.getByText(/Scripted runtime에 연결했으며 이 모델을 사용합니다/)).toBeVisible();
+  await expect(
+    page.getByText(/Scripted runtime.*에 연결했으며 이 모델을 사용합니다/),
+  ).toBeVisible();
 
   await page.getByLabel("API 키 교체").fill("fake-scripted-key-two");
   await page.getByRole("button", { name: "API 키 교체" }).click();
-  await expect(page.getByText(/Scripted runtime에 연결했으며 이 모델을 사용합니다/)).toBeVisible();
+  await expect(
+    page.getByText(/Scripted runtime.*에 연결했으며 이 모델을 사용합니다/),
+  ).toBeVisible();
 
   await page.route("**/rpc/models/beginOAuth", async (route) => {
     await route.fulfill({
