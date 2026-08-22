@@ -33,6 +33,8 @@ replacement for server authorization.
   short-lived, and never persist or log the full URL.
 - Rotate any value disclosed in chat or logs. Removing it from a later commit does not remove it from
   Git history.
+- PostgreSQL uses `sslmode=verify-full`. The runtime image pins the Supabase Root 2021 CA and enables
+  Node's system CA store; do not replace this with `sslmode=no-verify` or disabled certificate checks.
 
 ## Browser egress and SSRF
 

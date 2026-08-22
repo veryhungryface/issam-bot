@@ -38,7 +38,7 @@ ISSAM_BOT_IMAGE=ghcr.io/example/issam-bot@sha256:replace-with-image-digest
 GIT_SHA=replace-with-git-commit
 APP_ADDRESS=agent.example.com
 RAKAZO_HOST=agent.example.com
-DATABASE_URL=postgresql://user:password@managed-db.example.com:5432/postgres?sslmode=require
+DATABASE_URL=postgresql://user:password@managed-db.example.com:5432/postgres?sslmode=verify-full
 BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
 ENCRYPTION_KEY=replace-with-a-long-random-secret
 BETTER_AUTH_URL=https://agent.example.com
@@ -94,6 +94,9 @@ docker compose --env-file /opt/issam-bot/secret.env ps
 The API container runs `prisma migrate deploy` before accepting traffic. A migration failure keeps
 the API unhealthy and prevents the worker from starting. The only public container ports are
 Caddy's 80/443. API port 3100 and web port 5173 exist only on the Compose network.
+
+The application image includes the pinned Supabase Root 2021 CA and starts Node with the system CA
+store enabled. Keep hostname verification enabled and rotate the pinned CA before its expiry.
 
 ## Upgrade and rollback
 
