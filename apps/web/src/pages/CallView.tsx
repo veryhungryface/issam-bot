@@ -151,7 +151,7 @@ export function CallView({
       if (text) {
         spokenMessage.current = lastBot.id;
         dictation.stop("cancel");
-        void speaker.speak(ask ? `${text}. Say yes or no, or answer in a sentence.` : text, {
+        void speaker.speak(ask ? `${text}. 예 또는 아니요로 답하거나 문장으로 답하세요.` : text, {
           botId,
           messageId: lastBot.id,
         });
@@ -225,7 +225,7 @@ export function CallView({
             통화 종료
           </button>
         </div>
-        <p className="mt-4 text-[12px] text-[#6C6C70]">Space: 끼어들기 · Esc: 통화 종료</p>
+        <p className="mt-4 text-[12px] text-[#6C6C70]">스페이스바: 끼어들기 · Esc: 통화 종료</p>
       </div>
     </div>
   );

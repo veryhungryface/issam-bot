@@ -14,8 +14,6 @@ interface SpeakOptions {
   messageId?: string;
 }
 
-type TtsErrorBody = { error?: string };
-
 const IDLE: SpeechSnapshot = { status: "idle" };
 
 export class Speaker {
@@ -145,7 +143,7 @@ export class Speaker {
       { signal },
     );
     if (!body.ready) {
-      throw new Error("Add a voice provider key and pick a voice in Voice settings.");
+      throw new Error("음성 설정에서 공급자 키를 추가하고 사용할 음성을 선택하세요.");
     }
     return body.utterances ?? [];
   }
@@ -159,8 +157,8 @@ export class Speaker {
       signal,
     });
     if (!res.ok) {
-      const body: TtsErrorBody = await res.json().catch(() => ({}));
-      throw new Error(body.error ?? `the voice service returned ${res.status}`);
+      await res.body?.cancel().catch(() => undefined);
+      throw new Error(`음성 서비스 요청에 실패했습니다(상태 코드: ${res.status}).`);
     }
     return res.blob();
   }

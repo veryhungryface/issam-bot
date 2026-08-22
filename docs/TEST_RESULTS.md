@@ -54,6 +54,25 @@ docker run --rm -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
 The placeholder environment must contain syntactically valid fake values only. Do not inject real
 secrets into CI logs.
 
+## Korean UI and message responsiveness probe (2026-08-23)
+
+| Check | Result | Evidence/limit |
+| --- | --- | --- |
+| Korean product UI | Pass locally | The primary navigation, onboarding, account/model/voice settings, browser controls, routines, approvals, status labels, and loading/error copy use Korean. Provider and model product names remain unchanged. |
+| Immediate chat feedback | Pass in unit/build validation | Sending inserts the user bubble immediately with `전송 중…`; the server event replaces it, with a delayed refresh used only as recovery. Production browser verification is required after the image is deployed. |
+| Browserbase Korean text path | Pass in adapter tests | Remote composed text uses Playwright `keyboard.insertText` through a dedicated text action instead of per-key input. Production Browserbase verification is required after deployment. |
+| VPS location | Observed | The deployed VPS geolocates to Buffalo, New York, United States. |
+| Database location | Observed | The Supabase PostgreSQL endpoint is in `ap-northeast-2` (Seoul). |
+| VPS to database latency | Slow | A first connection took about 3.41 seconds; repeated `SELECT 1` probes took about 236–241 ms each. |
+| Recent task latency | Variable | Recent queue/start delay samples were about 5.2–7.9 seconds. Normal end-to-end agent runs were about 20–23 seconds; worker logs also showed successful jobs ranging from 0.93 to 24.38 seconds. |
+
+The high-confidence infrastructure cause is the repeated trans-Pacific path between the US API and
+worker and the Seoul database. The send endpoint performs several authorization, state, durable
+message/run/event, cancellation, and queue operations in sequence. Optimistic rendering removes the
+blank UI wait, but it cannot remove model or network latency. For Korean users, the recommended
+production fix is to run the API and worker in Seoul near Supabase; moving infrastructure requires a
+separate approved deployment.
+
 ## Phase 0 completion gate
 
 Phase 0 is complete only after one reproducible run records all of the following against the image

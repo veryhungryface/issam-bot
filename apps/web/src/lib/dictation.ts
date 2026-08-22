@@ -24,7 +24,7 @@ const IDLE: DictationSnapshot = { status: "idle", transcript: "" };
 const ENDPOINT_TICK_MS = 80;
 const SILENCE_RMS = 0.035;
 const ENDPOINT_UNSUPPORTED =
-  "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer.";
+  "이 브라우저에서는 말하기 종료 시점을 자동으로 감지할 수 없습니다. Chrome이나 데스크톱 앱을 사용하거나 메시지 입력창에서 말하는 동안 버튼을 누르고 계세요.";
 
 export function webSpeechAvailable(): boolean {
   return Boolean(speechRecognitionCtor());
@@ -131,7 +131,7 @@ export class Dictation {
     this.set({
       ...IDLE,
       error:
-        "This browser has no on-device dictation. Connect a voice provider with transcription, or use Chrome / the desktop app.",
+        "이 브라우저는 기기 내 음성 인식을 지원하지 않습니다. 음성 변환을 지원하는 공급자를 연결하거나 Chrome 또는 데스크톱 앱을 사용하세요.",
     });
   }
 
@@ -162,7 +162,7 @@ export class Dictation {
       if (event.error === "aborted" || event.error === "no-speech") return;
       this.set({
         ...IDLE,
-        error: event.error ? `Dictation failed: ${event.error}` : "Dictation failed.",
+        error: "음성 입력에 실패했습니다.",
       });
     };
     rec.onend = () => {
@@ -180,7 +180,7 @@ export class Dictation {
       try {
         rec.start();
       } catch {
-        this.set({ ...IDLE, error: "Dictation ended unexpectedly." });
+        this.set({ ...IDLE, error: "음성 입력이 예기치 않게 종료되었습니다." });
       }
     };
     this.recognition = rec;
@@ -191,11 +191,11 @@ export class Dictation {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (error) {
+    } catch {
       if (this.token !== mine) return;
       this.set({
         ...IDLE,
-        error: error instanceof Error ? error.message : "Microphone failed",
+        error: "마이크를 사용할 수 없습니다.",
       });
       return;
     }
@@ -303,7 +303,7 @@ export class Dictation {
       const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
       if (this.token !== mine) return;
       if (!res.ok) {
-        this.set({ ...IDLE, error: body.error ?? "Could not transcribe that recording." });
+        this.set({ ...IDLE, error: "녹음 내용을 텍스트로 변환하지 못했습니다." });
         return;
       }
       this.finish(body.text ?? "", mine);
@@ -312,7 +312,7 @@ export class Dictation {
       if (error instanceof Error && error.name === "AbortError") return;
       this.set({
         ...IDLE,
-        error: error instanceof Error ? error.message : "Could not transcribe that recording.",
+        error: "녹음 내용을 텍스트로 변환하지 못했습니다.",
       });
     }
   }

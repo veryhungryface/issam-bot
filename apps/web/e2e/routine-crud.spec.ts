@@ -25,12 +25,12 @@ test("routine editing updates in place, preserves timezone, and deletion persist
   await page.getByRole("button", { name: /Tokyo check-in/ }).click();
   await page.locator("label:has-text('이름') input").fill("Weekday check-in");
   await page.locator("label:has-text('작업 지시') textarea").fill("Send the revised update");
-  await page.getByLabel("How often").selectOption("Weekdays");
+  await page.getByLabel("실행 주기").selectOption("Weekdays");
   await page.getByRole("button", { name: "저장", exact: true }).click();
 
   const updatedButton = page.getByRole("button", { name: /Weekday check-in/ });
   await expect(updatedButton).toHaveCount(1);
-  await expect(updatedButton).toContainText("Weekdays at 9:00 AM");
+  await expect(updatedButton).toContainText("평일 오전 9:00에");
   await expect(page.getByRole("button", { name: /Tokyo check-in/ })).toHaveCount(0);
 
   const [updated] = await rpc<Routine[]>(page, "routines/list", { botId });

@@ -10,13 +10,13 @@ test("mobile shell uses a bot drawer and full-width work panels", async ({ page 
   const sidebar = page.getByTestId("bot-sidebar");
   const main = page.locator("main");
   await expect(sidebar).toBeHidden();
-  await expect(page.getByRole("button", { name: "Open bot navigation" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "봇 목록 열기" })).toBeVisible();
   await expect.poll(async () => Math.round((await main.boundingBox())?.width ?? 0)).toBe(390);
 
-  await page.getByRole("button", { name: "Open bot navigation" }).click();
+  await page.getByRole("button", { name: "봇 목록 열기" }).click();
   await expect(sidebar).toBeVisible();
   expect((await sidebar.boundingBox())?.width).toBeLessThan(390);
-  await sidebar.getByRole("button", { name: "Close bot navigation" }).click();
+  await sidebar.getByRole("button", { name: "봇 목록 닫기" }).click();
   await expect(sidebar).toBeHidden();
 
   await page.getByTestId("bot-settings-trigger").click();

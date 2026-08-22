@@ -25,7 +25,7 @@ export function App() {
     return window.location.pathname.startsWith("/app") ? (
       <ShellSkeleton />
     ) : (
-      <div className="grid h-full place-items-center text-[#6C6C70]">Loading…</div>
+      <div className="grid h-full place-items-center text-[#6C6C70]">불러오는 중…</div>
     );
   }
   const user = session.data?.user;
@@ -75,7 +75,7 @@ function ShellSkeleton() {
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="h-[74px] border-b border-[#141416]" />
         <div className="flex flex-1 items-center justify-center text-[14px] text-[#55555A]">
-          Opening your workspace…
+          작업 공간을 여는 중…
         </div>
         <div className="mx-6 mb-6 h-[54px] rounded-full border border-[#202023] bg-[#131315]" />
       </main>

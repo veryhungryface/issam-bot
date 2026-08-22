@@ -4,20 +4,22 @@ import {
   type CronPreset,
   type CronUnit,
   cronFromPreset,
+  presetFromCron,
 } from "@rakazo/core";
 
 const UNITS: CronUnit[] = ["minutes", "hours", "days"];
 const NUMBERS = [1, 2, 3, 5, 10, 15, 30, 45];
-const TIMES = [
-  "6:00 AM",
-  "7:00 AM",
-  "8:00 AM",
-  "9:00 AM",
-  "12:00 PM",
-  "3:00 PM",
-  "6:00 PM",
-  "9:00 PM",
-];
+const TIME_LABELS: Record<string, string> = {
+  "6:00 AM": "오전 6:00",
+  "7:00 AM": "오전 7:00",
+  "8:00 AM": "오전 8:00",
+  "9:00 AM": "오전 9:00",
+  "12:00 PM": "오후 12:00",
+  "3:00 PM": "오후 3:00",
+  "6:00 PM": "오후 6:00",
+  "9:00 PM": "오후 9:00",
+};
+const TIMES = Object.keys(TIME_LABELS);
 
 const TIMED: CronFreq[] = ["Every day", "Weekdays", "Every week", "Every month"];
 
@@ -37,18 +39,28 @@ const UNIT_LABELS: Record<CronUnit, string> = {
   days: "일",
 };
 
-function describeKoreanSchedule(preset: CronPreset): { lead: string; detail: string } {
+function koreanTimeLabel(time: string): string {
+  return TIME_LABELS[time] ?? time;
+}
+
+export function describeKoreanSchedule(preset: CronPreset): { lead: string; detail: string } {
   if (preset.freq === "Interval") {
     return { lead: "반복", detail: `${preset.n}${UNIT_LABELS[preset.unit]}마다` };
   }
   if (preset.freq === "Every hour") return { lead: "매시간", detail: "" };
   if (preset.freq === "Advanced") {
-    return { lead: "Cron", detail: preset.cron || "*/3 * * * *" };
+    return { lead: "고급 일정", detail: preset.cron || "*/3 * * * *" };
   }
-  if (preset.freq === "Weekdays") return { lead: "평일", detail: `${preset.time}에` };
-  if (preset.freq === "Every week") return { lead: "매주 월요일", detail: `${preset.time}에` };
-  if (preset.freq === "Every month") return { lead: "매월 1일", detail: `${preset.time}에` };
-  return { lead: "매일", detail: `${preset.time}에` };
+  const time = `${koreanTimeLabel(preset.time)}에`;
+  if (preset.freq === "Weekdays") return { lead: "평일", detail: time };
+  if (preset.freq === "Every week") return { lead: "매주 월요일", detail: time };
+  if (preset.freq === "Every month") return { lead: "매월 1일", detail: time };
+  return { lead: "매일", detail: time };
+}
+
+export function formatKoreanCron(cron: string): string {
+  const { lead, detail } = describeKoreanSchedule(presetFromCron(cron));
+  return detail ? `${lead} ${detail}` : lead;
 }
 
 export function RoutineSchedule({
@@ -147,7 +159,7 @@ export function RoutineSchedule({
             >
               {times.map((time) => (
                 <option key={time} value={time}>
-                  {time}
+                  {koreanTimeLabel(time)}
                 </option>
               ))}
             </select>
@@ -157,7 +169,7 @@ export function RoutineSchedule({
           <input
             value={value.cron}
             placeholder="*/3 * * * *"
-            aria-label="Cron 표현식"
+            aria-label="고급 일정 표현식"
             onChange={(event) => patch({ cron: event.target.value })}
             className="min-w-[120px] flex-1 rounded-lg border-0 bg-[#24242A] px-2.5 py-1.5 font-mono text-[13.5px] text-[#ECECEE] outline-none"
           />

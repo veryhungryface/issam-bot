@@ -23,8 +23,8 @@ test("logout protects bot deep links and sign-in restores the session", async ({
   await page.getByRole("button", { name: "로그아웃" }).click();
   await expect(page.getByRole("heading", { name: "Issam Bot 로그인" })).toBeVisible();
   await page.goto("/");
-  await expect(page.getByText(/Your team of always-on agents/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Sign in/ })).toBeVisible();
+  await expect(page.getByText(/언제나 일할 준비가 된 AI 에이전트/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /로그인/ })).toBeVisible();
   await captureScreenshot(page, testInfo, "37-logged-out-welcome");
 
   await page.goto(protectedBotPath);

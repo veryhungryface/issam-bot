@@ -24,7 +24,6 @@ import {
   attachmentsForBot,
   cronFromPreset,
   defaultCronPreset,
-  formatCron,
   groupBotsForSidebar,
   inferAttachmentMimeType,
   isActive,
@@ -74,6 +73,7 @@ import { decodeArtifactBase64, openArtifact } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import { takeInitialBootstrap } from "../lib/bootstrap";
 import { dictation } from "../lib/dictation";
+import { koreanStatusLabel } from "../lib/korean-labels";
 import { isBrowserbaseDisconnectedMessage, screenIframeSandbox } from "../lib/live-view";
 import { revokePendingAttachmentPreviews } from "../lib/pending-attachments";
 import { markAfterPaint, markOnce } from "../lib/performance";
@@ -91,6 +91,7 @@ import {
 import { speaker } from "../lib/tts";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { HostComputerPrompt } from "./HostComputerPrompt";
+import { formatKoreanCron } from "./RoutineSchedule";
 import { WindowChrome } from "./WindowChrome";
 import { WorkspaceSearchResults } from "./WorkspaceSearch";
 
@@ -1186,7 +1187,7 @@ export function ShellPage() {
                           {bot.unread ? <span className="sr-only"> (읽지 않음)</span> : null}
                         </span>
                         <span className="flex shrink-0 items-center gap-1.5 text-[12.5px] text-[#6C6C70]">
-                          {bot.status === "idle" ? "" : bot.status}
+                          {koreanStatusLabel(bot.status)}
                           {bot.unread ? (
                             <span
                               aria-hidden="true"
@@ -1471,7 +1472,7 @@ export function ShellPage() {
             {panel !== "routine" && panel !== "create" ? (
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-[13.5px] text-[#85858A]">
-                  {computer?.state ?? active.status}
+                  {koreanStatusLabel(computer?.state ?? active.status)}
                 </span>
                 <div className="flex gap-3.5">
                   <button type="button" aria-label="봇 설정" onClick={() => setPanel("settings")}>
@@ -1576,7 +1577,9 @@ export function ShellPage() {
                     <span className="flex-1 text-left text-[14.5px] text-[#ECECEE]">
                       {routine.name}
                     </span>
-                    <span className="text-[13px] text-[#6C6C70]">{formatCron(routine.cron)}</span>
+                    <span className="text-[13px] text-[#6C6C70]">
+                      {formatKoreanCron(routine.cron)}
+                    </span>
                   </button>
                 ))}
                 <button
@@ -1606,7 +1609,7 @@ export function ShellPage() {
                     onAddRoutine={(skill) => {
                       setRoutineDraft({
                         name: skill.name || skill.goal.slice(0, 80),
-                        prompt: `Run taught skill: ${skill.name || skill.goal}\n${skill.playbook.steps.map((step, index) => `${index + 1}. ${step}`).join("\n")}`,
+                        prompt: `학습한 작업 실행: ${skill.name || skill.goal}\n${skill.playbook.steps.map((step, index) => `${index + 1}. ${step}`).join("\n")}`,
                         schedule: defaultCronPreset(),
                       });
                       setEditingRoutine(null);
@@ -1707,15 +1710,15 @@ export function ShellPage() {
                         if (targetRoutine) {
                           await rpc.routines.update({
                             routineId: targetRoutine.id,
-                            name: routineDraft.name || "Routine",
-                            prompt: routineDraft.prompt || "Check in.",
+                            name: routineDraft.name || "자동 작업",
+                            prompt: routineDraft.prompt || "상태를 확인해 줘.",
                             cron: cronFromPreset(routineDraft.schedule),
                           });
                         } else {
                           await rpc.routines.create({
                             botId: targetBotId,
-                            name: routineDraft.name || "Routine",
-                            prompt: routineDraft.prompt || "Check in.",
+                            name: routineDraft.name || "자동 작업",
+                            prompt: routineDraft.prompt || "상태를 확인해 줘.",
                             cron: cronFromPreset(routineDraft.schedule),
                             timezone: "UTC",
                             active: true,
@@ -2021,15 +2024,15 @@ export function ShellPage() {
               <div
                 className={`mt-1.5 text-[12px] ${remoteTextError ? "text-[#F17171]" : "text-[#6C6C70]"}`}
               >
-                {remoteTextError ?? "IME 조합이 필요한 문자는 여기서 완성한 뒤 Enter를 누르세요."}
+                {remoteTextError ?? "IME 조합이 필요한 문자는 여기서 완성한 뒤 엔터 키를 누르세요."}
               </div>
             </div>
           ) : null}
           <div className="relative min-h-0 flex-1 bg-[#0E0E10]">
             {computer?.kind === "desktop" ? (
               <div className="grid h-full place-items-center px-8 text-center text-sm text-[#6C6C70]">
-                This bot runs on this computer. There is no separate Linux desktop. Ask it to use
-                the shell; working directories under your home folder are allowed.
+                이 봇은 현재 컴퓨터에서 실행됩니다. 별도의 Linux 데스크톱은 없습니다. 셸을
+                사용하도록 요청할 수 있으며 홈 폴더 아래의 작업 디렉터리에 접근할 수 있습니다.
               </div>
             ) : computer?.state === "running" && embeddedScreenUrl ? (
               <>
@@ -2414,7 +2417,9 @@ const MessageView = memo(function MessageView({
                     animation: running ? "rkPulse 1.2s ease-in-out infinite" : undefined,
                   }}
                 >
-                  {running ? "하위 에이전트" : block.status}
+                  {running
+                    ? `하위 에이전트 · ${koreanStatusLabel(block.status)}`
+                    : koreanStatusLabel(block.status)}
                 </span>
               </div>
               <div className="mt-2 text-[13.5px] text-[#85858A]">{block.task}</div>
@@ -2571,7 +2576,7 @@ const MessageView = memo(function MessageView({
               <div className="flex items-center justify-between">
                 <span className="text-[15px] font-medium text-[#ECECEE]">브라우저</span>
                 <span className="rounded-full bg-[rgba(48,162,75,.14)] px-[11px] py-1 text-[13px] text-[#4ECB71]">
-                  {block.state}
+                  {koreanStatusLabel(block.state)}
                 </span>
               </div>
               <div className="my-2.5 text-[14.5px] leading-[1.5] text-[#A8A8AD]">
@@ -3389,7 +3394,7 @@ function readFileAsBase64(file: File): Promise<string> {
       const base64 = result.includes(",") ? (result.split(",")[1] ?? "") : result;
       resolve(base64);
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.onerror = () => reject(new Error("파일을 읽지 못했습니다."));
     reader.readAsDataURL(file);
   });
 }

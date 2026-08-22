@@ -9,17 +9,17 @@ test("model settings connect, replace, and cancel provider authentication", asyn
 
   await page.getByRole("button", { name: new RegExp(userName) }).click();
   await page.getByRole("button", { name: "모델", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Close model settings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "모델 설정 닫기" })).toBeVisible();
 
   const providerSearch = page.getByPlaceholder("공급자 검색");
   await providerSearch.fill("scripted");
   await page.getByRole("button", { name: /Scripted/ }).click();
-  await page.getByLabel("API key").fill("fake-scripted-key-one");
+  await page.getByLabel("API 키").fill("fake-scripted-key-one");
   await page.getByRole("button", { name: "API 키 연결" }).click();
   await expect(page.getByText(/Scripted runtime에 연결했으며 이 모델을 사용합니다/)).toBeVisible();
 
-  await page.getByLabel("Replace API key").fill("fake-scripted-key-two");
-  await page.getByRole("button", { name: "Replace API key" }).click();
+  await page.getByLabel("API 키 교체").fill("fake-scripted-key-two");
+  await page.getByRole("button", { name: "API 키 교체" }).click();
   await expect(page.getByText(/Scripted runtime에 연결했으며 이 모델을 사용합니다/)).toBeVisible();
 
   await page.route("**/rpc/models/beginOAuth", async (route) => {
@@ -55,7 +55,7 @@ test("model settings connect, replace, and cancel provider authentication", asyn
     .first()
     .click();
   await page.getByRole("button", { name: /Sign in with ChatGPT Plus\/Pro/ }).click();
-  await expect(page.getByText("Waiting for sign-in…")).toBeVisible();
+  await expect(page.getByText("로그인 완료를 기다리는 중…")).toBeVisible();
 
   const cancelled = page.waitForRequest((request) =>
     request.url().includes("/rpc/models/cancelOAuth"),
@@ -64,7 +64,7 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   await page.getByRole("button", { name: /Scripted/ }).click();
   await cancelled;
   expect(finishRequests).toBe(0);
-  await page.getByLabel("Replace API key").fill("fake-scripted-key-three");
-  await expect(page.getByRole("button", { name: "Replace API key" })).toBeEnabled();
-  await expect(page.getByText("Waiting for sign-in…")).toBeHidden();
+  await page.getByLabel("API 키 교체").fill("fake-scripted-key-three");
+  await expect(page.getByRole("button", { name: "API 키 교체" })).toBeEnabled();
+  await expect(page.getByText("로그인 완료를 기다리는 중…")).toBeHidden();
 });

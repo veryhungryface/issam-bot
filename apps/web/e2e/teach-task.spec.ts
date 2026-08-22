@@ -8,7 +8,7 @@ test("teach a task records interaction and saves a draft", async ({ page }) => {
   await page.getByTitle("에이전트 브라우저").click();
   await page.getByTestId("teach-start-button").click();
   await page.getByTestId("teach-goal-input").fill("Export weekly CRM list");
-  await page.getByRole("button", { name: "Start recording" }).click();
+  await page.getByRole("button", { name: "기록 시작" }).click();
   await expect(page.getByTestId("teach-recording-overlay")).toBeVisible();
   await expect(page.getByTestId("teach-capture-overlay")).toBeVisible();
   await page.getByTestId("teach-capture-overlay").click({ position: { x: 200, y: 200 } });

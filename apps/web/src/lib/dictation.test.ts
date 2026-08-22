@@ -184,7 +184,7 @@ describe("Dictation recorder fallback", () => {
     });
     expect(started).not.toHaveBeenCalled();
     expect(track.stop).toHaveBeenCalledOnce();
-    expect(dictation.state.error).toMatch(/stop talking/i);
+    expect(dictation.state.error).toContain("말하기 종료 시점");
   });
 
   it("stops an endpoint recording after silence", async () => {

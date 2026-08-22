@@ -1,4 +1,5 @@
 import type { SearchHit } from "@rakazo/contracts";
+import { koreanSearchKindLabel } from "../lib/korean-labels";
 
 export function WorkspaceSearchResults({
   hits,
@@ -27,7 +28,7 @@ export function WorkspaceSearchResults({
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[15px] font-medium text-[#ECECEE]">{hit.title}</span>
             <span className="shrink-0 text-[12px] uppercase tracking-wide text-[#6C6C70]">
-              {hit.kind}
+              {koreanSearchKindLabel(hit.kind)}
             </span>
           </div>
           <div className="mt-0.5 truncate text-[13px] text-[#85858A]">
