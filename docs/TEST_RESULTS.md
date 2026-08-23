@@ -36,7 +36,7 @@ Validation performed for this change:
 | Healthcheck against a local JSON health endpoint, including revision match | Pass |
 | `git diff --check` | Pass |
 | Full monorepo TypeScript checks | Pass; 19/19 Turbo tasks |
-| Unit/integration tests | Pass; full monorepo run passed 700 tests with 53 environment-dependent tests skipped |
+| Unit/integration tests | Pass; full monorepo run passed 701 tests with 53 environment-dependent tests skipped |
 | Production Vite web build | Pass; 2,333 modules transformed |
 | Docker Compose render on the target VPS | Pass with Docker Compose 2.27.1 |
 | Caddy container configuration validation on the target VPS | Pass with Caddy 2.10.2 |
@@ -91,7 +91,7 @@ separate approved deployment.
 | Deployment disk cleanup | Pass in workflow policy tests | The workflow persists a candidate release only after exact-revision health succeeds, rolls back to the persisted release on startup/health failure, and then prunes only unused Docker images. Containers and volumes are never pruned. |
 
 The integrated local validation passed Biome over 417 files, all 19 TypeScript/Turbo checks, the
-full 700-test suite, and the production build (2,333 web modules). Provider-backed production
+full 701-test suite, and the production build (2,333 web modules). Provider-backed production
 verification must be repeated after the immutable image is deployed.
 
 ## Phase 0 completion gate
