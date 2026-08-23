@@ -81,6 +81,7 @@ import {
   resolveSendAttachments,
 } from "./artifacts.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
+import { applyScreenViewPolicy } from "./screen-view-policy.js";
 import { queryWorkspaceSearch } from "./search.js";
 import { withSerializableRetry } from "./serializable-retry.js";
 import { assertTeachingSendAllowed, createTaughtSkillsService } from "./taught-skills.js";
@@ -1145,8 +1146,9 @@ export function createRouter(deps: RouterDeps) {
         );
         if (!session.url) return { url: null };
         scheduleComputerSleep(deps.jobs, bot.computer.id);
-        const viewUrl = withViewOnly(
+        const viewUrl = applyScreenViewPolicy(
           session.url,
+          bot.computer.kind,
           !(hasActiveComputerControl(bot.computer) && bot.computer.controlBotId === bot.id),
         );
         return {
@@ -2191,17 +2193,6 @@ async function listRoutinesDto(deps: RouterDeps, actor: Actor, botId: string) {
     where: { botId, workspaceId: actor.workspaceId, userId: actor.userId },
   });
   return rows.map(mapRoutine);
-}
-
-function withViewOnly(url: string, viewOnly: boolean) {
-  try {
-    const parsed = new URL(url);
-    parsed.searchParams.set("view_only", viewOnly ? "true" : "false");
-    return parsed.toString();
-  } catch {
-    const join = url.includes("?") ? "&" : "?";
-    return `${url}${join}view_only=${viewOnly ? "true" : "false"}`;
-  }
 }
 
 function duplicateBotName(name: string) {
