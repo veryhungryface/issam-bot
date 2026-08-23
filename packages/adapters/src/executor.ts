@@ -22,6 +22,7 @@ import {
   blocksToAgentHistoryText,
   containsSecret,
   createStreamingRedactor,
+  createStreamProgressFlusher,
   formatSkillRunPrompt,
   inferAttachmentMimeType,
   isTerminal,
@@ -400,6 +401,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
 
       let leaseValid = true;
       let lastLeaseCheckAt = 0;
+      let leaseCheck: Promise<void> | undefined;
       let retainComputerLease = false;
       let screenRelease: { computer: ComputerRef; context: AdapterContext } | undefined;
       let runAbortController: AbortController | null = null;
@@ -589,12 +591,29 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : `This result workspace is your private home. Relative file paths${sandboxCapabilities.shell ? " and shell working directories" : ""} start at its root.`;
 
         let assembled = "";
-        let pendingProgress = "";
-        let lastProgressAt = 0;
         let lastComputerFrameId: string | undefined;
         let terminalCheckpointComplete = false;
         const progressRedactor = createStreamingRedactor(runSecrets);
         const scripted = deps.runtime.describe().capabilities.scripted;
+        const progressFlusher = scripted
+          ? null
+          : createStreamProgressFlusher({
+              publish: async (delta) => {
+                await deps.events.append({
+                  workspaceId: run.workspaceId,
+                  threadId: thread.id,
+                  botId: bot.id,
+                  type: "thread.progress",
+                  runId,
+                  payload: { delta, streaming: true },
+                });
+              },
+            });
+        const flushLiveProgress = async () => {
+          if (!progressFlusher) return;
+          progressFlusher.push(progressRedactor.finish());
+          await progressFlusher.flush();
+        };
         const script = scripted
           ? inferScript(task.prompt, resumeFromTakeover ? "takeover" : undefined)
           : undefined;
@@ -1076,40 +1095,39 @@ export function createRunExecutor(deps: ExecutorDeps) {
           )) {
             if (!leaseValid) return;
             const now = Date.now();
-            if (now - lastLeaseCheckAt >= 1_000) {
+            if (now - lastLeaseCheckAt >= 1_000 && !leaseCheck) {
               lastLeaseCheckAt = now;
-              const still = await deps.prisma.run.findUnique({
-                where: { id: runId },
-                select: { status: true, leaseOwner: true, leaseFence: true },
-              });
-              if (
-                !still ||
-                still.status === "cancelled" ||
-                still.leaseOwner !== workerId ||
-                still.leaseFence !== fence
-              ) {
-                leaseValid = false;
-                return;
-              }
+              leaseCheck = deps.prisma.run
+                .findUnique({
+                  where: { id: runId },
+                  select: { status: true, leaseOwner: true, leaseFence: true },
+                })
+                .then((still) => {
+                  if (
+                    !still ||
+                    still.status === "cancelled" ||
+                    still.leaseOwner !== workerId ||
+                    still.leaseFence !== fence
+                  ) {
+                    leaseValid = false;
+                  }
+                })
+                .catch(() => {
+                  leaseValid = false;
+                })
+                .finally(() => {
+                  leaseCheck = undefined;
+                });
             }
 
             if (event.type === "text") {
               assembled += event.text;
-              pendingProgress += progressRedactor.push(event.text);
-              const now = Date.now();
-              if (!scripted && pendingProgress && now - lastProgressAt >= 250) {
-                lastProgressAt = now;
-                await deps.events.append({
-                  workspaceId: run.workspaceId,
-                  threadId: thread.id,
-                  botId: bot.id,
-                  type: "thread.progress",
-                  runId,
-                  payload: { delta: pendingProgress, streaming: true },
-                });
-                pendingProgress = "";
-              }
-            } else if (event.type === "progress") {
+              progressFlusher?.push(progressRedactor.push(event.text));
+              continue;
+            }
+
+            await flushLiveProgress();
+            if (event.type === "progress") {
               await deps.events.append({
                 workspaceId: run.workspaceId,
                 threadId: thread.id,
@@ -1257,6 +1275,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               assembled = assembled || event.text || assembled;
             }
           }
+
+          await flushLiveProgress();
 
           for (const turn of script ?? []) {
             for (const file of turn.files ?? []) {
