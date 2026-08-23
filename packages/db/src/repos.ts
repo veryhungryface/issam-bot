@@ -173,6 +173,47 @@ export function createRepos(prisma: PrismaClient) {
       return bot;
     },
 
+    async getBotThread(actor: Actor, botId: string) {
+      const bot = await prisma.bot.findFirst({
+        where: {
+          id: botId,
+          workspaceId: actor.workspaceId,
+          userId: actor.userId,
+          archivedAt: null,
+        },
+        select: { id: true, thread: { select: { id: true } } },
+      });
+      if (!bot) throw new IsolationError();
+      return bot;
+    },
+
+    async getBotSnapshot(actor: Actor, botId: string) {
+      const bot = await prisma.bot.findFirst({
+        where: {
+          id: botId,
+          workspaceId: actor.workspaceId,
+          userId: actor.userId,
+          archivedAt: null,
+        },
+        select: {
+          id: true,
+          thread: { select: { id: true } },
+          computer: {
+            select: {
+              kind: true,
+              state: true,
+              scope: true,
+              controlHolder: true,
+              controlBotId: true,
+              homeRevision: true,
+            },
+          },
+        },
+      });
+      if (!bot) throw new IsolationError();
+      return bot;
+    },
+
     async createBot(
       actor: Actor,
       input: {

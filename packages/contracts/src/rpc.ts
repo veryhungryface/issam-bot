@@ -26,6 +26,7 @@ import {
   TeachRecordingEventSchema,
   ThreadMessagePageSchema,
   ThreadSnapshotSchema,
+  ThreadViewSchema,
   UpdateBotInput,
   UsageRecordSchema,
   VoiceCatalogEntrySchema,
@@ -123,6 +124,7 @@ export const appContract = {
   },
   threads: {
     get: oc.input(z.object({ botId: Id })).output(ThreadSnapshotSchema),
+    open: oc.input(z.object({ botId: Id })).output(ThreadViewSchema),
     messages: oc
       .input(
         z.object({

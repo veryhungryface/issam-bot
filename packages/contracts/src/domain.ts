@@ -262,6 +262,13 @@ export const ThreadSnapshotSchema = z.object({
 });
 export type ThreadSnapshot = z.infer<typeof ThreadSnapshotSchema>;
 
+export const ThreadViewSchema = z.object({
+  thread: ThreadSnapshotSchema,
+  routines: z.array(RoutineSchema),
+  skills: z.array(TaughtSkillSchema),
+});
+export type ThreadView = z.infer<typeof ThreadViewSchema>;
+
 export const ModelCredentialSchema = z.object({
   id: Id,
   provider: z.string(),

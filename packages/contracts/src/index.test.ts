@@ -11,6 +11,7 @@ describe("contracts", () => {
   it("exposes the product rpc surface", () => {
     expect(appContract.models.beginOAuth).toBeTruthy();
     expect(appContract.bootstrap).toBeTruthy();
+    expect(appContract.threads.open).toBeTruthy();
     expect(appContract.models.completeOAuth).toBeTruthy();
     expect(appContract.bots.create).toBeTruthy();
     expect(appContract.bots.archive).toBeTruthy();

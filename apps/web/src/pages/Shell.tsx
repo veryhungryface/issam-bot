@@ -223,13 +223,19 @@ export function ShellPage() {
   computerVisible.current = panel === "computer" || computerOpen;
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
+  const snapshotCache = useRef(new Map<string, ThreadSnapshot>());
 
   const active = bots.find((b) => b.id === botId) ?? bots[0];
+  const activeSnapshot = active
+    ? snapshot?.botId === active.id
+      ? snapshot
+      : (snapshotCache.current.get(active.id) ?? null)
+    : null;
   const transcriptMessages = useMemo(() => {
-    const messages = snapshot?.messages ?? [];
+    const messages = activeSnapshot?.messages ?? [];
     const optimistic = active ? optimisticMessages[active.id] : undefined;
     return optimistic ? [...messages, optimistic] : messages;
-  }, [active, optimisticMessages, snapshot?.messages]);
+  }, [active, activeSnapshot?.messages, optimisticMessages]);
   const activePendingAttachments = useMemo(
     () => attachmentsForBot(pendingAttachments, active?.id),
     [active?.id, pendingAttachments],
@@ -244,6 +250,9 @@ export function ShellPage() {
   const screenRequest = useRef(0);
   const contextBot = botMenu ? bots.find((bot) => bot.id === botMenu.botId) : undefined;
   const closeBotMenu = useCallback(() => setBotMenu(null), []);
+  useEffect(() => {
+    if (snapshot) snapshotCache.current.set(snapshot.botId, snapshot);
+  }, [snapshot]);
   const updateBotUnread = useCallback((id: string, unread: boolean) => {
     setBots((current) => {
       const bot = current.find((candidate) => candidate.id === id);
@@ -317,12 +326,8 @@ export function ShellPage() {
     const pin = pinnedAroundRef.current;
     const keepPin = pin?.botId === id;
     const epoch = historyEpoch.current;
-    const [snap, routines, skills] = await Promise.all([
-      rpc.threads.get({ botId: id }),
-      rpc.routines.list({ botId: id }),
-      rpc.skills.list({ botId: id }),
-      refreshComputerScreen(id),
-    ]);
+    const [view] = await Promise.all([rpc.threads.open({ botId: id }), refreshComputerScreen(id)]);
+    const { thread: snap, routines, skills } = view;
     markOnce("rk:renderer:thread-response");
     // The epoch check drops a response that raced a conversation clear, which would otherwise
     // re-apply the deleted messages and cursor over the emptied snapshot.
@@ -369,7 +374,7 @@ export function ShellPage() {
   }
 
   async function loadOlderMessages() {
-    if (!active || snapshot?.olderCursor == null || loadingOlder) return;
+    if (!active || activeSnapshot?.olderCursor == null || loadingOlder) return;
     pinnedAroundRef.current = null;
     const scrollElement = messageScroll.current;
     const previousHeight = scrollElement?.scrollHeight ?? 0;
@@ -378,7 +383,7 @@ export function ShellPage() {
     try {
       const page = await rpc.threads.messages({
         botId: active.id,
-        before: snapshot.olderCursor,
+        before: activeSnapshot.olderCursor,
       });
       if (epoch !== historyEpoch.current) return;
       expandedHistoryThread.current = page.threadId;
@@ -696,7 +701,7 @@ export function ShellPage() {
       });
     }
   }, [active?.id, routines, routinesBotId, searchParams, setSearchParams]);
-  const answerableAskMessageId = latestAnswerableAskMessageId(snapshot);
+  const answerableAskMessageId = latestAnswerableAskMessageId(activeSnapshot);
   const shellReady = initialBotsLoaded && Boolean(active && snapshot?.botId === active.id);
   const refreshThreadRef = useRef(refreshThread);
   refreshThreadRef.current = refreshThread;
@@ -1432,11 +1437,13 @@ export function ShellPage() {
           scrollRef={messageScroll}
           botId={active?.id ?? ""}
           messages={transcriptMessages}
-          olderCursor={snapshot?.olderCursor ?? null}
+          olderCursor={activeSnapshot?.olderCursor ?? null}
           loadingOlder={loadingOlder}
+          loading={!activeSnapshot && Boolean(active)}
           answerableAskMessageId={answerableAskMessageId}
           running={Boolean(
-            snapshot?.run && ["running", "queued", "leased"].includes(snapshot.run.status),
+            activeSnapshot?.run &&
+              ["running", "queued", "leased"].includes(activeSnapshot.run.status),
           )}
           onLoadOlder={loadOlder}
           onOpenBot={openBot}
@@ -1453,8 +1460,9 @@ export function ShellPage() {
           </div>
         ) : null}
         <Composer
+          key={active?.id ?? "no-bot"}
           activeName={active?.name}
-          running={Boolean(snapshot?.run && isActive(snapshot.run.status))}
+          running={Boolean(activeSnapshot?.run && isActive(activeSnapshot.run.status))}
           disabled={Boolean(recordingSkill)}
           pendingAttachments={activePendingAttachments}
           attachmentNotice={attachmentNotice}
@@ -2103,6 +2111,7 @@ const Transcript = memo(function Transcript({
   messages,
   olderCursor,
   loadingOlder,
+  loading,
   answerableAskMessageId,
   running,
   onLoadOlder,
@@ -2119,6 +2128,7 @@ const Transcript = memo(function Transcript({
   messages: ThreadMessage[];
   olderCursor: number | null;
   loadingOlder: boolean;
+  loading: boolean;
   answerableAskMessageId: string | null;
   running: boolean;
   onLoadOlder: () => void | Promise<void>;
@@ -2145,6 +2155,11 @@ const Transcript = memo(function Transcript({
         >
           {loadingOlder ? "불러오는 중…" : "이전 메시지 보기"}
         </button>
+      ) : null}
+      {loading && messages.length === 0 ? (
+        <div className="grid flex-1 place-items-center text-[13px] text-[#6C6C70]">
+          대화를 불러오는 중…
+        </div>
       ) : null}
       {messages.map((message) => (
         <div key={message.id} data-message-id={message.id}>
@@ -2214,11 +2229,14 @@ const Composer = memo(function Composer({
   onDictateStop: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const composing = useRef(false);
   const canSend = draft.trim().length > 0 || pendingAttachments.length > 0;
 
   function send() {
-    if (!canSend || sending || disabled) return;
-    const text = draft;
+    const text = textInputRef.current?.value ?? draft;
+    if ((text.trim().length === 0 && pendingAttachments.length === 0) || sending || disabled)
+      return;
     setDraft("");
     void onSend(text);
   }
@@ -2308,10 +2326,20 @@ const Composer = memo(function Composer({
           <Mic size={16} strokeWidth={1.8} />
         </button>
         <input
+          ref={textInputRef}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={(event) => {
+            composing.current = false;
+            setDraft(event.currentTarget.value);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
+              if (event.nativeEvent.isComposing || composing.current || event.keyCode === 229)
+                return;
               event.preventDefault();
               send();
             }

@@ -163,6 +163,13 @@ export function createRouter(deps: RouterDeps) {
     me: authed.me.handler(async ({ context }): Promise<Me> => meDto(deps, context.actor)),
     bootstrap: authed.bootstrap.handler(async ({ context, input }) => {
       const actor = context.actor;
+      const requestedThread = input.botId
+        ? loadBootstrapThread(deps, actor, input.botId)
+        : undefined;
+      // The requested bot normally exists, so overlap its thread load with the workspace lists.
+      // A stale URL can fall back to the first bot below; attach a handler now so its speculative
+      // permission failure can never become an unhandled rejection.
+      void requestedThread?.catch(() => undefined);
       const [me, bots, botSections, archivedBots] = await Promise.all([
         meDto(deps, actor),
         repos.listBots(actor),
@@ -170,12 +177,12 @@ export function createRouter(deps: RouterDeps) {
         repos.listBots(actor, { archived: true }),
       ]);
       const active = bots.find((bot) => bot.id === input.botId) ?? bots[0];
-      const [thread, routines] = active
-        ? await Promise.all([
-            snapshot(deps, actor, active.id),
-            listRoutinesDto(deps, actor, active.id),
-          ])
-        : [null, []];
+      const loaded = active
+        ? input.botId === active.id && requestedThread
+          ? await requestedThread
+          : await loadBootstrapThread(deps, actor, active.id)
+        : { thread: null, routines: [] };
+      const { thread, routines } = loaded;
       return { me, bots, botSections, archivedBots, thread, routines };
     }),
     deployment: {
@@ -506,8 +513,17 @@ export function createRouter(deps: RouterDeps) {
       get: authed.threads.get.handler(async ({ context, input }) =>
         snapshot(deps, context.actor, input.botId),
       ),
+      open: authed.threads.open.handler(async ({ context, input }) => {
+        const bot = await repos.getBotSnapshot(context.actor, input.botId);
+        const [thread, routines, skills] = await Promise.all([
+          snapshotForBot(deps, bot),
+          listRoutinesDto(deps, context.actor, bot.id),
+          taughtSkills.list(context.actor, bot.id),
+        ]);
+        return { thread, routines, skills };
+      }),
       messages: authed.threads.messages.handler(async ({ context, input }) => {
-        const bot = await repos.getBot(context.actor, input.botId);
+        const bot = await repos.getBotThread(context.actor, input.botId);
         if (!bot.thread) throw new IsolationError();
         return loadMessagePage(
           deps.prisma,
@@ -518,14 +534,14 @@ export function createRouter(deps: RouterDeps) {
         );
       }),
       subscribe: authed.threads.subscribe.handler(async function* ({ context, input }) {
-        const bot = await repos.getBot(context.actor, input.botId);
+        const bot = await repos.getBotThread(context.actor, input.botId);
         if (!bot.thread) throw new IsolationError();
         for await (const event of deps.events.follow(bot.thread.id, input.cursor, context.signal)) {
           yield event;
         }
       }),
       send: authed.threads.send.handler(async ({ context, input }) => {
-        const bot = await repos.getBot(context.actor, input.botId);
+        const bot = await repos.getBotThread(context.actor, input.botId);
         if (!bot.thread) throw new IsolationError();
         const duplicateRun = await checkThreadSendPreflight({
           assertTeachingAllowed: () =>
@@ -1831,8 +1847,15 @@ export function createRouter(deps: RouterDeps) {
 }
 
 async function snapshot(deps: RouterDeps, actor: Actor, botId: string): Promise<ThreadSnapshot> {
-  const bot = await createRepos(deps.prisma).getBot(actor, botId);
+  const bot = await createRepos(deps.prisma).getBotSnapshot(actor, botId);
+  return snapshotForBot(deps, bot);
+}
+
+type SnapshotBot = Awaited<ReturnType<ReturnType<typeof createRepos>["getBotSnapshot"]>>;
+
+async function snapshotForBot(deps: RouterDeps, bot: SnapshotBot): Promise<ThreadSnapshot> {
   if (!bot.thread) throw new IsolationError();
+  const botId = bot.id;
   const [messagePage, run, last] = await Promise.all([
     loadMessagePage(deps.prisma, bot.thread.id, undefined, THREAD_MESSAGE_PAGE_SIZE),
     deps.prisma.run.findFirst({
@@ -1893,6 +1916,15 @@ async function snapshot(deps: RouterDeps, actor: Actor, botId: string): Promise<
       : null,
     computer: toComputerStatus(botId, bot.computer),
   };
+}
+
+async function loadBootstrapThread(deps: RouterDeps, actor: Actor, botId: string) {
+  const bot = await createRepos(deps.prisma).getBotSnapshot(actor, botId);
+  const [thread, routines] = await Promise.all([
+    snapshotForBot(deps, bot),
+    listRoutinesDto(deps, actor, bot.id),
+  ]);
+  return { thread, routines };
 }
 
 async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
@@ -2156,7 +2188,7 @@ function mapRoutine(row: {
 
 async function listRoutinesDto(deps: RouterDeps, actor: Actor, botId: string) {
   const rows = await deps.prisma.routine.findMany({
-    where: { botId, workspaceId: actor.workspaceId },
+    where: { botId, workspaceId: actor.workspaceId, userId: actor.userId },
   });
   return rows.map(mapRoutine);
 }
