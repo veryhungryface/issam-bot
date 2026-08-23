@@ -271,7 +271,7 @@ describe("thread event reduction", () => {
     expect(
       isThreadSnapshotEvent(event({ type: "thread.cleared", seq: 12, runId: undefined })),
     ).toBe(true);
-    expect(isThreadSnapshotEvent(event({ type: "run.completed" }))).toBe(false);
+    expect(isThreadSnapshotEvent(event({ type: "run.completed" }))).toBe(true);
   });
 
   it("applies the durable waiting-input run transition without a refresh", () => {
@@ -302,6 +302,46 @@ describe("thread event reduction", () => {
     expect(
       reduceThreadSnapshot(waiting, event({ type: "run.waiting_input", seq: 7, runId: "run-1" })),
     ).toBe(waiting);
+  });
+
+  it("turns a failed run event into an immediate terminal state and clears progress", () => {
+    const initial: ThreadSnapshot = {
+      ...snapshot([message("progress:run-1", [{ kind: "progress", text: "작업 중" }])]),
+      run: {
+        id: "run-1",
+        botId: "bot-1",
+        threadId: "thread-1",
+        taskId: "task-1",
+        status: "running",
+        trigger: "user",
+        modelProvider: null,
+        modelId: null,
+        error: null,
+        startedAt: "2026-08-16T00:00:01.000Z",
+        completedAt: null,
+      },
+    };
+
+    const failed = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "run.failed",
+        seq: 8,
+        runId: "run-1",
+        createdAt: "2026-08-16T00:00:05.000Z",
+        payload: { error: "Browserbase 이용 한도를 확인해 주세요." },
+      }),
+    );
+
+    expect(failed).toMatchObject({
+      cursor: 8,
+      messages: [],
+      run: {
+        status: "failed",
+        error: "Browserbase 이용 한도를 확인해 주세요.",
+        completedAt: "2026-08-16T00:00:05.000Z",
+      },
+    });
   });
 
   it("replaces an ask message when its durable prompt state changes", () => {

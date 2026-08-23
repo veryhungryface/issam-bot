@@ -43,7 +43,11 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "thread.subagent" ||
     event.type === "thread.message.created" ||
     event.type === "thread.message.updated" ||
-    event.type === "run.waiting_input"
+    event.type === "run.waiting_input" ||
+    event.type === "run.started" ||
+    event.type === "run.completed" ||
+    event.type === "run.failed" ||
+    event.type === "run.cancelled"
   );
 }
 
@@ -88,6 +92,41 @@ export function reduceThreadSnapshot(
       ...prev,
       cursor: event.seq,
       run: { ...run, status: "waiting_input" },
+    };
+  }
+  if (
+    event.type === "run.started" ||
+    event.type === "run.completed" ||
+    event.type === "run.failed" ||
+    event.type === "run.cancelled"
+  ) {
+    const run = prev.run;
+    if (!run || run.id !== event.runId) return prev;
+    const status =
+      event.type === "run.started"
+        ? "running"
+        : event.type === "run.completed"
+          ? "completed"
+          : event.type === "run.failed"
+            ? "failed"
+            : "cancelled";
+    const error =
+      event.type === "run.failed" ? String(event.payload.error ?? "작업에 실패했습니다.") : null;
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages:
+        status === "running"
+          ? prev.messages
+          : prev.messages.filter((message) => !message.id.startsWith("progress:")),
+      run: {
+        ...run,
+        status,
+        error,
+        startedAt:
+          event.type === "run.started" ? (run.startedAt ?? event.createdAt) : run.startedAt,
+        completedAt: status === "running" ? null : event.createdAt,
+      },
     };
   }
   if (event.type === "thread.progress") {

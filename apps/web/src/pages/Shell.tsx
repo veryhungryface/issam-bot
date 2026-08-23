@@ -210,6 +210,7 @@ export function ShellPage() {
   const historyEpoch = useRef(0);
   const initiallyScrolledThread = useRef<string | null>(null);
   const messageScroll = useRef<HTMLDivElement>(null);
+  const followLatestMessage = useRef(true);
   const pinnedAroundRef = useRef<{
     botId: string;
     messageId: string;
@@ -559,6 +560,8 @@ export function ShellPage() {
               event.type === "bot.spawned" ||
               event.type === "bot.deleted" ||
               event.type === "run.completed" ||
+              event.type === "run.failed" ||
+              event.type === "run.cancelled" ||
               event.type === "thread.cleared"
             ) {
               void refreshBots().catch(() => undefined);
@@ -570,7 +573,12 @@ export function ShellPage() {
               }
               if (event.payload.role === "bot") markBotReadIfVisible(active.id);
             }
-            if (event.type === "run.completed" || event.type === "skill.teaching.stopped") {
+            if (
+              event.type === "run.completed" ||
+              event.type === "run.failed" ||
+              event.type === "run.cancelled" ||
+              event.type === "skill.teaching.stopped"
+            ) {
               void refreshThread(active.id).catch(() => undefined);
             } else if (isComputerStatusEvent(event)) {
               void refreshComputerScreen(active.id).catch(() => undefined);
@@ -702,6 +710,7 @@ export function ShellPage() {
     }
   }, [active?.id, routines, routinesBotId, searchParams, setSearchParams]);
   const answerableAskMessageId = latestAnswerableAskMessageId(activeSnapshot);
+  const latestTranscriptMessageId = transcriptMessages.at(-1)?.id ?? null;
   const shellReady = initialBotsLoaded && Boolean(active && snapshot?.botId === active.id);
   const refreshThreadRef = useRef(refreshThread);
   refreshThreadRef.current = refreshThread;
@@ -723,15 +732,32 @@ export function ShellPage() {
     }
   }, [active, initialBotsLoaded, shellReady, snapshot?.botId]);
 
+  const onTranscriptScroll = useCallback(() => {
+    const element = messageScroll.current;
+    if (!element) return;
+    followLatestMessage.current =
+      element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+  }, []);
+
   useLayoutEffect(() => {
-    if (!active || snapshot?.botId !== active.id) return;
-    if (initiallyScrolledThread.current === snapshot.threadId) return;
+    if (!active || !activeSnapshot || activeSnapshot.botId !== active.id) return;
     if (pinnedAroundRef.current?.botId === active.id) return;
     const element = messageScroll.current;
     if (!element) return;
+    const threadKey = `${active.id}:${activeSnapshot.threadId}`;
+    const enteredThread = initiallyScrolledThread.current !== threadKey;
+    if (!enteredThread && !followLatestMessage.current) return;
     element.scrollTop = element.scrollHeight;
-    initiallyScrolledThread.current = snapshot.threadId;
-  }, [active, snapshot?.botId, snapshot?.threadId]);
+    followLatestMessage.current = true;
+    initiallyScrolledThread.current = threadKey;
+  }, [
+    active?.id,
+    activeSnapshot?.botId,
+    activeSnapshot?.threadId,
+    activeSnapshot?.run?.error,
+    activeSnapshot?.run?.status,
+    latestTranscriptMessageId,
+  ]);
 
   const openBot = useCallback((id: string) => navigate(`/app/${id}`), [navigate]);
   const loadOlder = useCallback(() => loadOlderMessagesRef.current(), []);
@@ -1435,6 +1461,7 @@ export function ShellPage() {
         </div>
         <Transcript
           scrollRef={messageScroll}
+          onScroll={onTranscriptScroll}
           botId={active?.id ?? ""}
           messages={transcriptMessages}
           olderCursor={activeSnapshot?.olderCursor ?? null}
@@ -1445,6 +1472,7 @@ export function ShellPage() {
             activeSnapshot?.run &&
               ["running", "queued", "leased"].includes(activeSnapshot.run.status),
           )}
+          runError={activeSnapshot?.run?.status === "failed" ? activeSnapshot.run.error : null}
           onLoadOlder={loadOlder}
           onOpenBot={openBot}
           onAnswer={answerMessage}
@@ -2107,6 +2135,7 @@ export function ShellPage() {
 
 const Transcript = memo(function Transcript({
   scrollRef,
+  onScroll,
   botId,
   messages,
   olderCursor,
@@ -2114,6 +2143,7 @@ const Transcript = memo(function Transcript({
   loading,
   answerableAskMessageId,
   running,
+  runError,
   onLoadOlder,
   onOpenBot,
   onAnswer,
@@ -2124,6 +2154,7 @@ const Transcript = memo(function Transcript({
   onSpeak,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
+  onScroll: () => void;
   botId: string;
   messages: ThreadMessage[];
   olderCursor: number | null;
@@ -2131,6 +2162,7 @@ const Transcript = memo(function Transcript({
   loading: boolean;
   answerableAskMessageId: string | null;
   running: boolean;
+  runError: string | null;
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
   onAnswer: (message: ThreadMessage, text: string) => Promise<void>;
@@ -2143,6 +2175,7 @@ const Transcript = memo(function Transcript({
   return (
     <div
       ref={scrollRef}
+      onScroll={onScroll}
       data-testid="transcript"
       className="rk-scroll flex flex-1 flex-col gap-[13px] overflow-y-auto px-7 py-6"
     >
@@ -2184,6 +2217,14 @@ const Transcript = memo(function Transcript({
             style={{ animation: "rkPulse 1.2s ease-in-out infinite" }}
           >
             작업 중…
+          </div>
+        </div>
+      ) : null}
+      {runError ? (
+        <div className="flex justify-start" role="alert">
+          <div className="max-w-[min(680px,88%)] rounded-[18px] border border-[#5C2C2C] bg-[#241313] px-[18px] py-[13px] text-[14px] leading-6 text-[#F0A5A5]">
+            <div className="mb-1 font-medium text-[#FFB0B0]">작업을 완료하지 못했습니다</div>
+            <div>{runError}</div>
           </div>
         </div>
       ) : null}

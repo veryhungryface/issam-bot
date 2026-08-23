@@ -89,3 +89,52 @@ test("switching agents immediately replaces the transcript and composer draft", 
     timeout: 500,
   });
 });
+
+test("opening a long conversation focuses the most recent message", async ({ page }) => {
+  const stamp = Date.now();
+  await signup(page, `latest-${stamp}@rakazo.test`, "password12", "Latest");
+  await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
+
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as {
+      json?: {
+        thread?: {
+          messages: Array<Record<string, unknown>>;
+          olderCursor: number | null;
+        } | null;
+      };
+    };
+    const thread = payload.json?.thread;
+    if (thread) {
+      thread.messages = Array.from({ length: 40 }, (_, index) => ({
+        id: `message-${index}`,
+        threadId: "thread-latest",
+        seq: index,
+        role: index % 2 === 0 ? "user" : "bot",
+        blocks: [
+          {
+            kind: "text",
+            text:
+              index === 39 ? "가장 최근 메시지" : `스크롤 회귀 테스트 메시지 ${index} `.repeat(4),
+          },
+        ],
+        runId: null,
+        createdAt: new Date(1_700_000_000_000 + index * 1_000).toISOString(),
+      }));
+      thread.olderCursor = null;
+    }
+    await route.fulfill({ response, json: payload });
+  });
+
+  await page.reload();
+  await expect(page.getByText("가장 최근 메시지", { exact: true })).toBeVisible();
+  const transcript = page.getByTestId("transcript");
+  await expect
+    .poll(() =>
+      transcript.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      ),
+    )
+    .toBeLessThan(2);
+});

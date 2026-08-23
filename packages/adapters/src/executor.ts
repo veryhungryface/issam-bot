@@ -82,6 +82,7 @@ import {
   secretValuesToRedact,
   serializeModelSecret,
 } from "./pi-oauth.js";
+import { classifyRunSetupError } from "./run-setup-errors.js";
 import { inferScript } from "./scripted-runtime.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import {
@@ -1246,20 +1247,71 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
       } catch (setupError) {
         const computerBusy = setupError instanceof ComputerBusyError;
+        const technicalMessage = redactSecrets(
+          setupError instanceof Error ? setupError.message : String(setupError),
+          runSecrets,
+        );
         if (!computerBusy) {
-          console.error(
-            "run setup failed",
-            redactSecrets(
-              setupError instanceof Error ? setupError.message : String(setupError),
-              runSecrets,
-            ),
-          );
+          console.error("run setup failed", technicalMessage);
+          const previousSetupFailures = await deps.prisma.attempt.count({
+            where: { runId, status: "setup_failed" },
+          });
+          const plan = classifyRunSetupError(setupError, previousSetupFailures);
+          if (!plan.retry) {
+            const failed = await deps.events.finalizeRun({
+              workspaceId: run.workspaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              runId,
+              taskId: run.taskId,
+              attemptId: attempt.id,
+              leaseOwner: workerId,
+              leaseFence: fence,
+              outcome: "failed",
+              error: plan.userMessage,
+            });
+            if (failed) {
+              await notifyRun(deps, run, {
+                kind: "failure",
+                title: "브라우저 작업 실패",
+                body: plan.userMessage.slice(0, 180),
+                botId: run.botId,
+                threadId: run.threadId,
+              });
+            }
+            return;
+          }
+
+          const released = await deps.prisma.run.updateMany({
+            where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
+            data: {
+              status: "queued",
+              error: plan.userMessage,
+              leaseOwner: null,
+              leaseExpiresAt: null,
+            },
+          });
+          if (released.count === 1) {
+            await deps.prisma.attempt.update({
+              where: { id: attempt.id },
+              data: {
+                status: "setup_failed",
+                error: technicalMessage,
+                finishedAt: new Date(),
+              },
+            });
+            await deps.jobs.enqueue({
+              ...runContinueJob(runId),
+              availableAt: new Date(Date.now() + plan.retryDelayMs),
+            });
+          }
+          return;
         }
         const released = await deps.prisma.run.updateMany({
           where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
           data: {
             status: "queued",
-            error: computerBusy ? null : "Run setup failed; retrying",
+            error: null,
             leaseOwner: null,
             leaseExpiresAt: null,
           },
@@ -1269,18 +1321,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
             where: { id: attempt.id },
             data: {
               status: "setup_failed",
-              error: "Run setup failed; retrying",
+              error: "Computer is busy; retrying",
               finishedAt: new Date(),
             },
           });
-          if (computerBusy) {
-            await deps.jobs.enqueue({
-              ...runContinueJob(runId),
-              availableAt: new Date(Date.now() + computerRetryDelay(fence)),
-            });
-            return;
-          }
-          throw new Error("Run setup failed; retrying");
+          await deps.jobs.enqueue({
+            ...runContinueJob(runId),
+            availableAt: new Date(Date.now() + computerRetryDelay(fence)),
+          });
+          return;
         }
       } finally {
         clearInterval(heartbeat);
