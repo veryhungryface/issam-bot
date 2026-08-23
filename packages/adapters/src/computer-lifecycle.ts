@@ -171,8 +171,36 @@ export async function withComputerSessionRecovery<T>(
   } catch (error) {
     if (!(error instanceof ComputerSessionUnavailableError)) throw error;
   }
-  const replacement = await provisionComputer(deps, computerId, context, "bot");
-  return { computer: replacement, result: await work(replacement) };
+  const logContext = {
+    computerId,
+    runId: context.runId ?? null,
+    kind: computer.kind,
+  };
+  console.info({ event: "computer_session_recovery_started", ...logContext });
+  let replacement: ComputerRef;
+  try {
+    replacement = await provisionComputer(deps, computerId, context, "bot");
+  } catch (error) {
+    console.error({ event: "computer_session_recovery_replacement_failed", ...logContext });
+    throw error;
+  }
+  console.info({
+    event: "computer_session_recovery_replaced",
+    computerId,
+    runId: context.runId ?? null,
+    kind: replacement.kind,
+  });
+  try {
+    return { computer: replacement, result: await work(replacement) };
+  } catch (error) {
+    console.error({
+      event: "computer_session_recovery_retry_failed",
+      computerId,
+      runId: context.runId ?? null,
+      kind: replacement.kind,
+    });
+    throw error;
+  }
 }
 
 async function reconnectComputer(

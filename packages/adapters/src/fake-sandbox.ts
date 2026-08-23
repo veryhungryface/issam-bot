@@ -40,6 +40,10 @@ export class FakeSandboxProvider implements SandboxProvider {
       capabilities: {
         graphical: true,
         pty: true,
+        shell: true,
+        filesystem: true,
+        localFileOpen: true,
+        appLaunch: true,
         snapshots: true,
         takeover: true,
         persistentHome: true,

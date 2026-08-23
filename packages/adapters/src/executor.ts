@@ -6,10 +6,12 @@ import type {
   ArtifactStore,
   ComputerRef,
   ConnectorProvider,
+  ConnectorTool,
   JobPublisher,
   MemoryStore,
   NotificationMessage,
   NotificationProvider,
+  SandboxCapabilities,
   SandboxProvider,
 } from "@rakazo/adapter-kit";
 import { historyCompactJob, routineWakeupJob, runContinueJob } from "@rakazo/adapter-kit";
@@ -37,6 +39,12 @@ import {
   parseComputerMode,
   type ThreadEvents,
 } from "@rakazo/db";
+import {
+  listAgentWorkspaceFiles,
+  readAgentWorkspaceFile,
+  usesAgentHomeFiles,
+  writeAgentWorkspaceTextFile,
+} from "./agent-workspace-files.js";
 import { builtinAgentTools } from "./builtin-tools.js";
 import { archiveSpawnedBot, spawnBot } from "./child-bots.js";
 import {
@@ -113,6 +121,58 @@ const GRAPHICAL_AGENT_TOOLS = new Set([
   "open_path",
   "launch_app",
 ]);
+
+export function agentToolsForSandboxCapabilities(
+  capabilities: SandboxCapabilities,
+): ConnectorTool[] {
+  return builtinAgentTools.flatMap((tool) => {
+    if (!capabilities.graphical && GRAPHICAL_AGENT_TOOLS.has(tool.name)) return [];
+    if (!capabilities.shell && tool.name === "shell") return [];
+    if (!capabilities.appLaunch && tool.name === "launch_app") return [];
+    if (tool.name === "read_file" && !capabilities.localFileOpen) {
+      return [
+        {
+          ...tool,
+          description:
+            "Read a UTF-8 text file from this bot's contained result workspace. Use attach_file to deliver a generated file to the user.",
+        },
+      ];
+    }
+    if (tool.name === "open_path" && !capabilities.localFileOpen) {
+      return [
+        {
+          ...tool,
+          description:
+            "Open an http(s) URL in this bot's browser and return the resulting screen. Local workspace files must be attached to the chat with attach_file instead.",
+        },
+      ];
+    }
+    return [tool];
+  });
+}
+
+export function computerInstructionForSandboxCapabilities(
+  capabilities: SandboxCapabilities,
+): string {
+  if (capabilities.graphical && !capabilities.filesystem && !capabilities.shell) {
+    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. open_path accepts only http(s) URLs. Use write_file and attach_file to deliver generated HTML or text as a safe chat download; local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
+  }
+  if (capabilities.graphical) {
+    const preciseWork = capabilities.shell
+      ? "Use the file tools and shell for precise filesystem and terminal work."
+      : "Use the file tools for precise filesystem work; shell commands are unavailable.";
+    const opening = capabilities.localFileOpen
+      ? "Use open_path for graphical files and URLs."
+      : "open_path accepts only http(s) URLs; attach local results to the chat.";
+    const launching = capabilities.appLaunch
+      ? "Use launch_app for installed applications."
+      : "Installed application launching is unavailable.";
+    return `You have a persistent computer. Use computer_observe and computer_act for its visible desktop, including browsers and installed applications. ${opening} ${launching} ${preciseWork} On a Team Computer you have your own screen; other Team bots may run at the same time on theirs. Another user may interact with your screen while you run, so re-observe when it may have changed.`;
+  }
+  return capabilities.shell
+    ? "You have a persistent sandbox filesystem and shell. This backend does not provide model-visible graphical control, so use the file tools and shell."
+    : "You have a persistent contained filesystem without shell or model-visible graphical control. Use only the file tools.";
+}
 
 export interface ExecutorDeps {
   prisma: PrismaClient;
@@ -489,32 +549,44 @@ export function createRunExecutor(deps: ExecutorDeps) {
           scheduleComputerSleep(deps.jobs, storedComputer.id);
           return recovered.result;
         };
+        const sandboxCapabilities = deps.sandbox.describe().capabilities;
         const currentTurnFiles = deps.artifacts
           ? await materializeCurrentTurnFiles(
-              { prisma: deps.prisma, artifacts: deps.artifacts, sandbox: deps.sandbox },
+              {
+                prisma: deps.prisma,
+                artifacts: deps.artifacts,
+                sandbox: deps.sandbox,
+                home: deps.home,
+              },
               turnBlocks,
-              { context, computer, computerMode },
+              {
+                context,
+                computer,
+                computerMode,
+                homeKey: sandboxCapabilities.filesystem ? undefined : storedComputer.homeKey,
+              },
             )
           : [];
         const attachedFilesPrompt = currentTurnFilesInstruction(currentTurnFiles);
-        const graphical =
-          computer.kind !== "desktop" && deps.sandbox.describe().capabilities.graphical;
-        const builtins = graphical
-          ? builtinAgentTools
-          : builtinAgentTools.filter((tool) => !GRAPHICAL_AGENT_TOOLS.has(tool.name));
+        const graphical = computer.kind !== "desktop" && sandboxCapabilities.graphical;
+        const builtins = agentToolsForSandboxCapabilities({
+          ...sandboxCapabilities,
+          graphical,
+        });
         const tools = [
           ...builtins,
           ...discovered.filter(
             (tool) => !builtinAgentTools.some((builtin) => builtin.name === tool.name),
           ),
         ];
-        const computerInstruction = graphical
-          ? "You have a persistent computer. Use computer_observe and computer_act for its visible desktop, including browsers and installed applications. Use open_path and launch_app to open graphical files, URLs, and applications. Use the file tools and shell for precise filesystem and terminal work. On a Team Computer you have your own screen; other Team bots may run at the same time on theirs. Another user may interact with your screen while you run, so re-observe when it may have changed."
-          : "You have a persistent sandbox filesystem and shell. This backend does not provide model-visible graphical control, so use the file tools and shell.";
+        const computerInstruction = computerInstructionForSandboxCapabilities({
+          ...sandboxCapabilities,
+          graphical,
+        });
         const workspaceInstruction =
           computerMode === "team"
-            ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths and shell working directories start there. Put intentionally shared work under shared/. Other bots' folders are visible under bots/; treat them as their working areas.`
-            : "This entire computer workspace is your private home. Relative file paths and shell working directories start at its root.";
+            ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths${sandboxCapabilities.shell ? " and shell working directories" : ""} start there. Put intentionally shared work under shared/. Other bots' folders are visible under bots/; treat them as their working areas.`
+            : `This result workspace is your private home. Relative file paths${sandboxCapabilities.shell ? " and shell working directories" : ""} start at its root.`;
 
         let assembled = "";
         let pendingProgress = "";
@@ -534,6 +606,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
           lastComputerFrameId = observation.frameId;
           return result;
         };
+        const workspaceFileDeps = () => ({
+          home: deps.home,
+          sandbox: deps.sandbox,
+          computer,
+          homeKey: storedComputer.homeKey,
+          context,
+        });
 
         const applyTool = async (
           name: string,
@@ -591,10 +670,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "list_files") {
             const requestedPath = String(args.path ?? "");
-            const entries = await deps.sandbox.listFiles(
-              computer,
+            const entries = await listAgentWorkspaceFiles(
+              workspaceFileDeps(),
               resolveBotWorkspacePath(computerMode, bot.id, requestedPath),
-              context,
             );
             return {
               path: requestedPath,
@@ -609,7 +687,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const storedPath = resolveBotWorkspacePath(computerMode, bot.id, filePath);
             let bytes: Uint8Array;
             try {
-              bytes = await deps.sandbox.readFile(computer, storedPath, context, {
+              bytes = await readAgentWorkspaceFile(workspaceFileDeps(), storedPath, {
                 maxBytes: MAX_MODEL_FILE_BYTES,
               });
             } catch (error) {
@@ -635,7 +713,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               };
             } catch {
               return {
-                error: "file is not UTF-8 text; use open_path to inspect it",
+                error: sandboxCapabilities.localFileOpen
+                  ? "file is not UTF-8 text; use open_path to inspect it"
+                  : "file is not UTF-8 text and this browser-only computer cannot open local files",
                 path: filePath,
               };
             }
@@ -643,13 +723,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "write_file") {
             const filePath = String(args.path ?? "notes/result.txt");
             const content = String(args.content ?? "");
-            await deps.sandbox.writeFile(
-              computer,
-              {
-                path: resolveBotWorkspacePath(computerMode, bot.id, filePath),
-                content: new TextEncoder().encode(content),
-              },
-              context,
+            const size = new TextEncoder().encode(content).byteLength;
+            if (size > MAX_MODEL_FILE_BYTES) {
+              return finish({
+                error: "file is too large for the contained result workspace",
+                path: filePath,
+                size,
+              });
+            }
+            if (containsSecret(content, runSecrets)) {
+              return finish({ error: "refusing to write secret material", path: filePath });
+            }
+            await writeAgentWorkspaceTextFile(
+              workspaceFileDeps(),
+              resolveBotWorkspacePath(computerMode, bot.id, filePath),
+              content,
             );
             return finish({ ok: true, path: filePath });
           }
@@ -661,7 +749,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const storedPath = resolveBotWorkspacePath(computerMode, bot.id, filePath);
             let bytes: Uint8Array;
             try {
-              bytes = await deps.sandbox.readFile(computer, storedPath, context, {
+              bytes = await readAgentWorkspaceFile(workspaceFileDeps(), storedPath, {
                 maxBytes: ATTACHMENT_MAX_BYTES,
               });
             } catch {
@@ -670,6 +758,20 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const mimeType = inferAttachmentMimeType(filePath);
             if (!mimeType) {
               return finish({ error: "unsupported attachment type", path: filePath });
+            }
+            if (
+              usesAgentHomeFiles(deps.sandbox) &&
+              (mimeType.startsWith("text/") || mimeType === "application/json")
+            ) {
+              let content: string;
+              try {
+                content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+              } catch {
+                return finish({ error: "text attachment is not valid UTF-8", path: filePath });
+              }
+              if (containsSecret(content, runSecrets)) {
+                return finish({ error: "refusing to attach secret material", path: filePath });
+              }
             }
             try {
               const attached = await attachWorkspaceFileToThread(
@@ -694,6 +796,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
           }
           if (name === "shell") {
+            if (!sandboxCapabilities.shell) {
+              return finish({ error: "shell commands are unavailable on this computer" });
+            }
             const command = String(args.command ?? args.cmd ?? "");
             const cwd = resolveBotWorkspaceCwd(
               computerMode,
@@ -711,6 +816,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "open_path") {
             const requestedPath = String(args.path ?? "");
+            if (!sandboxCapabilities.localFileOpen && !/^https?:\/\//i.test(requestedPath)) {
+              return finish({
+                error: "local files cannot be opened here; use attach_file to deliver the result",
+                path: requestedPath,
+              });
+            }
             return computerScreenToolResult(async () => {
               const result = await withRecoveredComputer((active) =>
                 deps.sandbox.act(
@@ -736,6 +847,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }, finish);
           }
           if (name === "launch_app") {
+            if (!sandboxCapabilities.appLaunch) {
+              return finish({ error: "installed application launching is unavailable" });
+            }
             const application = String(args.application ?? "");
             return computerScreenToolResult(async () => {
               const result = await withRecoveredComputer((active) =>

@@ -5,7 +5,7 @@ describe("Korean UI labels", () => {
   it("maps known statuses without exposing internal enum values", () => {
     expect(koreanStatusLabel("running")).toBe("실행 중");
     expect(koreanStatusLabel("waiting_takeover")).toBe("직접 제어 대기");
-    expect(koreanStatusLabel("suspended")).toBe("절전");
+    expect(koreanStatusLabel("suspended")).toBe("다음 작업 대기");
     expect(koreanStatusLabel("idle")).toBe("");
   });
 

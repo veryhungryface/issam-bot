@@ -85,7 +85,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "attach_file",
     description:
-      "Attach a workspace file from this bot's home to the chat thread as an image or common file. The file stays in place; users can open it from the message.",
+      "Attach a workspace file from this bot's home to the chat thread as an image or common file. HTML is delivered as a download and is never executed inline. The file stays in place.",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string" } },

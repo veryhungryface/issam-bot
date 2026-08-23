@@ -49,6 +49,11 @@ does not change the product limit; both must be reviewed explicitly.
 11. On completion, cancellation, timeout, disconnect, or failure, attempt session termination in a
     `finally` path, persist usage, release the slot, and wake the next queued task.
 
+A user-initiated boot/direct-control request is also a provider health check. It must not return
+early merely because the database row says `running`; it acquires an execution lease and asks the
+provider to reconnect or replace the ephemeral Session first. Live View polling by itself does not
+create a paid Session.
+
 Contexts preserve login state between sessions. A Context ID is never accepted directly from a
 client and is never shared across workspaces. Passwords, MFA values, and CAPTCHA input are entered by
 the user and excluded from prompts, screenshots, and long-term storage.
@@ -104,6 +109,19 @@ depend on clipboard permission or page origin. Input is capped at 10,000 charact
 subject to the active takeover lease.
 
 ASCII keyboard input, pointer actions, and scrolling continue to use Live View directly.
+
+### Generated HTML and result files
+
+Browserbase is browser-only: it has no application shell or durable provider filesystem. File tools
+therefore use the workspace-scoped Agent Home rather than the VPS host or Browserbase runtime.
+Generated UTF-8 HTML/text is size-limited, checked against in-memory run secrets, and must be attached
+to the chat with `attach_file`. Browserbase workspace checkpointing records Agent Home in place and
+never commits an empty provider export over it.
+
+HTML artifacts are returned by the authenticated API as JSON/base64 like other artifacts. The web
+client treats every non-image as `application/octet-stream` and uses a download link; HTML is never
+rendered inline by the service. Shell and installed-application tools are not exposed to Browserbase
+bots, and `open_path` accepts only allowed HTTP(S) URLs.
 
 ## Login context scope
 

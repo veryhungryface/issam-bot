@@ -89,4 +89,30 @@ describe("provider-neutral computer workspace", () => {
       ),
     ).toBe("portable");
   });
+
+  it("preserves AgentHome files when Browserbase checkpoints an empty provider workspace", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
+    roots.push(root);
+    const home = new LocalAgentHomeStore(root);
+    const provider = new FakeSandboxProvider();
+    const provisioned = await provider.provision(
+      { botId: "browser-workspace", homePath: "/ignored" },
+      context,
+    );
+    const browserComputer = { ...provisioned, kind: "browserbase" as const };
+    await home.writeFile("bot-1", "results/result.html", "<h1>preserved</h1>", context);
+    const exportWorkspace = vi.spyOn(provider, "exportWorkspace");
+
+    const revision = await checkpointComputerWorkspace(
+      home,
+      provider,
+      "bot-1",
+      browserComputer,
+      context,
+    );
+
+    expect(revision).toMatch(/^rev-/);
+    expect(await home.readFile("bot-1", "results/result.html", context)).toBe("<h1>preserved</h1>");
+    expect(exportWorkspace).not.toHaveBeenCalled();
+  });
 });

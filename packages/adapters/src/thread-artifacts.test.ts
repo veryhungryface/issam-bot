@@ -1,5 +1,6 @@
 import type {
   AdapterContext,
+  AgentHomeStore,
   ArtifactStore,
   ComputerRef,
   SandboxProvider,
@@ -152,5 +153,70 @@ describe("current-turn thread files", () => {
 
     expect(files).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("copies Browserbase current-turn files into AgentHome without provider file access", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        id: "artifact-html",
+        workspaceId: "workspace-1",
+        botId: "bot-1",
+        name: "source.html",
+        mimeType: "text/html",
+        size: 4,
+        storageKey: "stored-html",
+      },
+    ]);
+    const bytes = new Uint8Array([0, 1, 2, 255]);
+    const writeBytes = vi.fn().mockResolvedValue(undefined);
+    const sandboxWriteFile = vi.fn();
+    const context: AdapterContext & { botId: string } = {
+      operationId: "run-browser",
+      traceId: "run-browser",
+      workspaceId: "workspace-1",
+      userId: "user-1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    };
+
+    const files = await materializeCurrentTurnFiles(
+      {
+        prisma: { artifact: { findMany } } as unknown as PrismaClient,
+        artifacts: {
+          get: vi.fn().mockResolvedValue(bytes),
+        } as unknown as ArtifactStore,
+        sandbox: { writeFile: sandboxWriteFile } as unknown as SandboxProvider,
+        home: { writeBytes } as unknown as AgentHomeStore,
+      },
+      [
+        {
+          kind: "file",
+          artifactId: "artifact-html",
+          name: "source.html",
+          mimeType: "text/html",
+          size: 4,
+        },
+      ],
+      {
+        context,
+        computer: {
+          id: "browserbase:v1:test",
+          botId: "bot-1",
+          kind: "browserbase",
+          providerRef: "browserbase:v1:test",
+        },
+        computerMode: "dedicated",
+        homeKey: "bot-1",
+      },
+    );
+
+    expect(writeBytes).toHaveBeenCalledWith(
+      "bot-1",
+      "attachments/artifact-html.html",
+      bytes,
+      context,
+    );
+    expect(sandboxWriteFile).not.toHaveBeenCalled();
+    expect(files[0]?.path).toBe("attachments/artifact-html.html");
   });
 });

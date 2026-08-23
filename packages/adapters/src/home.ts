@@ -83,6 +83,10 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     return this.withBotWrite(botId, async () => this.writeRevision(botId));
   }
 
+  async checkpoint(botId: string, _context: AdapterContext): Promise<string> {
+    return this.revise(botId);
+  }
+
   async restore(
     botId: string,
     _revision: string,
@@ -106,6 +110,17 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     _context: AdapterContext,
     options?: { maxBytes?: number },
   ): Promise<string> {
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      await this.readBytes(botId, filePath, _context, options),
+    );
+  }
+
+  async readBytes(
+    botId: string,
+    filePath: string,
+    _context: AdapterContext,
+    options?: { maxBytes?: number },
+  ): Promise<Uint8Array> {
     await this.waitForBotWrite(botId);
     await this.recoverInterruptedCommit(botId);
     const full = await containedExistingPath(this.botDir(botId), filePath);
@@ -117,7 +132,7 @@ export class LocalAgentHomeStore implements AgentHomeStore {
           throw new Error(`agent home file exceeds ${options.maxBytes} bytes`);
         }
       }
-      return await handle.readFile("utf8");
+      return new Uint8Array(await handle.readFile());
     } finally {
       await handle.close();
     }
@@ -129,6 +144,15 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     content: string,
     _context: AdapterContext,
   ): Promise<void> {
+    await this.writeBytes(botId, filePath, new TextEncoder().encode(content), _context);
+  }
+
+  async writeBytes(
+    botId: string,
+    filePath: string,
+    content: Uint8Array,
+    _context: AdapterContext,
+  ): Promise<void> {
     await this.withBotWrite(botId, async () => {
       await this.recoverInterruptedCommit(botId);
       const full = await containedWritePath(this.botDir(botId), filePath);
@@ -138,7 +162,7 @@ export class LocalAgentHomeStore implements AgentHomeStore {
         0o666,
       );
       try {
-        await handle.writeFile(content, "utf8");
+        await handle.writeFile(content);
       } finally {
         await handle.close();
       }

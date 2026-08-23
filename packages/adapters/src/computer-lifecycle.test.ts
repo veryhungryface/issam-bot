@@ -438,16 +438,19 @@ describe("computer provisioning", () => {
       .fn()
       .mockRejectedValueOnce(new ComputerSessionUnavailableError())
       .mockResolvedValueOnce("continued");
+    const recoveryContext = { ...context, runId: "run-1" };
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
       await expect(
-        withComputerSessionRecovery(deps, "computer-1", oldRef, context, action),
+        withComputerSessionRecovery(deps, "computer-1", oldRef, recoveryContext, action),
       ).resolves.toEqual({ computer: replacementRef, result: "continued" });
       expect(action).toHaveBeenNthCalledWith(1, oldRef);
       expect(action).toHaveBeenNthCalledWith(2, replacementRef);
       expect(sandbox.provision).toHaveBeenCalledWith(
         expect.objectContaining({ providerRef: oldRef.providerRef }),
-        context,
+        recoveryContext,
       );
       expect(updateMany).toHaveBeenCalledWith({
         where: {
@@ -458,7 +461,34 @@ describe("computer provisioning", () => {
         },
         data: { providerRef: replacementRef.providerRef, kind: replacementRef.kind },
       });
+      expect(info).toHaveBeenNthCalledWith(1, {
+        event: "computer_session_recovery_started",
+        computerId: "computer-1",
+        runId: "run-1",
+        kind: "browserbase",
+      });
+      expect(info).toHaveBeenNthCalledWith(2, {
+        event: "computer_session_recovery_replaced",
+        computerId: "computer-1",
+        runId: "run-1",
+        kind: "browserbase",
+      });
+      const failedRetry = vi
+        .fn()
+        .mockRejectedValueOnce(new ComputerSessionUnavailableError())
+        .mockRejectedValueOnce(new Error("retry failed"));
+      await expect(
+        withComputerSessionRecovery(deps, "computer-1", oldRef, recoveryContext, failedRetry),
+      ).rejects.toThrow("retry failed");
+      expect(consoleError).toHaveBeenLastCalledWith({
+        event: "computer_session_recovery_retry_failed",
+        computerId: "computer-1",
+        runId: "run-1",
+        kind: "browserbase",
+      });
     } finally {
+      info.mockRestore();
+      consoleError.mockRestore();
       await rm(dataDir, { recursive: true, force: true });
     }
   });

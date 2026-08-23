@@ -92,6 +92,10 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
       capabilities: {
         graphical: true,
         pty: false,
+        shell: false,
+        filesystem: false,
+        localFileOpen: false,
+        appLaunch: false,
         snapshots: false,
         takeover: true,
         persistentHome: true,
@@ -290,20 +294,12 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
 
   async observe(computer: ComputerRef, context: AdapterContext) {
     const box = await this.readyBox(computer, context);
-    const page = requiredPage(box);
-    throwIfAborted(context);
-    const [image, viewport, title] = await Promise.all([
-      page.screenshot({ type: "png" }),
-      Promise.resolve(page.viewportSize() ?? DEFAULT_VIEWPORT),
-      page.title().catch(() => "Browserbase Chrome"),
-    ]);
-    throwIfAborted(context);
-    return computerObservation(new Uint8Array(image), {
-      mimeType: "image/png",
-      width: viewport.width,
-      height: viewport.height,
-      activeWindow: { id: page.url(), title },
-    });
+    try {
+      return await observeBox(box, context);
+    } catch (error) {
+      if (!isUnavailableBrowserRuntime(box, error)) throw error;
+      return this.invalidateRuntime(box, error);
+    }
   }
 
   /** Accessibility-oriented DOM state for DOM-first browser agents. */
@@ -314,12 +310,17 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     const box = await this.readyBox(computer, context);
     const page = requiredPage(box);
     throwIfAborted(context);
-    const [title, aria] = await Promise.all([
-      page.title(),
-      page.locator("body").ariaSnapshot({ timeout: 10_000 }),
-    ]);
-    throwIfAborted(context);
-    return { url: page.url(), title, aria: aria.slice(0, 100_000) };
+    try {
+      const [title, aria] = await Promise.all([
+        page.title(),
+        page.locator("body").ariaSnapshot({ timeout: 10_000 }),
+      ]);
+      throwIfAborted(context);
+      return { url: page.url(), title, aria: aria.slice(0, 100_000) };
+    } catch (error) {
+      if (!isUnavailableBrowserRuntime(box, error)) throw error;
+      return this.invalidateRuntime(box, error);
+    }
   }
 
   async act(computer: ComputerRef, request: ComputerActionRequest, context: AdapterContext) {
@@ -336,7 +337,7 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     }
     return {
       completed,
-      ...(request.observe === false ? {} : { observation: await this.observe(computer, context) }),
+      ...(request.observe === false ? {} : { observation: await observeBox(box, context) }),
     };
   }
 
@@ -513,6 +514,18 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     if (browser) await browser.close();
   }
 
+  private async invalidateRuntime(box: BrowserbaseBox, cause: unknown): Promise<never> {
+    await this.closeRuntime(box).catch(() => undefined);
+    this.boxes.delete(box.ref.providerRef);
+    this.failedProviderRefs.add(box.ref.providerRef);
+    throw new ComputerSessionUnavailableError(
+      "Browserbase session disconnected during observation",
+      {
+        cause,
+      },
+    );
+  }
+
   private async recoverSession(
     sessionId: string,
     expectedContextId: string,
@@ -562,6 +575,31 @@ async function installNetworkPolicy(context: BrowserContext): Promise<void> {
     }
     await route.continue();
   });
+}
+
+async function observeBox(box: BrowserbaseBox, context: AdapterContext) {
+  const page = requiredPage(box);
+  throwIfAborted(context);
+  const [image, viewport, title] = await Promise.all([
+    page.screenshot({ type: "png" }),
+    Promise.resolve(page.viewportSize() ?? DEFAULT_VIEWPORT),
+    page.title().catch(() => "Browserbase Chrome"),
+  ]);
+  throwIfAborted(context);
+  return computerObservation(new Uint8Array(image), {
+    mimeType: "image/png",
+    width: viewport.width,
+    height: viewport.height,
+    activeWindow: { id: page.url(), title },
+  });
+}
+
+function isUnavailableBrowserRuntime(box: BrowserbaseBox, error: unknown): boolean {
+  if (!box.browser?.isConnected() || box.page?.isClosed()) return true;
+  const message = errorMessage(error);
+  return /(?:target page|browser|browser context|page|websocket).*(?:closed|disconnected|not open)|session closed/i.test(
+    message,
+  );
 }
 
 async function applyBrowserAction(

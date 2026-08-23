@@ -15,7 +15,7 @@ const STATUS_LABELS = {
   cancelled: "취소됨",
   stopped: "종료",
   booting: "시작 중",
-  suspended: "절전",
+  suspended: "다음 작업 대기",
   error: "오류",
 } satisfies Record<KnownStatus, string>;
 

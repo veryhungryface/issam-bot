@@ -14,12 +14,10 @@ import {
   type SandboxProvider,
 } from "@rakazo/adapter-kit";
 import {
-  acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
   type ComposioProvider,
   ComputerBusyError,
-  type ComputerExecutionLease,
   checkpointAndRecordComputerWorkspace,
   createVoiceProvider,
   deleteSupermemoryContainer,
@@ -31,8 +29,6 @@ import {
   isSupermemoryEnabled,
   listPiCatalog,
   type PiOAuthLogins,
-  provisionComputer,
-  releaseComputerExecutionLease,
   resolveBotWorkspacePath,
   sanitizeComposioError,
   savePushToken,
@@ -80,6 +76,7 @@ import {
   getOwnedArtifact,
   resolveSendAttachments,
 } from "./artifacts.js";
+import { provisionComputerForBoot } from "./computer-boot.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { applyScreenViewPolicy } from "./screen-view-policy.js";
 import { queryWorkspaceSearch } from "./search.js";
@@ -712,33 +709,14 @@ export function createRouter(deps: RouterDeps) {
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
-        if (bot.computer.state === "running" && bot.computer.providerRef) {
-          scheduleComputerSleep(deps.jobs, bot.computer.id);
-          return computerStatus(deps, context.actor, input.botId);
-        }
         const ctx = computerContext(context.actor, bot.id, "boot");
-        const manualRunId = `boot:${randomUUID()}`;
-        let lease: ComputerExecutionLease | null;
         try {
-          lease = await acquireComputerExecutionLease(deps.prisma, {
-            computerId: bot.computer.id,
-            runId: manualRunId,
-            botId: bot.id,
-          });
+          await provisionComputerForBoot(deps, bot.computer, bot.id, ctx);
         } catch (error) {
           if (error instanceof ComputerBusyError) {
             throw new ORPCError("CONFLICT", { message: "Computer is busy" });
           }
           throw error;
-        }
-        try {
-          await provisionComputer(deps, bot.computer.id, {
-            ...ctx,
-            screenLeaseId: screenLeaseIdForRun(lease, manualRunId),
-          });
-          scheduleComputerSleep(deps.jobs, bot.computer.id);
-        } finally {
-          await releaseComputerExecutionLease(deps.prisma, lease);
         }
         return computerStatus(deps, context.actor, input.botId);
       }),
@@ -1083,7 +1061,11 @@ export function createRouter(deps: RouterDeps) {
         const ctx = computerContext(context.actor, bot.id, "files");
         const storedPath = resolveBotWorkspacePath(computerMode, bot.id, input.path);
         let entries: Awaited<ReturnType<SandboxProvider["listFiles"]>>;
-        if (computer.state === "running" && computer.providerRef) {
+        if (
+          computer.state === "running" &&
+          computer.providerRef &&
+          deps.sandbox.describe().capabilities.filesystem
+        ) {
           await deps.prisma.computer.updateMany({
             where: { id: computer.id, state: "running" },
             data: { updatedAt: new Date() },
@@ -1105,7 +1087,11 @@ export function createRouter(deps: RouterDeps) {
         const ctx = computerContext(context.actor, bot.id, "read");
         const storedPath = resolveBotWorkspacePath(computerMode, bot.id, input.path);
         let content: string;
-        if (bot.computer.state === "running" && bot.computer.providerRef) {
+        if (
+          bot.computer.state === "running" &&
+          bot.computer.providerRef &&
+          deps.sandbox.describe().capabilities.filesystem
+        ) {
           await deps.prisma.computer.updateMany({
             where: { id: bot.computer.id, state: "running" },
             data: { updatedAt: new Date() },

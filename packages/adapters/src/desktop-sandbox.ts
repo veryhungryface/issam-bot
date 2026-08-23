@@ -44,6 +44,10 @@ export class DesktopSandboxProvider implements SandboxProvider {
       capabilities: {
         graphical: false,
         pty: true,
+        shell: true,
+        filesystem: true,
+        localFileOpen: false,
+        appLaunch: false,
         snapshots: true,
         takeover: false,
         persistentHome: true,

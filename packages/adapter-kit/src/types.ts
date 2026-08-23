@@ -149,6 +149,14 @@ export interface SnapshotRef {
 export interface SandboxCapabilities {
   graphical: boolean;
   pty: boolean;
+  /** The provider accepts command execution. Callers must still enforce the provider boundary. */
+  shell: boolean;
+  /** The provider itself has a workspace filesystem. AgentHomeStore may still provide files. */
+  filesystem: boolean;
+  /** Graphical open actions may receive provider-workspace paths as well as URLs. */
+  localFileOpen: boolean;
+  /** Installed graphical applications can be launched by name. */
+  appLaunch: boolean;
   snapshots: boolean;
   takeover: boolean;
   persistentHome: boolean;

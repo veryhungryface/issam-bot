@@ -59,6 +59,15 @@ describe("LocalAgentHomeStore path containment", () => {
     );
   });
 
+  it("round-trips binary attachment bytes without UTF-8 coercion", async () => {
+    const { store } = await fixture();
+    const bytes = new Uint8Array([0, 1, 2, 127, 128, 255]);
+
+    await store.writeBytes("bot-1", "attachments/source.pdf", bytes, context);
+
+    expect(await store.readBytes("bot-1", "attachments/source.pdf", context)).toEqual(bytes);
+  });
+
   it("allows symlinks whose resolved target stays inside the bot home", async () => {
     const { store, home } = await fixture();
     await writeFile(path.join(home, "target.txt"), "before");

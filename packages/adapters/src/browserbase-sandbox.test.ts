@@ -5,6 +5,22 @@ import type { BrowserbaseClient, BrowserbaseSession } from "./browserbase-client
 import { type BrowserbaseBrowserSdk, BrowserbaseSandboxProvider } from "./browserbase-sandbox.js";
 
 describe("BrowserbaseSandboxProvider", () => {
+  it("declares browser-only capabilities without shell or provider files", () => {
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      apiFixture().client,
+      browserFixture().sdk,
+    );
+
+    expect(provider.describe().capabilities).toMatchObject({
+      graphical: true,
+      shell: false,
+      filesystem: false,
+      localFileOpen: false,
+      appLaunch: false,
+    });
+  });
+
   it("creates a persistent context, connects through CDP, and exposes DOM and screenshots", async () => {
     const fixture = browserFixture();
     const api = apiFixture();
@@ -127,6 +143,45 @@ describe("BrowserbaseSandboxProvider", () => {
     ).resolves.toMatchObject({ completed: 1 });
   });
 
+  it("turns a stale connected-page observation failure into a recoverable session error", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.screenshot.mockRejectedValueOnce(
+      new Error("Target page, context or browser has been closed"),
+    );
+
+    await expect(provider.observe(computer, adapterContext())).rejects.toMatchObject({
+      name: "ComputerSessionUnavailableError",
+    });
+    expect(api.getSession).not.toHaveBeenCalled();
+
+    api.createSession.mockResolvedValueOnce({
+      id: "session-2",
+      connectUrl: "wss://cdp.example/session-2",
+      contextId: "context-1",
+    });
+    const replacement = await provider.provision(
+      { botId: "bot-1", homePath: "/unused", providerRef: computer.providerRef },
+      adapterContext(),
+    );
+    expect(replacement.providerRef).not.toBe(computer.providerRef);
+    expect(replacement.fresh).toBe(false);
+    expect(api.getSession).not.toHaveBeenCalled();
+    expect(api.createSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ contextId: "context-1" }),
+    );
+  });
+
   it("recovers Live View in an API process without opening a CDP connection", async () => {
     const api = apiFixture();
     const workerBrowser = browserFixture();
@@ -208,6 +263,34 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(api.getSession).toHaveBeenCalledWith("session-1");
     expect(api.createSession).toHaveBeenCalledTimes(1);
     expect(recoveredBrowser.connectOverCDP).toHaveBeenCalledWith("wss://cdp.example/session-1");
+  });
+
+  it("reports a persisted timed-out session as recoverable before observing in a new worker", async () => {
+    const api = apiFixture();
+    const first = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      browserFixture().sdk,
+    );
+    const saved = await first.provision({ botId: "bot-1", homePath: "/unused" }, adapterContext());
+    api.getSession.mockResolvedValueOnce({
+      id: "session-1",
+      connectUrl: "wss://cdp.example/session-1",
+      contextId: "context-1",
+      status: "TIMED_OUT",
+    });
+    const restartedBrowser = browserFixture();
+    const restarted = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      restartedBrowser.sdk,
+    );
+
+    await expect(restarted.observe(saved, adapterContext())).rejects.toMatchObject({
+      name: "ComputerSessionUnavailableError",
+    });
+    expect(api.getSession).toHaveBeenCalledWith("session-1");
+    expect(restartedBrowser.connectOverCDP).not.toHaveBeenCalled();
   });
 
   it("replaces a terminal persisted session while retaining its browser context", async () => {
@@ -445,11 +528,12 @@ function browserFixture() {
   const mouseWheel = vi.fn(async () => undefined);
   const keyboardPress = vi.fn(async () => undefined);
   const keyboardInsertText = vi.fn(async () => undefined);
+  const screenshot = vi.fn(async () => Buffer.from([1, 2, 3]));
   const page = {
     isClosed: vi.fn(() => false),
     setViewportSize: vi.fn(async () => undefined),
     viewportSize: vi.fn(() => ({ width: 1280, height: 800 })),
-    screenshot: vi.fn(async () => Buffer.from([1, 2, 3])),
+    screenshot,
     title: vi.fn(async () => "Example"),
     url: vi.fn(() => currentUrl),
     goto,
@@ -488,5 +572,6 @@ function browserFixture() {
     mouseWheel,
     keyboardPress,
     keyboardInsertText,
+    screenshot,
   };
 }

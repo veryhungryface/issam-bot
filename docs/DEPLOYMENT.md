@@ -115,6 +115,19 @@ docker compose --env-file /opt/issam-bot/secret.env logs --since=10m api worker
 For an application rollback, restore the previous image digest and redeploy. Database rollback is
 not automatic: use a tested compatible backup only when a migration cannot roll forward.
 
+The VPS deployment workflow starts a candidate revision with temporary Compose environment
+overrides, leaving the image and revision persisted in `secret.env` unchanged until `/health`
+reports the exact requested Git SHA. A pull or startup failure restores the persisted Compose
+configuration, and a revision/health timeout re-creates the previous services from that
+configuration. Database migrations remain forward-only, so releases with incompatible migrations
+still require the tested database backup procedure above.
+
+Only after exact-revision health verification succeeds does the workflow persist the new immutable
+image reference and run `docker image prune -a -f`. Docker limits this command to images unused by
+every container, so the running release and images referenced by stopped containers are retained.
+The workflow never prunes containers or volumes. It prints `docker system df`, filesystem usage, and
+Docker's reclaimed-space result before and after cleanup so disk pressure remains auditable.
+
 ## Backup and restore
 
 Install the PostgreSQL client tools on the host. Backups default to `/var/backups/issam-bot`, use

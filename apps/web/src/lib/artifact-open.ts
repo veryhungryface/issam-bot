@@ -10,6 +10,11 @@ export function decodeArtifactBase64(contentBase64: string): Uint8Array {
   return bytes;
 }
 
+/** Non-images are always download-only, even when their content type is browser-executable. */
+export function artifactBlobMimeType(mimeType: string): string {
+  return isAttachmentImageMimeType(mimeType) ? mimeType : "application/octet-stream";
+}
+
 export async function openArtifact(
   botId: string,
   artifactId: string,
@@ -18,7 +23,7 @@ export async function openArtifact(
 ): Promise<void> {
   const artifact = await rpc.artifacts.get({ botId, artifactId });
   const bytes = decodeArtifactBase64(artifact.contentBase64);
-  const blob = new Blob([new Uint8Array(bytes)], { type: mimeType });
+  const blob = new Blob([new Uint8Array(bytes)], { type: artifactBlobMimeType(mimeType) });
   const url = URL.createObjectURL(blob);
   if (isAttachmentImageMimeType(mimeType)) {
     window.open(url, "_blank", "noopener,noreferrer");

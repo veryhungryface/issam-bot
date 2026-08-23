@@ -93,8 +93,14 @@ export async function checkpointComputerWorkspace(
   computer: ComputerRef,
   context: AdapterContext,
 ): Promise<string> {
-  if (computer.kind === "docker" && home instanceof LocalAgentHomeStore) {
-    return home.revise(homeKey);
+  // Docker with the local store writes directly into AgentHome. Browserbase has
+  // no provider filesystem at all. Exporting either as an empty workspace and
+  // committing it would erase files that already live in AgentHome.
+  if (
+    computer.kind === "browserbase" ||
+    (computer.kind === "docker" && home instanceof LocalAgentHomeStore)
+  ) {
+    return home.checkpoint(homeKey, context);
   }
   const staging = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-"));
   try {

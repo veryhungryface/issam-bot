@@ -110,6 +110,8 @@ const EXTENSION_MIME_TYPES: Record<string, AttachmentMimeType> = {
   ".pdf": "application/pdf",
   ".txt": "text/plain",
   ".csv": "text/csv",
+  ".html": "text/html",
+  ".htm": "text/html",
   ".json": "application/json",
 };
 
@@ -121,6 +123,7 @@ const MIME_TYPE_EXTENSIONS: Record<AttachmentMimeType, string> = {
   "application/pdf": ".pdf",
   "text/plain": ".txt",
   "text/csv": ".csv",
+  "text/html": ".html",
   "application/json": ".json",
 };
 

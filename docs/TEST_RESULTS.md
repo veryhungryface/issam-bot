@@ -36,7 +36,7 @@ Validation performed for this change:
 | Healthcheck against a local JSON health endpoint, including revision match | Pass |
 | `git diff --check` | Pass |
 | Full monorepo TypeScript checks | Pass; 19/19 Turbo tasks |
-| Unit/integration tests | Pass; full monorepo run passed 686 tests with 53 environment-dependent tests skipped |
+| Unit/integration tests | Pass; full monorepo run passed 700 tests with 53 environment-dependent tests skipped |
 | Production Vite web build | Pass; 2,333 modules transformed |
 | Docker Compose render on the target VPS | Pass with Docker Compose 2.27.1 |
 | Caddy container configuration validation on the target VPS | Pass with Caddy 2.10.2 |
@@ -77,6 +77,22 @@ message/run/event, cancellation, and queue operations in sequence. Optimistic re
 blank UI wait, but it cannot remove model or network latency. For Korean users, the recommended
 production fix is to run the API and worker in Seoul near Supabase; moving infrastructure requires a
 separate approved deployment.
+
+## Browserbase recovery and generated HTML probe (2026-08-23)
+
+| Check | Result | Evidence/limit |
+| --- | --- | --- |
+| Running-row boot health check | Pass in API tests | A manual/direct-control boot no longer trusts the database `running` flag. It acquires an execution lease and reprovisions a terminal provider Session before returning. |
+| Stale CDP observation recovery | Pass in adapter tests | A Playwright closed/disconnected error during a read-only screenshot is converted to a recoverable Session fault, the same Context receives a replacement Session, and observation is retried once. |
+| Recovery observability | Pass in adapter tests | Recovery start, replacement, and failure events log only the computer/run identifiers and provider kind; provider references, URLs, and error text are excluded. |
+| Browser-only tool contract | Pass in capability tests | Browserbase exposes browser controls plus contained file tools, but does not expose shell or installed-app launch. A stale/blank/404 page instructs the agent to rediscover the flow from a stable site entry point. |
+| Generated HTML attachment | Pass in unit tests | HTML is written to the contained Agent Home, checkpointed without an empty Browserbase export, and attached to chat as `text/html`. The web client forces all non-images to an `application/octet-stream` download instead of inline execution. |
+| Current-turn binary attachment | Pass in unit tests | Browserbase copies user attachments byte-for-byte into Agent Home without invoking provider filesystem methods. |
+| Deployment disk cleanup | Pass in workflow policy tests | The workflow persists a candidate release only after exact-revision health succeeds, rolls back to the persisted release on startup/health failure, and then prunes only unused Docker images. Containers and volumes are never pruned. |
+
+The integrated local validation passed Biome over 417 files, all 19 TypeScript/Turbo checks, the
+full 700-test suite, and the production build (2,333 web modules). Provider-backed production
+verification must be repeated after the immutable image is deployed.
 
 ## Phase 0 completion gate
 

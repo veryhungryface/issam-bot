@@ -138,6 +138,8 @@ type PendingAttachment = {
 };
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
+const SUSPENDED_COMPUTER_MESSAGE =
+  "다음 작업을 보내면 에이전트가 자동으로 새 브라우저를 시작합니다. 지금 직접 조작하려면 직접 제어를 누르세요.";
 
 export function ShellPage() {
   const { botId } = useParams();
@@ -1636,7 +1638,7 @@ export function ShellPage() {
               <div>
                 <div className="relative aspect-[16/10] overflow-hidden rounded-[14px] bg-[#0E0E10]">
                   {computerOpen ? (
-                    <div className="grid h-full place-items-center text-sm text-[#6C6C70]">
+                    <div className="grid h-full place-items-center px-5 text-center text-sm leading-5 text-[#6C6C70]">
                       전체 화면에서 열려 있습니다
                     </div>
                   ) : computer?.kind === "desktop" ? (
@@ -1682,7 +1684,7 @@ export function ShellPage() {
                       : hasControl
                         ? "사용자가 제어 중"
                         : computer?.state === "suspended"
-                          ? "절전 상태"
+                          ? "다음 작업에서 브라우저 자동 시작"
                           : computerLabel(computer?.mode, active.name)}
                   </span>
                   {hasControl ? (
@@ -2221,7 +2223,7 @@ export function ShellPage() {
               <div className="grid h-full place-items-center text-sm text-[#6C6C70]">
                 {screenNotice ??
                   (computer?.state === "suspended"
-                    ? "브라우저가 절전 상태입니다"
+                    ? SUSPENDED_COMPUTER_MESSAGE
                     : computerLabel(computer?.mode, active.name))}
               </div>
             )}
@@ -3582,7 +3584,7 @@ function computerPlaceholder(
 ) {
   if (state === "booting" || booting) return "원격 브라우저를 시작하는 중…";
   if (state === "running") return label;
-  if (state === "suspended") return "브라우저가 절전 상태입니다. 직접 제어하면 다시 시작됩니다.";
+  if (state === "suspended") return SUSPENDED_COMPUTER_MESSAGE;
   if (state === "error") return "브라우저를 시작하지 못했습니다.";
   return "브라우저가 종료되었습니다.";
 }

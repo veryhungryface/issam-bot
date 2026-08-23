@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import type {
   AdapterContext,
+  AgentHomeStore,
   ArtifactStore,
   ComputerRef,
   SandboxProvider,
@@ -93,12 +94,14 @@ export async function materializeCurrentTurnFiles(
     prisma: PrismaClient;
     artifacts: ArtifactStore;
     sandbox: SandboxProvider;
+    home?: AgentHomeStore;
   },
   blocks: MessageBlock[] | undefined,
   input: {
     context: AdapterContext & { botId: string };
     computer: ComputerRef;
     computerMode: ComputerMode;
+    homeKey?: string;
   },
 ): Promise<MaterializedThreadFile[]> {
   const fileBlocks = blocks?.filter(
@@ -124,14 +127,21 @@ export async function materializeCurrentTurnFiles(
       throw new Error(`Attached file exceeds the 10 MiB limit: ${row.name}`);
     }
     const relativePath = `attachments/${row.id}${attachmentExtensionForMimeType(row.mimeType)}`;
-    await deps.sandbox.writeFile(
-      input.computer,
-      {
-        path: resolveBotWorkspacePath(input.computerMode, input.context.botId, relativePath),
-        content: bytes,
-      },
-      input.context,
+    const storedPath = resolveBotWorkspacePath(
+      input.computerMode,
+      input.context.botId,
+      relativePath,
     );
+    if (input.homeKey) {
+      if (!deps.home) throw new Error("AgentHome storage is unavailable for this computer");
+      await deps.home.writeBytes(input.homeKey, storedPath, bytes, input.context);
+    } else {
+      await deps.sandbox.writeFile(
+        input.computer,
+        { path: storedPath, content: bytes },
+        input.context,
+      );
+    }
     materialized.push({
       name: row.name,
       mimeType: row.mimeType,

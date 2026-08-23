@@ -1,3 +1,4 @@
+export * from "./agent-workspace-files.js";
 export * from "./artifacts.js";
 export * from "./background-job-handlers.js";
 export * from "./box-emulator.js";

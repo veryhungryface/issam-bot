@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MessageBlock, validateThreadsSendInput } from "./index.js";
+import { ATTACHMENT_ALLOWED_MIME_TYPES, MessageBlock, validateThreadsSendInput } from "./index.js";
 
 describe("attachment contracts", () => {
   it("parses image and file message blocks", () => {
@@ -27,5 +27,18 @@ describe("attachment contracts", () => {
     expect(validateThreadsSendInput({ artifactIds: ["art_1"] })).toBe(true);
     expect(validateThreadsSendInput({})).toBe(false);
     expect(validateThreadsSendInput({ artifactIds: ["a", "b", "c", "d", "e"] })).toBe(true);
+  });
+
+  it("allows HTML only as a non-image file attachment", () => {
+    expect(ATTACHMENT_ALLOWED_MIME_TYPES).toContain("text/html");
+    expect(
+      MessageBlock.parse({
+        kind: "file",
+        artifactId: "art_html",
+        mimeType: "text/html",
+        name: "result.html",
+        size: 42,
+      }),
+    ).toMatchObject({ kind: "file", mimeType: "text/html" });
   });
 });

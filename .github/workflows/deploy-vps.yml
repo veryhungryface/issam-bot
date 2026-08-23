@@ -49,9 +49,9 @@ jobs:
           printf '%s' "$GHCR_TOKEN" | ssh "${ssh_args[@]}" \
             'sudo -n docker login ghcr.io -u veryhungryface --password-stdin'
           ssh "${ssh_args[@]}" \
-            "sudo -n sed -i 's|^ISSAM_BOT_IMAGE=.*|ISSAM_BOT_IMAGE=ghcr.io/veryhungryface/issam-bot:${IMAGE_TAG}|' /opt/issam-bot/secret.env && sudo -n sed -i 's|^GIT_SHA=.*|GIT_SHA=${GIT_SHA}|' /opt/issam-bot/secret.env && cd /opt/issam-bot && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml pull && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --remove-orphans"
+            "cd /opt/issam-bot && sudo -n env ISSAM_BOT_IMAGE=ghcr.io/veryhungryface/issam-bot:${IMAGE_TAG} GIT_SHA=${GIT_SHA} docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml pull && if ! sudo -n env ISSAM_BOT_IMAGE=ghcr.io/veryhungryface/issam-bot:${IMAGE_TAG} GIT_SHA=${GIT_SHA} docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --remove-orphans; then sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --remove-orphans; exit 1; fi"
 
-      - name: Verify health and remove registry token
+      - name: Verify exact revision and persist release
         if: always()
         run: |
           ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes deploy@172.245.30.225)
@@ -59,9 +59,31 @@ jobs:
           if [[ "${{ job.status }}" == "success" ]]; then
             for attempt in {1..18}; do
               if curl --fail --silent --show-error --max-time 10 http://172.245.30.225/health | grep -Fq '"revision":"${{ inputs.git_sha }}"'; then
+                ssh "${ssh_args[@]}" \
+                  "sudo -n sed -i 's|^ISSAM_BOT_IMAGE=.*|ISSAM_BOT_IMAGE=ghcr.io/veryhungryface/issam-bot:${{ inputs.image_tag }}|' /opt/issam-bot/secret.env && sudo -n sed -i 's|^GIT_SHA=.*|GIT_SHA=${{ inputs.git_sha }}|' /opt/issam-bot/secret.env"
                 exit 0
               fi
               sleep 5
             done
+            ssh "${ssh_args[@]}" \
+              'cd /opt/issam-bot && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --remove-orphans' || \
+              printf '%s\n' '::error::Exact-revision health failed and the previous Compose release could not be restored.' >&2
             exit 1
           fi
+
+      - name: Prune unused images after verified deployment
+        if: success()
+        run: |
+          ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes deploy@172.245.30.225)
+          ssh "${ssh_args[@]}" '
+            set -eu
+            printf "%s\n" "Docker filesystem before unused-image cleanup:"
+            df -hP /
+            printf "%s\n" "Docker image usage before cleanup:"
+            sudo -n docker system df
+            sudo -n docker image prune -a -f
+            printf "%s\n" "Docker filesystem after unused-image cleanup:"
+            df -hP /
+            printf "%s\n" "Docker image usage after cleanup:"
+            sudo -n docker system df
+          '

@@ -169,6 +169,8 @@ export interface JobWorkerHost {
 
 export interface AgentHomeStore {
   describe(): AdapterDescriptor<{ revisions: boolean }>;
+  /** Record a durable revision without replacing the current home contents. */
+  checkpoint(botId: string, context: AdapterContext): Promise<string>;
   checkout(botId: string, dest: string, context: AdapterContext): Promise<string>;
   commit(botId: string, src: string, context: AdapterContext): Promise<string>;
   restore(botId: string, revision: string, dest: string, context: AdapterContext): Promise<void>;
@@ -179,7 +181,19 @@ export interface AgentHomeStore {
     context: AdapterContext,
     options?: { maxBytes?: number },
   ): Promise<string>;
+  readBytes(
+    botId: string,
+    path: string,
+    context: AdapterContext,
+    options?: { maxBytes?: number },
+  ): Promise<Uint8Array>;
   writeFile(botId: string, path: string, content: string, context: AdapterContext): Promise<void>;
+  writeBytes(
+    botId: string,
+    path: string,
+    content: Uint8Array,
+    context: AdapterContext,
+  ): Promise<void>;
   list(
     botId: string,
     path: string,

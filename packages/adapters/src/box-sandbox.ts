@@ -94,6 +94,10 @@ export class BoxSandboxProvider implements SandboxProvider {
       capabilities: {
         graphical: true,
         pty: false,
+        shell: true,
+        filesystem: true,
+        localFileOpen: true,
+        appLaunch: true,
         snapshots: true,
         takeover: true,
         persistentHome: true,

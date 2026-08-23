@@ -14,6 +14,7 @@ export const ATTACHMENT_FILE_MIME_TYPES = [
   "application/pdf",
   "text/plain",
   "text/csv",
+  "text/html",
   "application/json",
 ] as const;
 
