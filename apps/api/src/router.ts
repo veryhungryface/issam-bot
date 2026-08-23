@@ -1044,12 +1044,29 @@ export function createRouter(deps: RouterDeps) {
         const outcome = await taughtSkills.recordInput(context.actor, bot.id, mapped);
         if (outcome === "stale") return { ok: true as const };
         if (outcome !== "recorded") {
-          await applyTeachingDesktopInput(
-            deps.sandbox,
-            computer,
-            mapped,
-            computerContext(context.actor, bot.id, "input"),
-          );
+          try {
+            await applyTeachingDesktopInput(
+              deps.sandbox,
+              computer,
+              mapped,
+              computerContext(context.actor, bot.id, "input"),
+            );
+          } catch (error) {
+            // Never log the submitted text or provider connection URLs. The identifiers and
+            // sanitized failure class are enough to diagnose cross-process session recovery.
+            console.error("computer input delivery failed", {
+              botId: bot.id,
+              computerId: computer.id,
+              kind: input.kind,
+              error: safeComputerInputError(error),
+            });
+            throw new ORPCError("BAD_REQUEST", {
+              message:
+                input.kind === "text"
+                  ? "한글 입력을 브라우저에 전달하지 못했습니다. 원격 입력칸을 다시 클릭한 뒤 재시도하세요."
+                  : "입력을 브라우저에 전달하지 못했습니다.",
+            });
+          }
         }
         await deps.prisma.computer.updateMany({
           where: { id: computer.id, state: "running" },
@@ -2158,6 +2175,14 @@ async function persistModelCredential(
 
 function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw signal.reason ?? new Error("Request cancelled");
+}
+
+function safeComputerInputError(error: unknown) {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  return message
+    .replace(/(?:wss?|https?):\/\/\S+/gi, "[redacted-url]")
+    .replace(/(?:bb_live|sk-[A-Za-z0-9_-]*)[A-Za-z0-9_-]+/g, "[redacted-secret]")
+    .slice(0, 500);
 }
 
 function mapRoutine(row: {

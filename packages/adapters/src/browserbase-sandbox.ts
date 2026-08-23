@@ -19,8 +19,10 @@ import { chromium } from "playwright-core";
 import {
   assertAllowedBrowserUrl,
   BrowserbaseClient,
+  type BrowserbaseRegion,
   type BrowserbaseSession,
 } from "./browserbase-client.js";
+import { ComputerSessionUnavailableError } from "./computer-lifecycle.js";
 import { boundedComputerActions, computerObservation } from "./computer-support.js";
 
 const PROVIDER_REF_PREFIX = "browserbase:v1:";
@@ -31,6 +33,7 @@ export interface BrowserbaseSandboxOptions {
   apiKey: string;
   projectId: string;
   timeoutSeconds?: number;
+  region?: BrowserbaseRegion;
 }
 
 export interface BrowserbaseBrowserSdk {
@@ -63,6 +66,9 @@ interface BrowserbaseProviderRef {
  */
 export class BrowserbaseSandboxProvider implements SandboxProvider {
   private readonly boxes = new Map<string, BrowserbaseBox>();
+  private readonly recoveries = new Map<string, Promise<BrowserbaseBox>>();
+  private readonly sessionCreations = new Map<string, Promise<BrowserbaseSession>>();
+  private readonly failedProviderRefs = new Set<string>();
   private readonly client: BrowserbaseClient;
   private readonly sdk: BrowserbaseBrowserSdk;
 
@@ -104,10 +110,23 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     context: AdapterContext,
   ): Promise<ComputerRef> {
     throwIfAborted(context);
+    const knownUnavailable = request.providerRef
+      ? this.failedProviderRefs.delete(request.providerRef)
+      : false;
     const existing = request.providerRef ? this.boxes.get(request.providerRef) : undefined;
-    if (existing) {
-      throwIfAborted(context);
-      return { ...existing.ref, fresh: false };
+    if (existing && !knownUnavailable) {
+      const active = await this.recoverSession(existing.session.id, existing.contextId);
+      if (active) {
+        existing.session = active;
+        throwIfAborted(context);
+        return { ...existing.ref, fresh: false };
+      }
+      await this.closeRuntime(existing).catch(() => undefined);
+      this.boxes.delete(request.providerRef!);
+    }
+    if (existing && knownUnavailable) {
+      await this.closeRuntime(existing).catch(() => undefined);
+      this.boxes.delete(request.providerRef!);
     }
 
     const previous = request.providerRef ? decodeProviderRef(request.providerRef) : undefined;
@@ -119,15 +138,12 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
       throw context.signal.reason ?? new Error("Browserbase provisioning aborted");
     }
 
-    let session = previous?.sessionId
-      ? await this.recoverSession(previous.sessionId, contextId)
-      : undefined;
+    let session =
+      !knownUnavailable && previous?.sessionId
+        ? await this.recoverSession(previous.sessionId, contextId)
+        : undefined;
     try {
-      session ??= await this.client.createSession({
-        contextId,
-        timeoutSeconds: this.options.timeoutSeconds,
-        metadata: browserbaseMetadata(request.botId, context),
-      });
+      session ??= await this.createSession(contextId, request.botId, context);
     } catch (error) {
       if (!previousContextId) await this.client.deleteContext(contextId).catch(() => undefined);
       throw error;
@@ -179,9 +195,13 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
       await this.closeRuntime(box);
       await this.client.endSession(box.session.id).catch(() => undefined);
       this.boxes.delete(box.ref.providerRef);
-      throw new Error(`Could not connect to Browserbase Chrome: ${errorMessage(error)}`, {
-        cause: error,
-      });
+      this.failedProviderRefs.add(box.ref.providerRef);
+      throw new ComputerSessionUnavailableError(
+        `Could not connect to Browserbase Chrome: ${errorMessage(error)}`,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
@@ -386,6 +406,7 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     const box = this.boxes.get(computer.providerRef);
     const reference = decodeProviderRef(computer.providerRef);
     this.boxes.delete(computer.providerRef);
+    this.failedProviderRefs.delete(computer.providerRef);
     const cleanup: Promise<unknown>[] = [];
     if (box) cleanup.push(this.closeRuntime(box));
     if (reference.sessionId) cleanup.push(this.client.endSession(reference.sessionId));
@@ -398,6 +419,7 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     const reference = decodeProviderRef(computer.providerRef);
     const contextId = box?.contextId ?? reference.contextId;
     const results: PromiseSettledResult<unknown>[] = [];
+    this.failedProviderRefs.delete(computer.providerRef);
     if (box) {
       this.boxes.delete(computer.providerRef);
       results.push(...(await Promise.allSettled([this.closeRuntime(box)])));
@@ -419,7 +441,63 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
   }
 
   private async readyBox(computer: ComputerRef, context: AdapterContext): Promise<BrowserbaseBox> {
-    const box = this.requiredBox(computer);
+    if (this.failedProviderRefs.has(computer.providerRef)) {
+      throw new ComputerSessionUnavailableError(
+        "Browserbase computer is not provisioned in this worker",
+      );
+    }
+    const pending = this.recoveries.get(computer.providerRef);
+    if (pending) return pending;
+    const existing = this.boxes.get(computer.providerRef);
+    if (existing) {
+      if (existing.browser?.isConnected() && existing.page && !existing.page.isClosed()) {
+        throwIfAborted(context);
+        return existing;
+      }
+      const active = await this.recoverSession(existing.session.id, existing.contextId);
+      if (!active) {
+        await this.closeRuntime(existing).catch(() => undefined);
+        this.boxes.delete(computer.providerRef);
+        this.failedProviderRefs.add(computer.providerRef);
+        throw new ComputerSessionUnavailableError("Browserbase session is no longer running");
+      }
+      existing.session = active;
+      await this.prepare(computer, context);
+      return existing;
+    }
+
+    const recovery = this.recoverBox(computer, context);
+    this.recoveries.set(computer.providerRef, recovery);
+    try {
+      return await recovery;
+    } finally {
+      if (this.recoveries.get(computer.providerRef) === recovery) {
+        this.recoveries.delete(computer.providerRef);
+      }
+    }
+  }
+
+  private async recoverBox(
+    computer: ComputerRef,
+    context: AdapterContext,
+  ): Promise<BrowserbaseBox> {
+    ensureBrowserbaseComputer(computer);
+    throwIfAborted(context);
+    const reference = decodeProviderRef(computer.providerRef);
+    if (!reference.sessionId) {
+      throw new Error("Browserbase provider reference has no active session");
+    }
+    const session = await this.recoverSession(reference.sessionId, reference.contextId);
+    if (!session) {
+      throw new ComputerSessionUnavailableError("Browserbase session is no longer running");
+    }
+    const box: BrowserbaseBox = {
+      ref: { ...computer, fresh: false },
+      contextId: reference.contextId,
+      session,
+      userControlling: false,
+    };
+    this.boxes.set(computer.providerRef, box);
     await this.prepare(computer, context);
     return box;
   }
@@ -447,6 +525,29 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
       throw new Error("Browserbase session does not belong to the persisted context");
     }
     return session;
+  }
+
+  private async createSession(
+    contextId: string,
+    botId: string,
+    context: AdapterContext,
+  ): Promise<BrowserbaseSession> {
+    const pending = this.sessionCreations.get(contextId);
+    if (pending) return pending;
+    const creation = this.client.createSession({
+      contextId,
+      timeoutSeconds: this.options.timeoutSeconds,
+      region: this.options.region,
+      metadata: browserbaseMetadata(botId, context),
+    });
+    this.sessionCreations.set(contextId, creation);
+    try {
+      return await creation;
+    } finally {
+      if (this.sessionCreations.get(contextId) === creation) {
+        this.sessionCreations.delete(contextId);
+      }
+    }
   }
 }
 

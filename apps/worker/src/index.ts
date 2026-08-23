@@ -4,6 +4,7 @@ import { loadRootEnv } from "@rakazo/core/node/load-root-env";
 loadRootEnv();
 
 import {
+  type BrowserbaseRegion,
   createBackgroundJobHandlers,
   createConnectorStack,
   createJobReconciler,
@@ -26,6 +27,19 @@ import {
 import { resolveEncryptionKey } from "@rakazo/core";
 import { createDb, createThreadEvents } from "@rakazo/db";
 import { MarkdownMemoryStore } from "@rakazo/memory";
+
+function browserbaseRegion(value: string | undefined): BrowserbaseRegion {
+  const region = value?.trim() || "ap-southeast-1";
+  if (
+    region !== "us-west-2" &&
+    region !== "us-east-1" &&
+    region !== "eu-central-1" &&
+    region !== "ap-southeast-1"
+  ) {
+    throw new Error(`Unsupported Browserbase region "${region}"`);
+  }
+  return region;
+}
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -55,6 +69,7 @@ async function main() {
     browserbaseTaskTimeoutSeconds: process.env.BROWSERBASE_TASK_TIMEOUT_SECONDS
       ? Number(process.env.BROWSERBASE_TASK_TIMEOUT_SECONDS)
       : undefined,
+    browserbaseRegion: browserbaseRegion(process.env.BROWSERBASE_REGION),
     dataDir,
     prisma,
   });

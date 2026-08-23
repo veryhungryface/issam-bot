@@ -14,11 +14,16 @@ describe("BrowserbaseClient", () => {
       projectId: "project-1",
       fetch: fetcher,
     });
-    await client.createSession({ contextId: "context-1", metadata: { taskId: "task-1" } });
+    await client.createSession({
+      contextId: "context-1",
+      region: "ap-southeast-1",
+      metadata: { taskId: "task-1" },
+    });
     expect(fetcher).toHaveBeenCalledWith(
       "https://api.browserbase.com/v1/sessions",
       expect.objectContaining({
         headers: expect.objectContaining({ "x-bb-api-key": "server-secret" }),
+        body: expect.stringContaining('"region":"ap-southeast-1"'),
       }),
     );
     await expect(

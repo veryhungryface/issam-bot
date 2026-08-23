@@ -1,6 +1,7 @@
 import type { SandboxProvider } from "@rakazo/adapter-kit";
 import { BoxSandboxEmulator } from "./box-emulator.js";
 import { BoxSandboxProvider } from "./box-sandbox.js";
+import type { BrowserbaseRegion } from "./browserbase-client.js";
 import { BrowserbaseSandboxProvider } from "./browserbase-sandbox.js";
 import { DaytonaSandboxEmulator } from "./daytona-emulator.js";
 import { DaytonaSandboxProvider } from "./daytona-sandbox.js";
@@ -22,6 +23,7 @@ export interface SandboxProviderOptions {
   browserbaseApiKey?: string;
   browserbaseProjectId?: string;
   browserbaseTaskTimeoutSeconds?: number;
+  browserbaseRegion?: BrowserbaseRegion;
   dataDir?: string;
 }
 
@@ -52,6 +54,7 @@ export function createSandboxProvider(kind: string, opts: SandboxProviderOptions
         apiKey: opts.browserbaseApiKey,
         projectId: opts.browserbaseProjectId,
         timeoutSeconds: opts.browserbaseTaskTimeoutSeconds,
+        region: opts.browserbaseRegion,
       });
     case "docker":
       return new DockerSandboxProvider(

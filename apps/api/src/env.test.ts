@@ -97,13 +97,25 @@ describe("loadEnv", () => {
       BROWSERBASE_API_KEY: "  test-browserbase-key  ",
       BROWSERBASE_PROJECT_ID: "  test-project  ",
       BROWSERBASE_TASK_TIMEOUT_SECONDS: "300",
+      BROWSERBASE_REGION: "ap-southeast-1",
     });
     expect(env).toMatchObject({
       sandboxProvider: "browserbase",
       browserbaseApiKey: "test-browserbase-key",
       browserbaseProjectId: "test-project",
       browserbaseTaskTimeoutSeconds: 300,
+      browserbaseRegion: "ap-southeast-1",
     });
+  });
+
+  it("defaults Browserbase to the closest available region for Korean users", () => {
+    expect(loadEnv(base).browserbaseRegion).toBe("ap-southeast-1");
+  });
+
+  it("rejects an unsupported Browserbase region", () => {
+    expect(() => loadEnv({ ...base, BROWSERBASE_REGION: "ap-northeast-2" })).toThrow(
+      /Unsupported Browserbase region/,
+    );
   });
 
   it("rejects a non-integer Browserbase timeout", () => {

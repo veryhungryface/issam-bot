@@ -5,6 +5,8 @@ export interface BrowserbaseClientOptions {
   baseUrl?: string;
 }
 
+export type BrowserbaseRegion = "us-west-2" | "us-east-1" | "eu-central-1" | "ap-southeast-1";
+
 export interface BrowserbaseSession {
   id: string;
   connectUrl: string;
@@ -60,6 +62,7 @@ export class BrowserbaseClient {
   async createSession(input: {
     contextId: string;
     timeoutSeconds?: number;
+    region?: BrowserbaseRegion;
     metadata: Record<string, string>;
   }): Promise<BrowserbaseSession> {
     const timeout = input.timeoutSeconds ?? 600;
@@ -71,6 +74,7 @@ export class BrowserbaseClient {
       body: {
         projectId: this.options.projectId,
         timeout,
+        region: input.region,
         userMetadata: input.metadata,
         browserSettings: { context: { id: input.contextId, persist: true } },
       },

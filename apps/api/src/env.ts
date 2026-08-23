@@ -1,3 +1,4 @@
+import type { BrowserbaseRegion } from "@rakazo/adapters";
 import { resolveAuthSecret, resolveEncryptionKey, resolveSupervisorToken } from "@rakazo/core";
 
 export interface AppEnv {
@@ -27,6 +28,7 @@ export interface AppEnv {
   browserbaseApiKey: string | undefined;
   browserbaseProjectId: string | undefined;
   browserbaseTaskTimeoutSeconds: number | undefined;
+  browserbaseRegion: BrowserbaseRegion;
   composioApiKey: string | undefined;
   defaultProvider: string;
   defaultModel: string;
@@ -70,6 +72,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     browserbaseApiKey: optional(source.BROWSERBASE_API_KEY),
     browserbaseProjectId: optional(source.BROWSERBASE_PROJECT_ID),
     browserbaseTaskTimeoutSeconds: optionalInteger(source.BROWSERBASE_TASK_TIMEOUT_SECONDS),
+    browserbaseRegion: browserbaseRegion(source.BROWSERBASE_REGION),
     composioApiKey: source.COMPOSIO_API_KEY,
     defaultProvider,
     defaultModel: source.PI_DEFAULT_MODEL ?? "deepseek/deepseek-v4-flash-0731",
@@ -110,4 +113,17 @@ function optionalInteger(value: string | undefined): number | undefined {
   const parsed = Number(trimmed);
   if (!Number.isInteger(parsed)) throw new Error(`Expected an integer, received "${trimmed}"`);
   return parsed;
+}
+
+function browserbaseRegion(value: string | undefined): BrowserbaseRegion {
+  const region = optional(value) ?? "ap-southeast-1";
+  if (
+    region !== "us-west-2" &&
+    region !== "us-east-1" &&
+    region !== "eu-central-1" &&
+    region !== "ap-southeast-1"
+  ) {
+    throw new Error(`Unsupported Browserbase region "${region}"`);
+  }
+  return region;
 }

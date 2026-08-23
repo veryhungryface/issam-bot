@@ -103,6 +103,7 @@ export async function createApp(
     browserbaseApiKey: env.browserbaseApiKey,
     browserbaseProjectId: env.browserbaseProjectId,
     browserbaseTaskTimeoutSeconds: env.browserbaseTaskTimeoutSeconds,
+    browserbaseRegion: env.browserbaseRegion,
     dataDir: env.dataDir,
     prisma,
   });

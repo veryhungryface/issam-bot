@@ -75,7 +75,11 @@ import { takeInitialBootstrap } from "../lib/bootstrap";
 import { createClientNonce } from "../lib/client-nonce";
 import { dictation } from "../lib/dictation";
 import { koreanStatusLabel } from "../lib/korean-labels";
-import { isBrowserbaseDisconnectedMessage, screenIframeSandbox } from "../lib/live-view";
+import {
+  isBrowserbaseDisconnectedMessage,
+  pollBrowserbaseLiveViewRecovery,
+  screenIframeSandbox,
+} from "../lib/live-view";
 import { revokePendingAttachmentPreviews } from "../lib/pending-attachments";
 import { markAfterPaint, markOnce } from "../lib/performance";
 import { rpc } from "../lib/rpc";
@@ -193,7 +197,11 @@ export function ShellPage() {
   const [screenUrl, setScreenUrl] = useState<string | null>(null);
   const [screenNotice, setScreenNotice] = useState<string | null>(null);
   const [computerOpen, setComputerOpen] = useState(false);
+  const [computerOpeningMessage, setComputerOpeningMessage] = useState<string | null>(null);
+  const [computerOpenError, setComputerOpenError] = useState<string | null>(null);
+  const [screenFrameLoaded, setScreenFrameLoaded] = useState(false);
   const [remoteText, setRemoteText] = useState("");
+  const [remoteTextOpen, setRemoteTextOpen] = useState(false);
   const [remoteTextBusy, setRemoteTextBusy] = useState(false);
   const [remoteTextError, setRemoteTextError] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -221,6 +229,9 @@ export function ShellPage() {
   const manuallyUnread = useRef(new Set<string>());
   const computerVisible = useRef(false);
   const screenFrame = useRef<HTMLIFrameElement>(null);
+  const remoteTextInput = useRef<HTMLInputElement>(null);
+  const computerOpenRequest = useRef(0);
+  const liveViewRecovery = useRef<AbortController | null>(null);
   computerVisible.current = panel === "computer" || computerOpen;
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
@@ -232,6 +243,7 @@ export function ShellPage() {
       ? snapshot
       : (snapshotCache.current.get(active.id) ?? null)
     : null;
+  const activeRunInProgress = Boolean(activeSnapshot?.run && isActive(activeSnapshot.run.status));
   const transcriptMessages = useMemo(() => {
     const messages = activeSnapshot?.messages ?? [];
     const optimistic = active ? optimisticMessages[active.id] : undefined;
@@ -358,7 +370,7 @@ export function ShellPage() {
     return snap;
   }
 
-  async function refreshComputerScreen(id: string) {
+  async function refreshComputerScreen(id: string, excludedUrl?: string | null) {
     if (!computerVisible.current) return null;
     const request = ++screenRequest.current;
     const screen = await rpc.computer.screenUrl({ botId: id }).catch(() => ({ url: null }));
@@ -369,6 +381,7 @@ export function ShellPage() {
     ) {
       return null;
     }
+    if (screen.url && screen.url === excludedUrl) return null;
     setScreenUrl(screen.url);
     if (screen.url) setScreenNotice(null);
     return screen.url;
@@ -1023,9 +1036,30 @@ export function ShellPage() {
   }, [panel, active?.id]);
 
   useEffect(() => {
+    liveViewRecovery.current?.abort();
+    liveViewRecovery.current = null;
+    computerOpenRequest.current += 1;
     setComputerOpen(false);
+    setComputerOpeningMessage(null);
+    setComputerOpenError(null);
+    setScreenFrameLoaded(false);
+    setRemoteTextOpen(false);
     setMobileSidebarOpen(false);
   }, [active?.id]);
+
+  useEffect(() => {
+    if (activeRunInProgress) return;
+    liveViewRecovery.current?.abort();
+    liveViewRecovery.current = null;
+  }, [activeRunInProgress]);
+
+  useEffect(
+    () => () => {
+      liveViewRecovery.current?.abort();
+      computerOpenRequest.current += 1;
+    },
+    [],
+  );
 
   // The routine panel copies a routine's data into local draft state at click time
   // rather than deriving it from `active`, so it goes stale across a bot switch —
@@ -1049,11 +1083,25 @@ export function ShellPage() {
   useEffect(() => {
     if (!computerOpen) return;
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setComputerOpen(false);
+      if (event.key !== "Escape") return;
+      if (remoteTextOpen) {
+        setRemoteTextOpen(false);
+        return;
+      }
+      closeComputerOverlay();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [computerOpen]);
+  }, [computerOpen, remoteTextOpen]);
+
+  useLayoutEffect(() => {
+    if (computerOpen) setScreenFrameLoaded(false);
+  }, [computerOpen, screenUrl]);
+
+  useEffect(() => {
+    if (!remoteTextOpen) return;
+    remoteTextInput.current?.focus();
+  }, [remoteTextOpen]);
 
   useEffect(() => {
     if ((panel !== "computer" && !computerOpen) || !active || computer?.state !== "running") return;
@@ -1066,6 +1114,7 @@ export function ShellPage() {
   useEffect(() => {
     if (computer?.kind !== "browserbase" || !screenUrl) return;
     const visibleBotId = active?.id;
+    const disconnectedUrl = screenUrl;
     function onLiveViewMessage(event: MessageEvent) {
       if (
         !isBrowserbaseDisconnectedMessage(
@@ -1080,27 +1129,65 @@ export function ShellPage() {
       }
       screenRequest.current += 1;
       setScreenUrl(null);
-      setScreenNotice("실시간 화면 연결이 끊어졌습니다. 브라우저를 다시 열어 연결하세요.");
-      if (visibleBotId) void refreshThread(visibleBotId).catch(() => undefined);
+      setScreenFrameLoaded(false);
+      setScreenNotice("세션 연결이 종료되었습니다. 다음 작업에서 자동으로 새 세션에 연결됩니다.");
+      liveViewRecovery.current?.abort();
+      liveViewRecovery.current = null;
+      if (!visibleBotId || !activeRunInProgress) return;
+      const controller = new AbortController();
+      liveViewRecovery.current = controller;
+      void pollBrowserbaseLiveViewRecovery(
+        () => refreshComputerScreen(visibleBotId, disconnectedUrl),
+        { signal: controller.signal },
+      ).finally(() => {
+        if (liveViewRecovery.current === controller) liveViewRecovery.current = null;
+      });
     }
     window.addEventListener("message", onLiveViewMessage);
     return () => window.removeEventListener("message", onLiveViewMessage);
-  }, [active?.id, computer?.kind, screenUrl]);
+  }, [active?.id, activeRunInProgress, computer?.kind, screenUrl]);
 
   async function openComputer() {
     if (!active) return;
+    const request = ++computerOpenRequest.current;
     const needsTakeover = !userHoldsComputerControl(computer, active.id);
-    await bootComputer({
-      takeControl: needsTakeover,
-      overlay: needsTakeover || computer?.state !== "running",
-      force: computer?.state !== "running",
-    });
     setComputerOpen(true);
+    setComputerOpenError(null);
+    setScreenFrameLoaded(false);
+    setRemoteTextOpen(false);
+    setComputerOpeningMessage(
+      needsTakeover ? "브라우저에 연결하고 제어권을 확보하는 중…" : "브라우저 화면에 연결하는 중…",
+    );
+    try {
+      await bootComputer({
+        takeControl: needsTakeover,
+        overlay: false,
+        force: computer?.state !== "running",
+      });
+    } catch (error) {
+      if (request !== computerOpenRequest.current) return;
+      setComputerOpenError(
+        error instanceof Error ? error.message : "브라우저에 연결하지 못했습니다.",
+      );
+    } finally {
+      if (request === computerOpenRequest.current) setComputerOpeningMessage(null);
+    }
+  }
+
+  function closeComputerOverlay() {
+    liveViewRecovery.current?.abort();
+    liveViewRecovery.current = null;
+    computerOpenRequest.current += 1;
+    setComputerOpen(false);
+    setComputerOpeningMessage(null);
+    setComputerOpenError(null);
+    setScreenFrameLoaded(false);
+    setRemoteTextOpen(false);
   }
 
   async function releaseComputer() {
     if (!active) return;
-    setComputerOpen(false);
+    closeComputerOverlay();
     setRemoteText("");
     setRemoteTextError(null);
     await rpc.computer.release({ botId: active.id }).catch(() => undefined);
@@ -1128,6 +1215,10 @@ export function ShellPage() {
 
   const embeddedScreenUrl = embeddableScreenUrl(screenUrl);
   const hasControl = userHoldsComputerControl(computer, active?.id);
+
+  useEffect(() => {
+    if (!hasControl) setRemoteTextOpen(false);
+  }, [hasControl]);
 
   const userName = session.data?.user.name ?? "사용자";
   const initials = userName
@@ -1982,7 +2073,7 @@ export function ShellPage() {
         ) : null}
       </Suspense>
 
-      {booting ? (
+      {booting && !computerOpen ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-[22px] bg-[rgba(4,4,5,.96)]">
           <div className="text-[19px] font-medium text-[#F1F1F2]">
             {active?.name} 브라우저를 시작하는 중
@@ -1993,9 +2084,12 @@ export function ShellPage() {
         </div>
       ) : computerOpen && active ? (
         <div className="absolute inset-0 z-30 flex flex-col bg-[#050506]">
-          <div className="flex items-center justify-between gap-4 border-b border-[#171719] px-[18px] py-3.5">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <BotAvatar color={active.color} size={28} />
+          <div
+            data-testid="computer-toolbar"
+            className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-[#171719] px-3"
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <BotAvatar color={active.color} size={22} />
               {recordingSkill ? (
                 <TeachRecordingChrome
                   recording={recordingSkill}
@@ -2004,89 +2098,91 @@ export function ShellPage() {
                   variant="overlay"
                 />
               ) : (
-                <span className="truncate text-[15.5px] font-medium text-[#ECECEE]">
+                <span className="truncate text-[14px] font-medium text-[#ECECEE]">
                   {computerLabel(computer?.mode, active.name)}
                 </span>
               )}
               {!recordingSkill && hasControl ? (
-                <span className="rounded-full bg-[rgba(48,162,75,.14)] px-[11px] py-1 text-[13px] text-[#4ECB71]">
+                <span className="hidden shrink-0 rounded-full bg-[rgba(48,162,75,.14)] px-2 py-0.5 text-[12px] text-[#4ECB71] sm:inline">
                   사용자가 제어 중
                 </span>
               ) : null}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-1.5">
               {recordingSkill ? (
                 <TeachStopButton busy={teachBusy} onStop={stopTeaching} />
-              ) : hasControl ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void releaseComputer()}
-                >
-                  봇에게 제어권 반환
-                </Button>
               ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void bootComputer({ takeControl: true, overlay: false })}
-                >
-                  직접 제어
-                </Button>
+                <>
+                  {computer?.kind === "browserbase" && hasControl ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={remoteTextOpen}
+                      aria-controls="remote-korean-input"
+                      onClick={() => {
+                        setRemoteTextOpen((open) => !open);
+                        setRemoteTextError(null);
+                      }}
+                    >
+                      한글 입력
+                    </Button>
+                  ) : null}
+                  {hasControl ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label="봇에게 제어권 반환"
+                      onClick={() => void releaseComputer()}
+                    >
+                      봇에게 반환
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={Boolean(computerOpeningMessage)}
+                      onClick={() => void openComputer()}
+                    >
+                      직접 제어
+                    </Button>
+                  )}
+                </>
               )}
               <button
                 type="button"
-                className="text-[16px] text-[#85858A] hover:text-[#ECECEE]"
+                className="grid h-8 w-8 place-items-center text-[#85858A] hover:text-[#ECECEE]"
                 aria-label="브라우저 닫기"
-                onClick={() => setComputerOpen(false)}
+                onClick={closeComputerOverlay}
               >
                 <X size={16} strokeWidth={1.8} />
               </button>
             </div>
           </div>
-          {computer?.kind === "browserbase" && hasControl && !recordingSkill ? (
-            <div className="border-b border-[#171719] bg-[#0B0B0D] px-[18px] py-2.5">
-              <div className="flex items-center gap-2">
-                <input
-                  value={remoteText}
-                  maxLength={10_000}
-                  autoComplete="off"
-                  aria-label="한글 및 IME 원격 입력"
-                  placeholder="한글/IME 입력 — 원격 입력칸을 먼저 클릭하세요"
-                  onChange={(event) => {
-                    setRemoteText(event.target.value);
-                    setRemoteTextError(null);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
-                      return;
-                    }
-                    event.preventDefault();
-                    void pasteRemoteText();
-                  }}
-                  className="min-w-0 flex-1 rounded-[10px] border border-[#303035] bg-[#141416] px-3 py-2 text-[14px] text-[#ECECEE] outline-none placeholder:text-[#66666D] focus:border-[#66666D]"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!remoteText || remoteTextBusy}
-                  onClick={() => void pasteRemoteText()}
-                >
-                  {remoteTextBusy ? "입력 중…" : "입력"}
-                </Button>
-              </div>
-              <div
-                className={`mt-1.5 text-[12px] ${remoteTextError ? "text-[#F17171]" : "text-[#6C6C70]"}`}
-              >
-                {remoteTextError ?? "IME 조합이 필요한 문자는 여기서 완성한 뒤 엔터 키를 누르세요."}
-              </div>
-            </div>
-          ) : null}
           <div className="relative min-h-0 flex-1 bg-[#0E0E10]">
-            {computer?.kind === "desktop" ? (
+            {computerOpenError ? (
+              <div className="grid h-full place-items-center px-6 text-center">
+                <div className="max-w-md">
+                  <div className="text-[16px] font-medium text-[#ECECEE]">
+                    브라우저 연결에 실패했습니다
+                  </div>
+                  <div className="mt-2 text-[13px] leading-5 text-[#85858A]">
+                    {computerOpenError}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => void openComputer()}
+                  >
+                    다시 시도
+                  </Button>
+                </div>
+              </div>
+            ) : computer?.kind === "desktop" ? (
               <div className="grid h-full place-items-center px-8 text-center text-sm text-[#6C6C70]">
                 이 봇은 현재 컴퓨터에서 실행됩니다. 별도의 Linux 데스크톱은 없습니다. 셸을
                 사용하도록 요청할 수 있으며 홈 폴더 아래의 작업 디렉터리에 접근할 수 있습니다.
@@ -2104,6 +2200,7 @@ export function ShellPage() {
                   )}
                   className="h-full w-full border-0 bg-black"
                   allow="clipboard-read; clipboard-write; fullscreen"
+                  onLoad={() => setScreenFrameLoaded(true)}
                   style={{
                     pointerEvents: recordingSkill || !hasControl ? "none" : "auto",
                   }}
@@ -2118,6 +2215,8 @@ export function ShellPage() {
                   />
                 ) : null}
               </>
+            ) : computerOpeningMessage ? (
+              <div className="h-full bg-black" />
             ) : (
               <div className="grid h-full place-items-center text-sm text-[#6C6C70]">
                 {screenNotice ??
@@ -2126,6 +2225,110 @@ export function ShellPage() {
                     : computerLabel(computer?.mode, active.name))}
               </div>
             )}
+            {computerOpeningMessage ? (
+              <div
+                role="status"
+                className="absolute inset-0 z-10 grid place-items-center bg-[rgba(8,8,10,.88)] px-6 text-center"
+                data-testid="computer-connecting"
+              >
+                <div>
+                  <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-[#34343A] border-t-[#ECECEE]" />
+                  <div className="mt-4 text-[14px] text-[#B7B7BC]">{computerOpeningMessage}</div>
+                  <div className="mt-1.5 text-[12px] text-[#68686E]">
+                    화면이 준비되면 바로 직접 조작할 수 있습니다.
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {!screenFrameLoaded &&
+            !computerOpeningMessage &&
+            !computerOpenError &&
+            computer?.state === "running" &&
+            embeddedScreenUrl ? (
+              <div
+                role="status"
+                className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-[rgba(8,8,10,.88)] text-center"
+                data-testid="computer-frame-loading"
+              >
+                <div>
+                  <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-[#34343A] border-t-[#ECECEE]" />
+                  <div className="mt-4 text-[14px] text-[#B7B7BC]">
+                    실시간 브라우저 화면을 불러오는 중…
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {computer?.kind === "browserbase" &&
+            hasControl &&
+            !recordingSkill &&
+            remoteTextOpen &&
+            !computerOpeningMessage &&
+            !computerOpenError ? (
+              <div
+                id="remote-korean-input"
+                role="dialog"
+                aria-label="한글 원격 입력"
+                className="absolute top-3 right-3 z-20 w-[min(420px,calc(100%-24px))] rounded-[14px] border border-[#303035] bg-[rgba(11,11,13,.97)] p-3 shadow-2xl backdrop-blur"
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-[13px] font-medium text-[#D7D7DB]">한글 원격 입력</span>
+                  <button
+                    type="button"
+                    aria-label="한글 입력 닫기"
+                    className="grid h-6 w-6 place-items-center text-[#77777D] hover:text-[#ECECEE]"
+                    onClick={() => setRemoteTextOpen(false)}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={remoteTextInput}
+                    value={remoteText}
+                    maxLength={10_000}
+                    autoComplete="off"
+                    aria-label="한글 및 IME 원격 입력"
+                    placeholder="원격 입력칸을 클릭한 뒤 한글을 입력하세요"
+                    onChange={(event) => {
+                      setRemoteText(event.target.value);
+                      setRemoteTextError(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.stopPropagation();
+                        setRemoteTextOpen(false);
+                        return;
+                      }
+                      if (
+                        event.key !== "Enter" ||
+                        event.shiftKey ||
+                        event.nativeEvent.isComposing
+                      ) {
+                        return;
+                      }
+                      event.preventDefault();
+                      void pasteRemoteText();
+                    }}
+                    className="min-w-0 flex-1 rounded-[10px] border border-[#303035] bg-[#141416] px-3 py-2 text-[14px] text-[#ECECEE] outline-none placeholder:text-[#66666D] focus:border-[#66666D]"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!remoteText || remoteTextBusy}
+                    onClick={() => void pasteRemoteText()}
+                  >
+                    {remoteTextBusy ? "입력 중…" : "입력"}
+                  </Button>
+                </div>
+                <div
+                  className={`mt-2 text-[12px] ${remoteTextError ? "text-[#F17171]" : "text-[#77777D]"}`}
+                >
+                  {remoteTextError ??
+                    "먼저 원격 사이트의 입력칸을 클릭하고, 여기서 한글을 완성해 전송하세요."}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

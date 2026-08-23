@@ -40,6 +40,7 @@ chmod 600 "$temp_file"
   printf 'SANDBOX_PROVIDER=browserbase\n'
   printf 'BROWSERBASE_API_KEY=%s\n' "$browserbase_key"
   printf 'BROWSERBASE_PROJECT_ID=7419d7dc-f773-4176-9418-0c0d339a3c6a\n'
+  printf 'BROWSERBASE_REGION=ap-southeast-1\n'
   printf 'BROWSERBASE_MAX_CONCURRENT_SESSIONS=3\n'
   printf 'BROWSERBASE_MAX_SESSIONS_PER_USER=1\n'
   printf 'BROWSERBASE_TASK_TIMEOUT_SECONDS=600\n'

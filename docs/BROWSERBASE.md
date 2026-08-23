@@ -12,6 +12,7 @@ Store these values in `/opt/issam-bot/secret.env` and never expose them through 
 SANDBOX_PROVIDER=browserbase
 BROWSERBASE_API_KEY=replace-on-server
 BROWSERBASE_PROJECT_ID=replace-on-server
+BROWSERBASE_REGION=ap-southeast-1
 BROWSERBASE_MAX_CONCURRENT_SESSIONS=3
 BROWSERBASE_MAX_SESSIONS_PER_USER=1
 BROWSERBASE_TASK_TIMEOUT_SECONDS=600
@@ -20,6 +21,10 @@ BROWSERBASE_DAILY_SECONDS_PER_USER=1200
 BROWSERBASE_MONTHLY_WARNING_SECONDS=288000
 BROWSERBASE_MONTHLY_HARD_LIMIT_SECONDS=342000
 ```
+
+`ap-southeast-1` (Singapore) is the closest Browserbase runtime region currently
+available for Korean users. Existing Context IDs remain reusable; the region is
+applied when the next Browserbase Session is created.
 
 Application limits deliberately remain below the provider plan. Changing a provider dashboard limit
 does not change the product limit; both must be reviewed explicitly.
@@ -38,7 +43,10 @@ does not change the product limit; both must be reviewed explicitly.
    to finish or cancel before enabling user input.
 9. On return to the bot, snapshot the current URL/DOM, transfer the lease, and resume from a
    checkpoint rather than replaying the last click.
-10. On completion, cancellation, timeout, disconnect, or failure, attempt session termination in a
+10. If Browserbase reports the Session as terminal while a run continues, create one replacement
+    Session on the same Context, atomically persist the replacement reference, and retry only the
+    browser action that failed before execution.
+11. On completion, cancellation, timeout, disconnect, or failure, attempt session termination in a
     `finally` path, persist usage, release the slot, and wake the next queued task.
 
 Contexts preserve login state between sessions. A Context ID is never accepted directly from a
@@ -50,6 +58,12 @@ the user and excluded from prompts, screenshots, and long-term storage.
 Session creation and task execution are retryable only before a non-idempotent side effect. Use a
 stable task attempt ID and store the Browserbase session ID as soon as it exists. A retry must first
 check whether the previous session is still active.
+
+The product schedules cleanup after 180 seconds without an active run or viewer heartbeat. Each
+individual Browserbase Session has a 600-second lifetime. The Context outlives both limits, so a
+subsequent task—and a task that reaches the Session lifetime while still running—reopens Chrome
+without asking the user to repeat login. Replacement creation is deduplicated per Context and the
+database provider reference is updated with compare-and-set semantics.
 
 Handle at least these terminal paths:
 
@@ -81,10 +95,11 @@ increase bandwidth, latency, and the blast radius of a credential leak.
 
 Browserbase Live View forwards desktop key events, but cross-origin remote keyboard input does not
 reliably preserve browser IME composition. Direct Korean typing can therefore arrive as separated
-jamo. While the user holds computer control, the full-screen viewer exposes a local **한글/IME
-입력** field. The user first clicks the desired field in the remote browser, composes text locally,
-then presses Enter or **입력**. The server sends the completed Unicode string through Playwright's
-`keyboard.insertText()` over the existing authenticated computer-input endpoint. This does not
+jamo. While the user holds computer control, the compact full-screen toolbar exposes an on-demand
+**한글 입력** popover. The user first clicks the desired field in the remote browser, composes text
+locally, then presses Enter or **입력**. The server recovers the active Session in the API process
+and sends the completed Unicode string through Playwright's `keyboard.insertText()` over the
+existing authenticated computer-input endpoint. This does not
 depend on clipboard permission or page origin. Input is capped at 10,000 characters and remains
 subject to the active takeover lease.
 

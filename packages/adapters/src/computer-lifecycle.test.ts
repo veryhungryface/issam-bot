@@ -11,10 +11,12 @@ import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   acquireComputerExecutionLease,
+  ComputerSessionUnavailableError,
   provisionComputer,
   releaseComputerExecutionLease,
   renewComputerExecutionLease,
   screenLeaseIdForRun,
+  withComputerSessionRecovery,
 } from "./computer-lifecycle.js";
 
 const context = {
@@ -383,6 +385,78 @@ describe("computer provisioning", () => {
           kind: "browserbase",
         },
         data: { providerRef: "new-provider", kind: "browserbase" },
+      });
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reprovisions a terminal browser session, persists its ref, and retries the same action once", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-session-recovery-"));
+    const oldRef = {
+      id: "old-provider",
+      botId: "bot-1",
+      kind: "browserbase" as const,
+      providerRef: "old-provider",
+      fresh: false,
+    };
+    const replacementRef = {
+      id: "new-provider",
+      botId: "bot-1",
+      kind: "browserbase" as const,
+      providerRef: "new-provider",
+      fresh: false,
+    };
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      computer: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          id: "computer-1",
+          homeKey: "bot-1",
+          providerRef: oldRef.providerRef,
+          kind: oldRef.kind,
+          scope: "dedicated",
+          state: "running",
+          controlLeaseId: null,
+        }),
+        updateMany,
+      },
+    } as unknown as PrismaClient;
+    const sandbox = {
+      provision: vi.fn().mockResolvedValue(replacementRef),
+      prepare: vi.fn().mockResolvedValue(undefined),
+    } as unknown as SandboxProvider;
+    const deps = {
+      prisma,
+      sandbox,
+      home: {} as AgentHomeStore,
+      jobs: {} as JobPublisher,
+      events: {} as ThreadEvents,
+      dataDir,
+    };
+    const action = vi
+      .fn()
+      .mockRejectedValueOnce(new ComputerSessionUnavailableError())
+      .mockResolvedValueOnce("continued");
+
+    try {
+      await expect(
+        withComputerSessionRecovery(deps, "computer-1", oldRef, context, action),
+      ).resolves.toEqual({ computer: replacementRef, result: "continued" });
+      expect(action).toHaveBeenNthCalledWith(1, oldRef);
+      expect(action).toHaveBeenNthCalledWith(2, replacementRef);
+      expect(sandbox.provision).toHaveBeenCalledWith(
+        expect.objectContaining({ providerRef: oldRef.providerRef }),
+        context,
+      );
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "computer-1",
+          state: "running",
+          providerRef: oldRef.providerRef,
+          kind: oldRef.kind,
+        },
+        data: { providerRef: replacementRef.providerRef, kind: replacementRef.kind },
       });
     } finally {
       await rm(dataDir, { recursive: true, force: true });

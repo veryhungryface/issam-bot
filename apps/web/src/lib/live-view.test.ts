@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { isBrowserbaseDisconnectedMessage, screenIframeSandbox } from "./live-view";
+import { describe, expect, it, vi } from "vitest";
+import {
+  isBrowserbaseDisconnectedMessage,
+  pollBrowserbaseLiveViewRecovery,
+  screenIframeSandbox,
+} from "./live-view";
 
 describe("Browserbase Live View embedding", () => {
   it("uses Browserbase's documented iframe sandbox without top-navigation privileges", () => {
@@ -26,5 +30,38 @@ describe("Browserbase Live View embedding", () => {
     expect(isBrowserbaseDisconnectedMessage("browserbase-disconnected", true)).toBe(true);
     expect(isBrowserbaseDisconnectedMessage("browserbase-disconnected", false)).toBe(false);
     expect(isBrowserbaseDisconnectedMessage("unrelated", true)).toBe(false);
+  });
+
+  it("polls with bounded backoff until a replacement Live View is available", async () => {
+    const refresh = vi
+      .fn<() => Promise<string | null>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("https://live.example/replacement");
+    const wait = vi.fn(async () => undefined);
+
+    await expect(
+      pollBrowserbaseLiveViewRecovery(refresh, {
+        signal: new AbortController().signal,
+        attempts: 15,
+        intervalMs: 2_000,
+        wait,
+      }),
+    ).resolves.toBe("https://live.example/replacement");
+    expect(wait).toHaveBeenCalledTimes(3);
+    expect(refresh).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops recovery after its attempt limit without creating a session", async () => {
+    const refresh = vi.fn(async () => null);
+
+    await expect(
+      pollBrowserbaseLiveViewRecovery(refresh, {
+        signal: new AbortController().signal,
+        attempts: 2,
+        wait: async () => undefined,
+      }),
+    ).resolves.toBeNull();
+    expect(refresh).toHaveBeenCalledTimes(2);
   });
 });

@@ -56,6 +56,7 @@ import {
   releaseComputerExecutionLease,
   renewComputerExecutionLease,
   screenLeaseIdForRun,
+  withComputerSessionRecovery,
 } from "./computer-lifecycle.js";
 import { withComputerScreenAvailability } from "./computer-screens.js";
 import {
@@ -472,9 +473,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
         if (!bot.computer) throw new Error("Bot has no computer");
         const storedComputer = bot.computer;
         const computerMode = parseComputerMode(storedComputer.scope);
-        const computer = await provisionComputer(deps, storedComputer.id, context, "bot");
+        let computer = await provisionComputer(deps, storedComputer.id, context, "bot");
         screenRelease = { computer, context };
         scheduleComputerSleep(deps.jobs, storedComputer.id);
+        const withRecoveredComputer = async <T>(work: (active: ComputerRef) => Promise<T>) => {
+          const recovered = await withComputerSessionRecovery(
+            deps,
+            storedComputer.id,
+            computer,
+            context,
+            work,
+          );
+          computer = recovered.computer;
+          screenRelease = { computer, context };
+          scheduleComputerSleep(deps.jobs, storedComputer.id);
+          return recovered.result;
+        };
         const currentTurnFiles = deps.artifacts
           ? await materializeCurrentTurnFiles(
               { prisma: deps.prisma, artifacts: deps.artifacts, sandbox: deps.sandbox },
@@ -546,7 +560,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return { error: "Teaching is in progress. Stop teaching before using the computer." };
             }
             return computerScreenToolResult(async () =>
-              formatObservation(await deps.sandbox.observe(computer, context)),
+              formatObservation(
+                await withRecoveredComputer((active) => deps.sandbox.observe(active, context)),
+              ),
             );
           }
           if (name === "computer_act") {
@@ -554,14 +570,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return { error: "Teaching is in progress. Stop teaching before using the computer." };
             }
             return computerScreenToolResult(async () => {
-              const result = await deps.sandbox.act(
-                computer,
-                {
-                  actions: parseComputerActions(args.actions),
-                  observe: args.observe !== false,
-                  settleMs: Number(args.settle_ms ?? 350),
-                },
-                context,
+              const result = await withRecoveredComputer((active) =>
+                deps.sandbox.act(
+                  active,
+                  {
+                    actions: parseComputerActions(args.actions),
+                    observe: args.observe !== false,
+                    settleMs: Number(args.settle_ms ?? 350),
+                  },
+                  context,
+                ),
               );
               return result.observation
                 ? formatObservation(
@@ -694,21 +712,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "open_path") {
             const requestedPath = String(args.path ?? "");
             return computerScreenToolResult(async () => {
-              const result = await deps.sandbox.act(
-                computer,
-                {
-                  actions: [
-                    {
-                      kind: "open",
-                      path: /^https?:\/\//i.test(requestedPath)
-                        ? requestedPath
-                        : resolveBotWorkspacePath(computerMode, bot.id, requestedPath),
-                    },
-                  ],
-                  observe: true,
-                  settleMs: 600,
-                },
-                context,
+              const result = await withRecoveredComputer((active) =>
+                deps.sandbox.act(
+                  active,
+                  {
+                    actions: [
+                      {
+                        kind: "open",
+                        path: /^https?:\/\//i.test(requestedPath)
+                          ? requestedPath
+                          : resolveBotWorkspacePath(computerMode, bot.id, requestedPath),
+                      },
+                    ],
+                    observe: true,
+                    settleMs: 600,
+                  },
+                  context,
+                ),
               );
               return result.observation
                 ? formatObservation(result.observation, `opened ${requestedPath}`)
@@ -718,20 +738,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "launch_app") {
             const application = String(args.application ?? "");
             return computerScreenToolResult(async () => {
-              const result = await deps.sandbox.act(
-                computer,
-                {
-                  actions: [
-                    {
-                      kind: "launch",
-                      application,
-                      uri: args.uri ? String(args.uri) : undefined,
-                    },
-                  ],
-                  observe: true,
-                  settleMs: 600,
-                },
-                context,
+              const result = await withRecoveredComputer((active) =>
+                deps.sandbox.act(
+                  active,
+                  {
+                    actions: [
+                      {
+                        kind: "launch",
+                        application,
+                        uri: args.uri ? String(args.uri) : undefined,
+                      },
+                    ],
+                    observe: true,
+                    settleMs: 600,
+                  },
+                  context,
+                ),
               );
               return result.observation
                 ? formatObservation(result.observation, `launched ${application}`)

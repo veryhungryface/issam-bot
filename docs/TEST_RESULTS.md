@@ -36,8 +36,8 @@ Validation performed for this change:
 | Healthcheck against a local JSON health endpoint, including revision match | Pass |
 | `git diff --check` | Pass |
 | Full monorepo TypeScript checks | Pass; 19/19 Turbo tasks |
-| Unit/integration tests | Pass; the latest adapters run passed 330 tests with 7 skipped, and the earlier full monorepo run passed 654 with 53 environment-dependent tests skipped |
-| Production Vite web build | Pass; 2,331 modules transformed |
+| Unit/integration tests | Pass; full monorepo run passed 686 tests with 53 environment-dependent tests skipped |
+| Production Vite web build | Pass; 2,333 modules transformed |
 | Docker Compose render on the target VPS | Pass with Docker Compose 2.27.1 |
 | Caddy container configuration validation on the target VPS | Pass with Caddy 2.10.2 |
 
@@ -61,6 +61,11 @@ secrets into CI logs.
 | Korean product UI | Pass locally | The primary navigation, onboarding, account/model/voice settings, browser controls, routines, approvals, status labels, and loading/error copy use Korean. Provider and model product names remain unchanged. |
 | Immediate chat feedback | Pass in unit/build validation | Sending inserts the user bubble immediately with `전송 중…`; the server event replaces it, with a delayed refresh used only as recovery. Production browser verification is required after the image is deployed. |
 | Browserbase Korean text path | Pass in adapter tests | Remote composed text uses Playwright `keyboard.insertText` through a dedicated text action instead of per-key input. Production Browserbase verification is required after deployment. |
+| API/Worker Korean input recovery | Pass in adapter tests | A fresh API provider recovers the worker-created Session over CDP and inserts the complete Korean string `라면`; submitted text and connection URLs are excluded from failure logs. |
+| Live View immediate feedback | Pass in web validation | Opening the small preview displays the full overlay before RPC completion, keeps a bounded spinner through iframe load, and uses a 44px toolbar with an on-demand Korean input popover. |
+| Timed-out Session recovery | Pass in adapter tests | A terminal Browserbase Session is replaced using the same persistent Context, the new provider reference is CAS-persisted, and the interrupted browser action is retried once. Concurrent replacement is deduplicated. |
+| Live View replacement polling | Pass in web unit tests | During an active run only, a disconnected iframe polls for a new server-issued Live View URL for up to 30 seconds without creating a Session from the client. |
+| Browserbase region | Changed for new sessions | New sessions default to `ap-southeast-1` (Singapore), the closest currently available Browserbase runtime to Korea. Existing active sessions keep their original region until replaced. |
 | VPS location | Observed | The deployed VPS geolocates to Buffalo, New York, United States. |
 | Database location | Observed | The Supabase PostgreSQL endpoint is in `ap-northeast-2` (Seoul). |
 | VPS to database latency | Slow | A first connection took about 3.41 seconds; repeated `SELECT 1` probes took about 236–241 ms each. |

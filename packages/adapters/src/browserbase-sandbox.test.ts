@@ -9,7 +9,12 @@ describe("BrowserbaseSandboxProvider", () => {
     const fixture = browserFixture();
     const api = apiFixture();
     const provider = new BrowserbaseSandboxProvider(
-      { apiKey: "test-key", projectId: "project-1", timeoutSeconds: 300 },
+      {
+        apiKey: "test-key",
+        projectId: "project-1",
+        timeoutSeconds: 300,
+        region: "ap-southeast-1",
+      },
       api.client,
       fixture.sdk,
     );
@@ -29,6 +34,7 @@ describe("BrowserbaseSandboxProvider", () => {
       expect.objectContaining({
         contextId: "context-1",
         timeoutSeconds: 300,
+        region: "ap-southeast-1",
         metadata: expect.objectContaining({
           botId: "bot-1",
           workspaceId: "workspace-1",
@@ -75,6 +81,7 @@ describe("BrowserbaseSandboxProvider", () => {
       title: "Example",
       aria: '- heading "Example"',
     });
+    expect(api.getSession).not.toHaveBeenCalled();
   });
 
   it("reuses a saved context, pauses bot actions during takeover, and returns Live View", async () => {
@@ -146,6 +153,36 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(apiBrowser.connectOverCDP).not.toHaveBeenCalled();
   });
 
+  it("recovers CDP in a new API provider and inserts Unicode text into the focused element", async () => {
+    const api = apiFixture();
+    const worker = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      browserFixture().sdk,
+    );
+    const computer = await worker.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    const apiBrowser = browserFixture();
+    const apiProvider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      apiBrowser.sdk,
+    );
+
+    await apiProvider.sendInput(
+      computer,
+      { kind: "text", text: "라면" },
+      { leaseId: "lease-1", holder: "user", fence: 1 },
+      adapterContext(),
+    );
+
+    expect(api.getSession).toHaveBeenCalledWith("session-1");
+    expect(apiBrowser.connectOverCDP).toHaveBeenCalledWith("wss://cdp.example/session-1");
+    expect(apiBrowser.keyboardInsertText).toHaveBeenCalledWith("라면");
+  });
+
   it("recovers an active session and CDP connection after a worker restart", async () => {
     const api = apiFixture();
     const first = new BrowserbaseSandboxProvider(
@@ -205,6 +242,50 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(replacement.providerRef).not.toBe(saved.providerRef);
     expect(replacement.fresh).toBe(false);
     expect(api.createContext).toHaveBeenCalledTimes(1);
+    expect(api.createSession).toHaveBeenLastCalledWith(
+      expect.objectContaining({ contextId: "context-1" }),
+    );
+  });
+
+  it("deduplicates a terminal in-process session replacement and preserves its context", async () => {
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      browserFixture().sdk,
+    );
+    const saved = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    api.getSession.mockResolvedValue({
+      id: "session-1",
+      connectUrl: "wss://cdp.example/session-1",
+      contextId: "context-1",
+      status: "TIMED_OUT",
+    });
+    api.createSession.mockResolvedValue({
+      id: "session-2",
+      connectUrl: "wss://cdp.example/session-2",
+      contextId: "context-1",
+    });
+
+    const replacements = await Promise.all([
+      provider.provision(
+        { botId: "bot-1", homePath: "/unused", providerRef: saved.providerRef },
+        adapterContext(),
+      ),
+      provider.provision(
+        { botId: "bot-1", homePath: "/unused", providerRef: saved.providerRef },
+        adapterContext(),
+      ),
+    ]);
+
+    expect(replacements[0]?.providerRef).toBe(replacements[1]?.providerRef);
+    expect(replacements[0]?.providerRef).not.toBe(saved.providerRef);
+    expect(replacements[0]?.fresh).toBe(false);
+    expect(api.createContext).toHaveBeenCalledTimes(1);
+    expect(api.createSession).toHaveBeenCalledTimes(2);
     expect(api.createSession).toHaveBeenLastCalledWith(
       expect.objectContaining({ contextId: "context-1" }),
     );
@@ -313,12 +394,16 @@ function adapterContext(): AdapterContext {
 }
 
 function apiFixture() {
+  let currentContextId = "context-1";
   const createContext = vi.fn(async () => ({ id: "context-1" }));
-  const createSession = vi.fn(async () => ({
-    id: "session-1",
-    connectUrl: "wss://cdp.example/session-1",
-    contextId: "context-1",
-  }));
+  const createSession = vi.fn(async (input: { contextId: string }) => {
+    currentContextId = input.contextId;
+    return {
+      id: "session-1",
+      connectUrl: "wss://cdp.example/session-1",
+      contextId: input.contextId,
+    };
+  });
   const liveView = vi.fn(async () => ({
     pages: [{ id: "page-1", debuggerFullscreenUrl: "https://live.example/full" }],
   }));
@@ -326,7 +411,7 @@ function apiFixture() {
     async (): Promise<BrowserbaseSession | undefined> => ({
       id: "session-1",
       connectUrl: "wss://cdp.example/session-1",
-      contextId: "context-1",
+      contextId: currentContextId,
       status: "RUNNING",
     }),
   );

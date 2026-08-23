@@ -23,17 +23,27 @@ export class ComputerBusyError extends Error {
   }
 }
 
+/** A persistent computer whose ephemeral provider session must be reprovisioned. */
+export class ComputerSessionUnavailableError extends Error {
+  constructor(message = "Computer session is no longer available", options?: ErrorOptions) {
+    super(message, options);
+    this.name = "ComputerSessionUnavailableError";
+  }
+}
+
+export interface ComputerProvisionDeps {
+  prisma: PrismaClient;
+  sandbox: SandboxProvider;
+  home: AgentHomeStore;
+  jobs: JobPublisher;
+  events: ThreadEvents;
+  dataDir?: string;
+}
+
 export { toComputerRef } from "./computer-support.js";
 
 export async function provisionComputer(
-  deps: {
-    prisma: PrismaClient;
-    sandbox: SandboxProvider;
-    home: AgentHomeStore;
-    jobs: JobPublisher;
-    events: ThreadEvents;
-    dataDir?: string;
-  },
+  deps: ComputerProvisionDeps,
   computerId: string,
   context: AdapterContext,
   controlHolder: "bot" | "none" = "none",
@@ -146,6 +156,23 @@ export async function provisionComputer(
     }
     throw error;
   }
+}
+
+/** Retry once after replacing only the ephemeral session behind a persistent computer. */
+export async function withComputerSessionRecovery<T>(
+  deps: ComputerProvisionDeps,
+  computerId: string,
+  computer: ComputerRef,
+  context: AdapterContext,
+  work: (active: ComputerRef) => Promise<T>,
+): Promise<{ computer: ComputerRef; result: T }> {
+  try {
+    return { computer, result: await work(computer) };
+  } catch (error) {
+    if (!(error instanceof ComputerSessionUnavailableError)) throw error;
+  }
+  const replacement = await provisionComputer(deps, computerId, context, "bot");
+  return { computer: replacement, result: await work(replacement) };
 }
 
 async function reconnectComputer(
