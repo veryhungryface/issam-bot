@@ -217,6 +217,7 @@ export async function createApp(
       defaultProvider: env.defaultProvider,
       defaultModel: env.defaultModel,
       openRouterKey: env.deploymentModelKey,
+      openAiKey: env.openAiKey,
       webOrigin: env.webOrigin,
       screenProxySecret: env.authSecret,
       sandboxProvider: env.sandboxProvider,
@@ -253,7 +254,7 @@ export async function createApp(
     if (matched) return c.newResponse(response.body, response);
     await next();
   });
-  mountVoiceHttpRoutes(app, { prisma, secrets }, async (c) => {
+  mountVoiceHttpRoutes(app, { prisma, secrets, deploymentOpenAiKey: env.openAiKey }, async (c) => {
     const session = await auth.api.getSession({ headers: sessionHeaders(c.req.raw) });
     if (!session?.user) return null;
     return requireMembership(prisma, session.user.id).catch(() => null);

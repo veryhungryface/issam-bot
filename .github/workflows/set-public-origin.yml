@@ -1,0 +1,48 @@
+name: Set public origin
+
+on:
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: Public HTTPS origin (no trailing slash)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate origin
+        env:
+          ORIGIN: ${{ inputs.origin }}
+        run: |
+          [[ "$ORIGIN" =~ ^https://[A-Za-z0-9._:-]+$ ]]
+
+      - name: Configure deploy SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/issam_bot_deploy
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/issam_bot_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Update secret.env and recreate app containers
+        env:
+          ORIGIN: ${{ inputs.origin }}
+        run: |
+          host="${ORIGIN#https://}"
+          ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes deploy@172.245.30.225)
+          ssh "${ssh_args[@]}" \
+            "sudo -n sed -i \
+              -e 's|^WEB_ORIGIN=.*|WEB_ORIGIN=${ORIGIN}|' \
+              -e 's|^BETTER_AUTH_URL=.*|BETTER_AUTH_URL=${ORIGIN}|' \
+              -e 's|^API_URL=.*|API_URL=${ORIGIN}|' \
+              -e 's|^RAKAZO_HOST=.*|RAKAZO_HOST=${host}|' \
+              /opt/issam-bot/secret.env"
+          ssh "${ssh_args[@]}" \
+            'cd /opt/issam-bot && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --remove-orphans'

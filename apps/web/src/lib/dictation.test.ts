@@ -343,6 +343,98 @@ describe("Dictation recorder fallback", () => {
 });
 
 describe("Dictation web speech", () => {
+  it("uses the configured transcribe API instead of Chrome Web Speech", async () => {
+    const startedSpeech = vi.fn();
+    class FakeRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onresult = null;
+      onerror = null;
+      onend = null;
+      start = startedSpeech;
+      stop = vi.fn();
+      abort = vi.fn();
+    }
+    vi.stubGlobal("window", { SpeechRecognition: FakeRecognition, isSecureContext: true });
+    const track = { stop: vi.fn() };
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn(async () => ({ getTracks: () => [track] })) },
+      language: "en-US",
+    });
+    vi.stubGlobal(
+      "MediaRecorder",
+      class {
+        state = "inactive";
+        start() {
+          this.state = "recording";
+        }
+        stop() {
+          this.state = "inactive";
+        }
+      },
+    );
+
+    const dictation = new Dictation();
+    await dictation.listen({
+      mode: "hold",
+      transcribe: true,
+      onFinal: () => undefined,
+    });
+
+    expect(startedSpeech).not.toHaveBeenCalled();
+    expect(dictation.state.status).toBe("listening");
+  });
+
+  it("recognizes Korean when the document language is ko", async () => {
+    const instances: Array<{ lang: string; start: ReturnType<typeof vi.fn> }> = [];
+    class FakeRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onresult = null;
+      onerror = null;
+      onend = null;
+      start = vi.fn();
+      stop = vi.fn();
+      abort = vi.fn();
+      constructor() {
+        instances.push(this);
+      }
+    }
+    vi.stubGlobal("window", { SpeechRecognition: FakeRecognition, isSecureContext: true });
+    vi.stubGlobal("navigator", { language: "ko" });
+
+    const dictation = new Dictation();
+    await dictation.listen({ mode: "endpoint", onFinal: () => undefined });
+    expect(instances[0]?.lang).toBe("ko-KR");
+  });
+
+  it("explains a Chrome network failure instead of a generic error", async () => {
+    const instances: Array<{ onerror: ((event: { error?: string }) => void) | null }> = [];
+    class FakeRecognition {
+      continuous = false;
+      interimResults = false;
+      lang = "";
+      onresult = null;
+      onerror: ((event: { error?: string }) => void) | null = null;
+      onend = null;
+      start = vi.fn();
+      stop = vi.fn();
+      abort = vi.fn();
+      constructor() {
+        instances.push(this);
+      }
+    }
+    vi.stubGlobal("window", { SpeechRecognition: FakeRecognition, isSecureContext: false });
+    vi.stubGlobal("navigator", { language: "ko-KR" });
+
+    const dictation = new Dictation();
+    await dictation.listen({ mode: "endpoint", onFinal: () => undefined });
+    instances[0]?.onerror?.({ error: "network" });
+    expect(dictation.state.error).toContain("HTTP");
+  });
+
   it("restarts endpoint recognition after a quiet end", async () => {
     const instances: FakeRecognition[] = [];
     class FakeRecognition {
@@ -359,7 +451,7 @@ describe("Dictation web speech", () => {
         instances.push(this);
       }
     }
-    vi.stubGlobal("window", { SpeechRecognition: FakeRecognition });
+    vi.stubGlobal("window", { SpeechRecognition: FakeRecognition, isSecureContext: true });
     vi.stubGlobal("navigator", { language: "en-US" });
 
     const dictation = new Dictation();

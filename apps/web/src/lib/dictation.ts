@@ -30,6 +30,33 @@ export function webSpeechAvailable(): boolean {
   return Boolean(speechRecognitionCtor());
 }
 
+export function recognitionLanguage(): string {
+  const docLang = typeof document !== "undefined" ? document.documentElement.lang.trim() : "";
+  const nav = typeof navigator !== "undefined" ? navigator.language : "";
+  const raw = docLang || nav || "ko-KR";
+  return /^ko(?:-|$)/i.test(raw) ? "ko-KR" : raw;
+}
+
+function insecureOrigin(): boolean {
+  return typeof window !== "undefined" && window.isSecureContext === false;
+}
+
+function speechRecognitionError(code?: string): string {
+  if (code === "not-allowed") {
+    return "마이크 권한이 거부되었습니다. 브라우저 주소창에서 마이크를 허용하세요.";
+  }
+  if (code === "audio-capture") return "마이크를 찾을 수 없습니다.";
+  if (code === "language-not-supported") {
+    return "이 브라우저는 한국어 음성 인식을 지원하지 않습니다. OpenAI 또는 ElevenLabs 받아쓰기를 연결하세요.";
+  }
+  if (code === "network" || code === "service-not-allowed") {
+    return insecureOrigin()
+      ? "브라우저 음성 인식이 실패했습니다. HTTP에서는 Google 음성 인식이 막힙니다. OpenAI 또는 ElevenLabs 받아쓰기를 연결하거나 HTTPS로 접속하세요."
+      : "브라우저 음성 인식이 네트워크에서 실패했습니다. OpenAI 또는 ElevenLabs 받아쓰기를 연결하면 설정한 API로 변환합니다.";
+  }
+  return "음성 입력에 실패했습니다.";
+}
+
 function speechRecognitionCtor(): SpeechRecognitionCtor | undefined {
   if (typeof window === "undefined") return undefined;
   const host = window as Window & {
@@ -120,18 +147,21 @@ export class Dictation {
     const mine = this.token;
     this.onFinal = opts.onFinal;
     this.set({ status: "listening", transcript: "" });
-    if (webSpeechAvailable()) {
-      this.listenWebSpeech(opts.mode, opts.endpointMs ?? 850, mine);
-      return;
-    }
+    // Prefer the configured voice provider. Chrome Web Speech talks to Google and
+    // fails on HTTP origins even when OpenAI/ElevenLabs STT is connected.
     if (opts.transcribe) {
       await this.listenRecorder(mine, opts.mode, opts.endpointMs ?? 850);
       return;
     }
+    if (webSpeechAvailable()) {
+      this.listenWebSpeech(opts.mode, opts.endpointMs ?? 850, mine);
+      return;
+    }
     this.set({
       ...IDLE,
-      error:
-        "이 브라우저는 기기 내 음성 인식을 지원하지 않습니다. 음성 변환을 지원하는 공급자를 연결하거나 Chrome 또는 데스크톱 앱을 사용하세요.",
+      error: insecureOrigin()
+        ? "음성 입력은 HTTPS에서만 동작합니다. OpenAI 또는 ElevenLabs 받아쓰기를 연결하거나 HTTPS로 접속하세요."
+        : "이 브라우저는 기기 내 음성 인식을 지원하지 않습니다. 음성 변환을 지원하는 공급자를 연결하거나 Chrome 또는 데스크톱 앱을 사용하세요.",
     });
   }
 
@@ -141,7 +171,7 @@ export class Dictation {
     const rec = new Ctor();
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = navigator.language || "en-US";
+    rec.lang = recognitionLanguage();
     rec.onresult = (event) => {
       if (this.token !== mine) return;
       let transcript = "";
@@ -162,7 +192,7 @@ export class Dictation {
       if (event.error === "aborted" || event.error === "no-speech") return;
       this.set({
         ...IDLE,
-        error: "음성 입력에 실패했습니다.",
+        error: speechRecognitionError(event.error),
       });
     };
     rec.onend = () => {
@@ -195,7 +225,9 @@ export class Dictation {
       if (this.token !== mine) return;
       this.set({
         ...IDLE,
-        error: "마이크를 사용할 수 없습니다.",
+        error: insecureOrigin()
+          ? "마이크를 사용할 수 없습니다. HTTP 주소에서는 브라우저가 마이크를 차단합니다. HTTPS로 접속하세요."
+          : "마이크를 사용할 수 없습니다.",
       });
       return;
     }
