@@ -2,8 +2,11 @@ import { StrictMode, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
+import { desktopBridge } from "./lib/desktop";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import "./styles.css";
+
+if (desktopBridge()) document.documentElement.classList.add("rakazo-desktop");
 
 markOnce("rk:renderer:module-evaluated");
 

@@ -1612,14 +1612,21 @@ export function ShellPage() {
         data-testid="side-panel"
         data-panel={panel ?? "closed"}
         className={`absolute inset-y-0 right-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-[#0A0A0B] transition-[width] duration-150 ease-out md:relative md:inset-auto ${
-          panel && active
+          panel && (active || panel === "create")
             ? "w-full border-l border-[#141416] md:w-[384px]"
             : "pointer-events-none w-0"
         }`}
       >
-        {panel && active ? (
+        {panel === "create" ? (
           <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]">
-            {panel !== "routine" && panel !== "create" ? (
+            <CreateBotForm
+              onCancel={() => setPanel(null)}
+              onCreate={(input) => void createBot(input)}
+            />
+          </div>
+        ) : panel && active ? (
+          <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]">
+            {panel !== "routine" ? (
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-[13.5px] text-[#85858A]">
                   {koreanStatusLabel(computer?.state ?? active.status)}
@@ -1768,12 +1775,6 @@ export function ShellPage() {
                   />
                 ) : null}
               </div>
-            ) : null}
-            {panel === "create" ? (
-              <CreateBotForm
-                onCancel={() => setPanel(null)}
-                onCreate={(input) => void createBot(input)}
-              />
             ) : null}
             {panel === "settings" ? (
               <BotSettings

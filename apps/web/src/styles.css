@@ -33,11 +33,11 @@ body,
   background: #414147;
 }
 
-.app-drag {
+html.rakazo-desktop .app-drag {
   -webkit-app-region: drag;
 }
 
-.app-no-drag {
+html.rakazo-desktop .app-no-drag {
   -webkit-app-region: no-drag;
 }
 
