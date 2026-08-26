@@ -98,6 +98,28 @@ describe("sandbox idle", () => {
     );
   });
 
+  it("records the current Browserbase page before suspending", async () => {
+    const harness = idleHarness();
+    harness.computer.kind = "browserbase";
+    const observe = vi.fn().mockResolvedValue({
+      activeWindow: { id: "https://example.com/inbox", title: "Inbox" },
+    });
+    (harness.sandbox as { observe?: typeof observe }).observe = observe;
+    (harness.home as { checkpoint?: ReturnType<typeof vi.fn> }).checkpoint = vi
+      .fn()
+      .mockResolvedValue("rev-checkpoint");
+
+    await sleepComputerIfIdle(harness.deps, "computer-id");
+
+    expect(observe).toHaveBeenCalledOnce();
+    expect(harness.prisma.computer.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ lastPageUrl: "https://example.com/inbox" }),
+      }),
+    );
+    expect(harness.sandbox.stop).toHaveBeenCalledOnce();
+  });
+
   it("never stops the computer when checkpoint export fails", async () => {
     const harness = idleHarness({ exportError: new Error("checkpoint unavailable") });
     harness.prisma.run.findFirst.mockResolvedValueOnce(null);

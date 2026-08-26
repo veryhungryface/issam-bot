@@ -7,7 +7,7 @@ import {
 import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 import { expireComputerControl, hasActiveComputerControl } from "./computer-control.js";
-import { toComputerRef } from "./computer-lifecycle.js";
+import { recordLastComputerPage, toComputerRef } from "./computer-lifecycle.js";
 import { checkpointComputerWorkspace } from "./computer-workspace.js";
 
 export const DEFAULT_SANDBOX_IDLE_MS = 10 * 60 * 1000;
@@ -71,6 +71,7 @@ export async function sleepComputerIfIdle(
     signal: new AbortController().signal,
   };
   const ref = toComputerRef(computer);
+  await recordLastComputerPage(deps, computer, ctx);
   const revision = await checkpointComputerWorkspace(
     deps.home,
     deps.sandbox,

@@ -29,6 +29,7 @@ import {
   isSupermemoryEnabled,
   listPiCatalog,
   type PiOAuthLogins,
+  recordLastComputerPage,
   resolveBotWorkspacePath,
   sanitizeComposioError,
   savePushToken,
@@ -764,6 +765,7 @@ export function createRouter(deps: RouterDeps) {
           if (bot.computer.providerRef) {
             const ctx = computerContext(context.actor, bot.id, "stop");
             const ref = toComputerRef(bot.computer);
+            await recordLastComputerPage(deps, bot.computer, ctx);
             await checkpointAndRecordComputerWorkspace(deps, bot.computer, ref, ctx);
             await deps.sandbox.stop(ref, ctx);
           }

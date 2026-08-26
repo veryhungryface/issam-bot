@@ -575,6 +575,7 @@ model Computer {
   executionLeaseExpiresAt  DateTime?
   executionFence           Int      @default(0)
   screenUrl                String?
+  lastPageUrl              String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   bots                     Bot[]

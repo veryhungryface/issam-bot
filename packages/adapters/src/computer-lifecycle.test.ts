@@ -158,6 +158,64 @@ describe("computer provisioning", () => {
     }
   });
 
+  it("reopens the last recorded page when a fresh Browserbase session boots", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-last-page-"));
+    const ref = {
+      id: "provider-1",
+      botId: "bot-1",
+      kind: "browserbase" as const,
+      providerRef: "browserbase:v1:ctx",
+      fresh: true,
+    };
+    const act = vi.fn().mockResolvedValue({ completed: 1 });
+    const prisma = {
+      computer: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          id: "computer-1",
+          homeKey: "bot-1",
+          providerRef: null,
+          kind: "browserbase",
+          scope: "dedicated",
+          state: "stopped",
+          controlLeaseId: null,
+          lastPageUrl: "https://example.com/dashboard",
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    } as unknown as PrismaClient;
+    const sandbox = {
+      provision: vi.fn().mockResolvedValue(ref),
+      prepare: vi.fn().mockResolvedValue(undefined),
+      importWorkspace: vi.fn().mockResolvedValue(undefined),
+      act,
+    } as unknown as SandboxProvider;
+    const home = {
+      exportHome: vi.fn(async function* () {}),
+    } as unknown as AgentHomeStore;
+
+    try {
+      await provisionComputer(
+        {
+          prisma,
+          sandbox,
+          home,
+          jobs: {} as JobPublisher,
+          events: {} as ThreadEvents,
+          dataDir,
+        },
+        "computer-1",
+        context,
+      );
+      expect(act).toHaveBeenCalledWith(
+        ref,
+        { actions: [{ kind: "open", path: "https://example.com/dashboard" }], observe: false },
+        context,
+      );
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("releases the screen when activation fails on a resumed Team computer", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-team-activation-rollback-"));
     const ref = {

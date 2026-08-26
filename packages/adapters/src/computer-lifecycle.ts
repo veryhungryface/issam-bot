@@ -9,6 +9,7 @@ import type {
 import { screenLeaseId } from "@rakazo/core";
 import { type PrismaClient, parseComputerMode, type ThreadEvents } from "@rakazo/db";
 import { expireComputerControl, hasActiveComputerControl } from "./computer-control.js";
+import { toComputerRef } from "./computer-support.js";
 import { ensureComputerWorkspaceLayout, restoreComputerWorkspace } from "./computer-workspace.js";
 import { resolveAgentHomePath } from "./home.js";
 
@@ -41,6 +42,59 @@ export interface ComputerProvisionDeps {
 }
 
 export { toComputerRef } from "./computer-support.js";
+
+const RESTORABLE_PAGE_URL = /^https?:\/\//i;
+const MAX_LAST_PAGE_URL_LENGTH = 2_048;
+
+/**
+ * Best-effort: remember the page a Browserbase session is showing so the next
+ * session can reopen it. Browser sessions are ephemeral while the Context keeps
+ * logins, so the URL is the only piece a fresh session cannot recover itself.
+ */
+export async function recordLastComputerPage(
+  deps: { prisma: PrismaClient; sandbox: SandboxProvider },
+  computer: {
+    id: string;
+    homeKey: string;
+    providerRef: string | null;
+    kind: string;
+    updatedAt: Date;
+  },
+  context: AdapterContext,
+): Promise<void> {
+  if (computer.kind !== "browserbase" || !computer.providerRef) return;
+  try {
+    const observation = await deps.sandbox.observe(toComputerRef(computer), context);
+    const url = observation.activeWindow?.id;
+    if (!url || !RESTORABLE_PAGE_URL.test(url) || url.length > MAX_LAST_PAGE_URL_LENGTH) return;
+    await deps.prisma.computer.updateMany({
+      where: { id: computer.id, updatedAt: computer.updatedAt },
+      // Saving the hint is not user activity: keep updatedAt untouched so idle
+      // sleep's optimistic-concurrency checks against it still match.
+      data: { lastPageUrl: url, updatedAt: computer.updatedAt },
+    });
+  } catch {
+    // Losing the restore hint must never block or fail a stop.
+  }
+}
+
+async function restoreLastComputerPage(
+  deps: { sandbox: SandboxProvider },
+  ref: ComputerRef,
+  lastPageUrl: string | null,
+  context: AdapterContext,
+): Promise<void> {
+  if (ref.kind !== "browserbase" || !lastPageUrl || !RESTORABLE_PAGE_URL.test(lastPageUrl)) return;
+  try {
+    await deps.sandbox.act(
+      ref,
+      { actions: [{ kind: "open", path: lastPageUrl }], observe: false },
+      context,
+    );
+  } catch {
+    // The saved page may be gone or blocked by URL policy; boot continues on a blank page.
+  }
+}
 
 export async function provisionComputer(
   deps: ComputerProvisionDeps,
@@ -107,6 +161,9 @@ export async function provisionComputer(
       context.botId,
       context,
     );
+    if (replacement) {
+      await restoreLastComputerPage(deps, ref, existing.lastPageUrl, context);
+    }
     const activeControl = hasActiveComputerControl(existing);
     const activated = await deps.prisma.computer.updateMany({
       where: {
