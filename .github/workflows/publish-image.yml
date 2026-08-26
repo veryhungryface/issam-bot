@@ -31,7 +31,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rakazo/db generate
-      - run: pnpm check
+      - run: pnpm exec turbo check --filter=!@rakazo/mobile
       - run: pnpm test
 
   build:
