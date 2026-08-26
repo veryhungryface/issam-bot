@@ -127,6 +127,31 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(fixture.keyboardInsertText).toHaveBeenCalledWith("붙여넣기 실패 대비");
   });
 
+  it("rejects typing when no page element is focused instead of silently dropping it", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.evaluate.mockResolvedValueOnce(false);
+
+    await expect(
+      provider.act(
+        computer,
+        { actions: [{ kind: "text", text: "포커스 없음" }], observe: false },
+        adapterContext(),
+      ),
+    ).rejects.toThrow("No input is focused");
+    expect(fixture.keyboardInsertText).not.toHaveBeenCalled();
+  });
+
   it("reuses a saved context, pauses bot actions during takeover, and returns Live View", async () => {
     const fixture = browserFixture();
     const api = apiFixture();
@@ -555,7 +580,7 @@ function browserFixture() {
   const mouseWheel = vi.fn(async () => undefined);
   const keyboardPress = vi.fn(async () => undefined);
   const keyboardInsertText = vi.fn(async () => undefined);
-  const evaluate = vi.fn(async () => undefined);
+  const evaluate = vi.fn(async (): Promise<unknown> => true);
   const screenshot = vi.fn(async () => Buffer.from([1, 2, 3]));
   const page = {
     isClosed: vi.fn(() => false),

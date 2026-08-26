@@ -624,6 +624,7 @@ async function applyBrowserAction(
       break;
     }
     case "text": {
+      await assertEditableFocus(page);
       await page.keyboard.insertText(action.text);
       break;
     }
@@ -652,6 +653,7 @@ async function applyBrowserAction(
       } catch {
         // Clipboard access can be denied (blank pages, permission errors); typing still works.
       }
+      await assertEditableFocus(page);
       await page.keyboard.insertText(action.text);
       break;
     }
@@ -676,6 +678,36 @@ async function applyBrowserAction(
       break;
   }
   throwIfAborted(context);
+}
+
+/**
+ * insertText silently does nothing without a focused editable element, which
+ * reads as "typing is broken" to agents and users. Turn that into an explicit
+ * error so the caller clicks the target field and retries.
+ */
+async function assertEditableFocus(page: Page): Promise<void> {
+  let focused: unknown = true;
+  try {
+    focused = await page.evaluate(() => {
+      const doc = (
+        globalThis as unknown as {
+          document?: { activeElement?: { tagName?: string } | null };
+        }
+      ).document;
+      const element = doc?.activeElement;
+      if (!element) return false;
+      const tag = String(element.tagName ?? "").toUpperCase();
+      return tag !== "BODY" && tag !== "HTML";
+    });
+  } catch {
+    // A failed probe must not block typing.
+    return;
+  }
+  if (focused === false) {
+    throw new Error(
+      "No input is focused on the page. Click the target field, then type again.",
+    );
+  }
 }
 
 function playwrightKeyName(key: string): string {
