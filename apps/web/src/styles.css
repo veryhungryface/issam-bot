@@ -15,6 +15,25 @@ body,
   font-family: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* App shell: the page itself never scrolls or pans — only inner regions do.
+   Without this, mobile browsers scroll the whole document when the keyboard
+   opens (header and composer drift up) and pan sideways on horizontal swipes. */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body {
+  touch-action: pan-y pinch-zoom;
+}
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+}
+
 .rk-scroll::-webkit-scrollbar {
   width: 6px;
 }

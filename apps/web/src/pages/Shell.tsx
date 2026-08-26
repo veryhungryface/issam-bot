@@ -1154,8 +1154,7 @@ export function ShellPage() {
     const request = ++computerOpenRequest.current;
     // Viewing must not pause the bot: only take the control lease when the user
     // explicitly asks for it or the bot is waiting for them on the screen.
-    const wantsControl =
-      options.takeControl ?? activeSnapshot?.run?.status === "waiting_takeover";
+    const wantsControl = options.takeControl ?? activeSnapshot?.run?.status === "waiting_takeover";
     const needsTakeover = wantsControl && !userHoldsComputerControl(computer, active.id);
     setComputerOpen(true);
     setComputerOpenError(null);

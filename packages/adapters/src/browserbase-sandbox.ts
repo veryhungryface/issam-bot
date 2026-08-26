@@ -704,9 +704,7 @@ async function assertEditableFocus(page: Page): Promise<void> {
     return;
   }
   if (focused === false) {
-    throw new Error(
-      "No input is focused on the page. Click the target field, then type again.",
-    );
+    throw new Error("No input is focused on the page. Click the target field, then type again.");
   }
 }
 
