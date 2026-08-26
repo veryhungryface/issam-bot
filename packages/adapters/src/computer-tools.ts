@@ -62,21 +62,36 @@ export function observationToolResult(
   note = "computer observed",
   previousFrameId?: string,
 ): AgentToolExecutionResult {
+  const url = observation.url ?? observation.activeWindow?.id;
+  const title = observation.title ?? observation.activeWindow?.title;
   const details = {
     frameId: observation.frameId,
     capturedAt: observation.capturedAt,
     width: observation.width,
     height: observation.height,
+    coordinateSpace: "css-pixels",
     cursor: observation.cursor,
     activeWindow: observation.activeWindow,
+    url,
+    title,
   };
   const unchanged = previousFrameId === observation.frameId;
+  const aria = observation.aria?.trim();
+  const pageHint = [
+    url ? `url: ${url}` : "",
+    title ? `title: ${title}` : "",
+    aria ? `page:\n${aria}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   return {
     kind: "agent_tool_result",
     content: [
       {
         type: "text",
-        text: `${note}${unchanged ? " (screen unchanged)" : ""}\n${JSON.stringify(details)}`,
+        text: `${note}${unchanged ? " (screen unchanged)" : ""}\n${JSON.stringify(details)}${
+          pageHint ? `\n${pageHint}` : ""
+        }`,
       },
       ...(unchanged
         ? []

@@ -580,17 +580,25 @@ async function installNetworkPolicy(context: BrowserContext): Promise<void> {
 async function observeBox(box: BrowserbaseBox, context: AdapterContext) {
   const page = requiredPage(box);
   throwIfAborted(context);
-  const [image, viewport, title] = await Promise.all([
-    page.screenshot({ type: "png" }),
+  const [image, viewport, title, aria] = await Promise.all([
+    page.screenshot({ type: "png", scale: "css" }),
     Promise.resolve(page.viewportSize() ?? DEFAULT_VIEWPORT),
     page.title().catch(() => "Browserbase Chrome"),
+    page
+      .locator("body")
+      .ariaSnapshot({ timeout: 4_000 })
+      .catch(() => ""),
   ]);
   throwIfAborted(context);
+  const url = page.url();
   return computerObservation(new Uint8Array(image), {
     mimeType: "image/png",
     width: viewport.width,
     height: viewport.height,
-    activeWindow: { id: page.url(), title },
+    activeWindow: { id: url, title },
+    url,
+    title,
+    aria: aria.trim().slice(0, 12_000) || undefined,
   });
 }
 

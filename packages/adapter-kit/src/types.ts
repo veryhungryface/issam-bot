@@ -104,6 +104,9 @@ export interface ComputerObservation {
   height: number;
   cursor?: { x: number; y: number };
   activeWindow?: { id: string; title?: string };
+  url?: string;
+  title?: string;
+  aria?: string;
 }
 
 export interface ComputerActionRequest {

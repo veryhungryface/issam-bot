@@ -36,6 +36,9 @@ describe("executor sandbox capabilities", () => {
     expect(instruction).toContain("blank, stale, or 404");
     expect(instruction).toContain("navigate to the site's home page");
     expect(instruction).toContain("login, MFA, CAPTCHA");
+    expect(instruction).toContain("CSS pixels");
+    expect(instruction).toContain("open_path");
+    expect(instruction).toContain("omnibox");
     expect(instruction).toContain(
       "Shell commands and installed application launching are unavailable",
     );

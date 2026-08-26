@@ -38,6 +38,22 @@ describe("computer tool bridge", () => {
     ]);
   });
 
+  it("includes url, title, and page snapshot so the model need not guess from pixels", () => {
+    const observation = computerObservation(Uint8Array.from([1, 2, 3]), {
+      mimeType: "image/png",
+      width: 1280,
+      height: 800,
+      url: "https://example.com/path",
+      title: "Example",
+      aria: '- heading "Example"',
+    });
+    const result = observationToolResult(observation);
+    const text = result.content.find((part) => part.type === "text")?.text ?? "";
+    expect(text).toContain("https://example.com/path");
+    expect(text).toContain("css-pixels");
+    expect(text).toContain('- heading "Example"');
+  });
+
   it("does not resend an unchanged screenshot", () => {
     const observation = computerObservation(Uint8Array.from([1, 2, 3]), {
       mimeType: "image/png",

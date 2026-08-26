@@ -87,10 +87,14 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(fixture.mouseWheel).toHaveBeenCalledWith(0, 200);
 
     const observation = await provider.observe(computer, adapterContext());
+    expect(fixture.screenshot).toHaveBeenCalledWith({ type: "png", scale: "css" });
     expect(observation).toMatchObject({
       mimeType: "image/png",
       width: 1280,
       height: 800,
+      url: "https://example.com/path",
+      title: "Example",
+      aria: '- heading "Example"',
       activeWindow: { id: "https://example.com/path", title: "Example" },
     });
     expect(observation.image).toEqual(new Uint8Array([1, 2, 3]));

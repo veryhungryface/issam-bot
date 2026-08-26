@@ -140,6 +140,11 @@ type PendingAttachment = {
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
 const SUSPENDED_COMPUTER_MESSAGE =
   "다음 작업을 보내면 에이전트가 자동으로 새 브라우저를 시작합니다. 지금 직접 조작하려면 직접 제어를 누르세요.";
+const COMPUTER_CONNECTING_VIEW = "브라우저 화면에 연결하는 중…";
+const COMPUTER_CONNECTING_TAKEOVER = "브라우저에 연결하고 제어권을 확보하는 중…";
+const COMPUTER_CONNECTING_VIEW_HINT =
+  "제어권은 봇에게 있습니다. 직접 조작하려면 직접 제어를 누르세요.";
+const COMPUTER_CONNECTING_TAKEOVER_HINT = "화면이 준비되면 바로 직접 조작할 수 있습니다.";
 
 export function ShellPage() {
   const { botId } = useParams();
@@ -1161,7 +1166,7 @@ export function ShellPage() {
     setScreenFrameLoaded(false);
     setRemoteTextOpen(false);
     setComputerOpeningMessage(
-      needsTakeover ? "브라우저에 연결하고 제어권을 확보하는 중…" : "브라우저 화면에 연결하는 중…",
+      needsTakeover ? COMPUTER_CONNECTING_TAKEOVER : COMPUTER_CONNECTING_VIEW,
     );
     try {
       await bootComputer({
@@ -2261,7 +2266,9 @@ export function ShellPage() {
                   <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-[#34343A] border-t-[#ECECEE]" />
                   <div className="mt-4 text-[14px] text-[#B7B7BC]">{computerOpeningMessage}</div>
                   <div className="mt-1.5 text-[12px] text-[#68686E]">
-                    화면이 준비되면 바로 직접 조작할 수 있습니다.
+                    {computerOpeningMessage === COMPUTER_CONNECTING_TAKEOVER
+                      ? COMPUTER_CONNECTING_TAKEOVER_HINT
+                      : COMPUTER_CONNECTING_VIEW_HINT}
                   </div>
                 </div>
               </div>

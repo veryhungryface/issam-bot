@@ -156,7 +156,7 @@ export function computerInstructionForSandboxCapabilities(
   capabilities: SandboxCapabilities,
 ): string {
   if (capabilities.graphical && !capabilities.filesystem && !capabilities.shell) {
-    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. open_path accepts only http(s) URLs. Use write_file and attach_file to deliver generated HTML or text as a safe chat download; local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
+    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Use write_file and attach_file to deliver generated HTML or text as a safe chat download; local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
   }
   if (capabilities.graphical) {
     const preciseWork = capabilities.shell
@@ -674,7 +674,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   {
                     actions: parseComputerActions(args.actions),
                     observe: args.observe !== false,
-                    settleMs: Number(args.settle_ms ?? 350),
+                    settleMs: Number(
+                      args.settle_ms ??
+                        (!sandboxCapabilities.shell && sandboxCapabilities.graphical ? 800 : 350),
+                    ),
                   },
                   context,
                 ),
