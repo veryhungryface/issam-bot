@@ -1149,10 +1149,14 @@ export function ShellPage() {
     return () => window.removeEventListener("message", onLiveViewMessage);
   }, [active?.id, activeRunInProgress, computer?.kind, screenUrl]);
 
-  async function openComputer() {
+  async function openComputer(options: { takeControl?: boolean } = {}) {
     if (!active) return;
     const request = ++computerOpenRequest.current;
-    const needsTakeover = !userHoldsComputerControl(computer, active.id);
+    // Viewing must not pause the bot: only take the control lease when the user
+    // explicitly asks for it or the bot is waiting for them on the screen.
+    const wantsControl =
+      options.takeControl ?? activeSnapshot?.run?.status === "waiting_takeover";
+    const needsTakeover = wantsControl && !userHoldsComputerControl(computer, active.id);
     setComputerOpen(true);
     setComputerOpenError(null);
     setScreenFrameLoaded(false);
@@ -1176,7 +1180,7 @@ export function ShellPage() {
     }
   }
 
-  function closeComputerOverlay() {
+  function hideComputerOverlay() {
     liveViewRecovery.current?.abort();
     liveViewRecovery.current = null;
     computerOpenRequest.current += 1;
@@ -1187,9 +1191,23 @@ export function ShellPage() {
     setRemoteTextOpen(false);
   }
 
+  function closeComputerOverlay() {
+    hideComputerOverlay();
+    // A Browserbase bot is fully blocked while the user holds control, so
+    // closing the window returns control instead of waiting out the lease.
+    // Team desktop computers keep control across a close on purpose.
+    if (active && hasControl && !recordingSkill && computer?.kind === "browserbase") {
+      const botId = active.id;
+      void rpc.computer
+        .release({ botId })
+        .then(() => refreshThread(botId))
+        .catch(() => undefined);
+    }
+  }
+
   async function releaseComputer() {
     if (!active) return;
-    closeComputerOverlay();
+    hideComputerOverlay();
     setRemoteText("");
     setRemoteTextError(null);
     await rpc.computer.release({ botId: active.id }).catch(() => undefined);
@@ -1714,7 +1732,7 @@ export function ShellPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => void openComputer()}
+                      onClick={() => void openComputer({ takeControl: true })}
                     >
                       직접 제어
                     </Button>
@@ -2153,7 +2171,7 @@ export function ShellPage() {
                       variant="outline"
                       size="sm"
                       disabled={Boolean(computerOpeningMessage)}
-                      onClick={() => void openComputer()}
+                      onClick={() => void openComputer({ takeControl: true })}
                     >
                       직접 제어
                     </Button>
