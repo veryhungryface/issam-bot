@@ -628,23 +628,31 @@ async function applyBrowserAction(
       break;
     }
     case "clipboard": {
-      const origin = safeOrigin(page.url());
-      if (origin) {
-        await box.browserContext?.grantPermissions(["clipboard-read", "clipboard-write"], {
-          origin,
-        });
+      // The agent's `type` action maps here. Remote Chromium never synthesizes a paste,
+      // so inserting into the focused element is the authoritative effect; the clipboard
+      // copy stays best-effort for pages that read it.
+      try {
+        const origin = safeOrigin(page.url());
+        if (origin) {
+          await box.browserContext?.grantPermissions(["clipboard-read", "clipboard-write"], {
+            origin,
+          });
+        }
+        await page.evaluate(
+          (text) =>
+            (
+              globalThis as unknown as {
+                navigator: {
+                  clipboard: { writeText(value: string): Promise<void> };
+                };
+              }
+            ).navigator.clipboard.writeText(text),
+          action.text,
+        );
+      } catch {
+        // Clipboard access can be denied (blank pages, permission errors); typing still works.
       }
-      await page.evaluate(
-        (text) =>
-          (
-            globalThis as unknown as {
-              navigator: {
-                clipboard: { writeText(value: string): Promise<void> };
-              };
-            }
-          ).navigator.clipboard.writeText(text),
-        action.text,
-      );
+      await page.keyboard.insertText(action.text);
       break;
     }
     case "scroll":

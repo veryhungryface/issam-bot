@@ -1219,8 +1219,14 @@ export function ShellPage() {
   const hasControl = userHoldsComputerControl(computer, active?.id);
 
   useEffect(() => {
-    if (!hasControl) setRemoteTextOpen(false);
-  }, [hasControl]);
+    if (!hasControl) {
+      setRemoteTextOpen(false);
+      return;
+    }
+    // Browserbase Live View forwards raw key events to a remote Chromium without an IME,
+    // so direct Korean typing splits into jamo. Open the composed-text panel by default.
+    if (computer?.kind === "browserbase") setRemoteTextOpen(true);
+  }, [hasControl, computer?.kind]);
 
   const userName = session.data?.user.name ?? "사용자";
   const initials = userName
@@ -2328,7 +2334,7 @@ export function ShellPage() {
                   className={`mt-2 text-[12px] ${remoteTextError ? "text-[#F17171]" : "text-[#77777D]"}`}
                 >
                   {remoteTextError ??
-                    "먼저 원격 사이트의 입력칸을 클릭하고, 여기서 한글을 완성해 전송하세요."}
+                    "원격 화면에 직접 타이핑하면 한글 자모가 분리됩니다. 원격 입력칸을 클릭한 뒤 여기서 문장을 완성해 전송하세요."}
                 </div>
               </div>
             ) : null}

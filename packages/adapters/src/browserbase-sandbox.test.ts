@@ -68,6 +68,7 @@ describe("BrowserbaseSandboxProvider", () => {
           { kind: "key", key: "A", modifiers: ["Control"] },
           { kind: "key", key: "Return" },
           { kind: "text", text: "한글 입력" },
+          { kind: "clipboard", text: "타이핑 문구" },
           { kind: "scroll", direction: "down", amount: 200 },
         ],
         observe: false,
@@ -82,6 +83,7 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(fixture.keyboardPress).toHaveBeenCalledWith("Control+A");
     expect(fixture.keyboardPress).toHaveBeenCalledWith("Enter");
     expect(fixture.keyboardInsertText).toHaveBeenCalledWith("한글 입력");
+    expect(fixture.keyboardInsertText).toHaveBeenCalledWith("타이핑 문구");
     expect(fixture.mouseWheel).toHaveBeenCalledWith(0, 200);
 
     const observation = await provider.observe(computer, adapterContext());
@@ -98,6 +100,31 @@ describe("BrowserbaseSandboxProvider", () => {
       aria: '- heading "Example"',
     });
     expect(api.getSession).not.toHaveBeenCalled();
+  });
+
+  it("still types clipboard text when the clipboard write is denied", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.evaluate.mockRejectedValueOnce(new Error("clipboard denied"));
+
+    const acted = await provider.act(
+      computer,
+      { actions: [{ kind: "clipboard", text: "붙여넣기 실패 대비" }], observe: false },
+      adapterContext(),
+    );
+
+    expect(acted.completed).toBe(1);
+    expect(fixture.keyboardInsertText).toHaveBeenCalledWith("붙여넣기 실패 대비");
   });
 
   it("reuses a saved context, pauses bot actions during takeover, and returns Live View", async () => {
@@ -528,6 +555,7 @@ function browserFixture() {
   const mouseWheel = vi.fn(async () => undefined);
   const keyboardPress = vi.fn(async () => undefined);
   const keyboardInsertText = vi.fn(async () => undefined);
+  const evaluate = vi.fn(async () => undefined);
   const screenshot = vi.fn(async () => Buffer.from([1, 2, 3]));
   const page = {
     isClosed: vi.fn(() => false),
@@ -538,7 +566,7 @@ function browserFixture() {
     url: vi.fn(() => currentUrl),
     goto,
     waitForTimeout: vi.fn(async () => undefined),
-    evaluate: vi.fn(async () => undefined),
+    evaluate,
     locator: vi.fn(() => ({
       ariaSnapshot: vi.fn(async () => '- heading "Example"'),
     })),
@@ -572,6 +600,7 @@ function browserFixture() {
     mouseWheel,
     keyboardPress,
     keyboardInsertText,
+    evaluate,
     screenshot,
   };
 }
