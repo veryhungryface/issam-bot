@@ -2294,7 +2294,7 @@ export function ShellPage() {
                 id="remote-korean-input"
                 role="dialog"
                 aria-label="한글 원격 입력"
-                className="absolute top-3 right-3 z-20 w-[min(420px,calc(100%-24px))] rounded-[14px] border border-[#303035] bg-[rgba(11,11,13,.97)] p-3 shadow-2xl backdrop-blur"
+                className="absolute inset-x-3 bottom-3 z-20 rounded-[14px] border border-[#303035] bg-[rgba(11,11,13,.97)] p-3 shadow-2xl backdrop-blur sm:inset-x-auto sm:top-3 sm:right-3 sm:bottom-auto sm:w-[min(420px,calc(100%-24px))]"
               >
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <span className="text-[13px] font-medium text-[#D7D7DB]">한글 원격 입력</span>
