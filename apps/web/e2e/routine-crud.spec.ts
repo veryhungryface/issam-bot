@@ -22,17 +22,17 @@ test("routine editing updates in place, preserves timezone, and deletion persist
   expect(created.nextRunAt).not.toBeNull();
   expect(localSchedule(created.nextRunAt!, created.timezone)).toMatchObject({ hour: 9, minute: 0 });
   await page.reload();
-  await page.getByTitle("에이전트 브라우저").click();
+  await page.getByTitle("Agent computer").click();
 
   await page.getByRole("button", { name: /Tokyo check-in/ }).click();
-  await page.locator("label:has-text('이름') input").fill("Weekday check-in");
-  await page.locator("label:has-text('작업 지시') textarea").fill("Send the revised update");
-  await page.getByLabel("실행 주기").selectOption("Weekdays");
-  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.locator("label:has-text('Name') input").fill("Weekday check-in");
+  await page.locator("label:has-text('Instruction') textarea").fill("Send the revised update");
+  await page.getByLabel("How often").selectOption("Weekdays");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
 
   const updatedButton = page.getByRole("button", { name: /Weekday check-in/ });
   await expect(updatedButton).toHaveCount(1);
-  await expect(updatedButton).toContainText("평일 오전 9:00에");
+  await expect(updatedButton).toContainText("Weekdays at 9:00 AM");
   await expect(page.getByRole("button", { name: /Tokyo check-in/ })).toHaveCount(0);
 
   const [updated] = await rpc<Routine[]>(page, "routines/list", { botId });
@@ -49,26 +49,24 @@ test("routine editing updates in place, preserves timezone, and deletion persist
   await captureScreenshot(page, testInfo, "routine-weekday-schedule");
 
   await updatedButton.click();
-  await page.getByRole("button", { name: "자동 작업 삭제" }).click();
-  const dialog = page.getByRole("alertdialog", {
-    name: "Weekday check-in 자동 작업을 삭제할까요?",
-  });
+  await page.getByRole("button", { name: "Delete routine" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Delete Weekday check-in?" });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "취소" }).click();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator("label:has-text('이름') input")).toHaveValue("Weekday check-in");
+  await expect(page.locator("label:has-text('Name') input")).toHaveValue("Weekday check-in");
 
-  await page.getByRole("button", { name: "자동 작업 삭제" }).click();
+  await page.getByRole("button", { name: "Delete routine" }).click();
   const removeResponse = page.waitForResponse(
     (response) => response.url().includes("/rpc/routines/remove") && response.ok(),
   );
-  await dialog.getByRole("button", { name: "삭제", exact: true }).click();
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
   await removeResponse;
   await expect(updatedButton).toHaveCount(0);
   expect(await rpc<Routine[]>(page, "routines/list", { botId })).toEqual([]);
 
   await page.reload();
-  await page.getByTitle("에이전트 브라우저").click();
+  await page.getByTitle("Agent computer").click();
   await expect(updatedButton).toHaveCount(0);
 });
 
@@ -164,9 +162,9 @@ test("switching bots while a routine save is pending does not reopen stale state
   ]);
   await page.reload();
 
-  await page.getByTitle("에이전트 브라우저").click();
+  await page.getByTitle("Agent computer").click();
   await page.getByRole("button", { name: /First routine/ }).click();
-  await page.locator("label:has-text('이름') input").fill("First routine updated");
+  await page.locator("label:has-text('Name') input").fill("First routine updated");
 
   let releaseUpdate!: () => void;
   let sawUpdate!: () => void;
@@ -189,7 +187,7 @@ test("switching bots while a routine save is pending does not reopen stale state
     response.url().includes("/rpc/routines/update"),
   );
 
-  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await updateIntercepted;
   await page
     .locator("aside")
@@ -204,7 +202,7 @@ test("switching bots while a routine save is pending does not reopen stale state
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
-  await page.getByTitle("에이전트 브라우저").click();
+  await page.getByTitle("Agent computer").click();
   await expect(page.getByRole("button", { name: /Second routine/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /First routine/ })).toHaveCount(0);
 
@@ -216,7 +214,7 @@ test("switching bots while a routine save is pending does not reopen stale state
   const staleListIntercepted = new Promise<void>((resolve) => {
     sawStaleList = resolve;
   });
-  await page.route("**/rpc/threads/open", async (route) => {
+  await page.route("**/rpc/routines/list", async (route) => {
     if (route.request().postData()?.includes(firstBotId) !== true) {
       await route.continue();
       return;
@@ -227,7 +225,7 @@ test("switching bots while a routine save is pending does not reopen stale state
   });
   const staleListResponse = page.waitForResponse(
     (response) =>
-      response.url().includes("/rpc/threads/open") &&
+      response.url().includes("/rpc/routines/list") &&
       response.request().postData()?.includes(firstBotId) === true,
   );
 
@@ -238,7 +236,7 @@ test("switching bots while a routine save is pending does not reopen stale state
   await page.waitForURL(new RegExp(`/app/${secondBot.id}$`));
   releaseStaleList();
   await staleListResponse;
-  await page.unroute("**/rpc/threads/open");
+  await page.unroute("**/rpc/routines/list");
 
   await expect(page.getByRole("button", { name: /Second routine/ })).toHaveCount(1);
   await expect(page.getByRole("button", { name: /First routine/ })).toHaveCount(0);

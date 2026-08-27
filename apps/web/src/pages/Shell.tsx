@@ -3685,7 +3685,9 @@ const Composer = memo(function Composer({
                 removeLastChip();
                 return;
               }
-              if (event.key === "Enter" && !event.shiftKey) {
+              // A Korean/Japanese/Chinese IME confirms a composition with Enter;
+              // sending on that keydown would submit early and drop the final syllable.
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 send();
               }
