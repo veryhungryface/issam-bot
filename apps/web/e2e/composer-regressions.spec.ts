@@ -8,7 +8,10 @@ test("Korean IME confirmation does not submit early or leave the final syllable"
   await signup(page, `ime-${stamp}@rakazo.test`, "password12", "IME");
   await completeOnboarding(page);
 
-  const composer = page.getByPlaceholder(/Message /);
+  // The placeholder disappears once the draft has content, so resolve the
+  // composer structurally instead of by placeholder for the later actions.
+  await page.getByPlaceholder(/Message /).waitFor();
+  const composer = page.locator("textarea").first();
   await composer.fill("한글 입력 확인");
 
   let sendRequests = 0;
