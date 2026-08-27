@@ -55,7 +55,7 @@ export function AskCard({
   }
 
   return (
-    <div className="max-w-[74%] rounded-[20px] border border-[#242428] bg-[#141417] px-5 py-[17px]">
+    <div className="min-w-0 max-w-[74%] rounded-[20px] border border-[#242428] bg-[#141417] px-5 py-[17px]">
       <div className="text-[15.5px] leading-[1.5] text-[#ECECEE]">
         <ChatMarkdown>{block.text}</ChatMarkdown>
       </div>

@@ -3212,7 +3212,7 @@ const Transcript = memo(function Transcript({
     <div
       ref={scrollRef}
       data-testid="transcript"
-      className="rk-scroll flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-5 md:px-7 md:py-6"
+      className="rk-scroll flex flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-4 py-5 md:px-7 md:py-6"
     >
       {olderCursor != null ? (
         <button
@@ -3264,7 +3264,7 @@ const Transcript = memo(function Transcript({
         <div className="flex justify-start">
           {/* Box metrics match the progress bubble exactly so swapping between
               them never changes height or text position. */}
-          <div className="flex max-w-[74%] items-center rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5]">
+          <div className="flex min-w-0 max-w-[74%] items-center rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5]">
             <LoadingState label="working" startedAt={workingStartedAt} />
           </div>
         </div>
@@ -4001,7 +4001,7 @@ const MessageView = memo(function MessageView({
           data-testid="reply-parent-preview"
           aria-label={t`Jump to replied message`}
           onClick={() => onJumpToMessage?.(parentJumpId)}
-          className="mb-2 block max-w-[74%] truncate rounded-[14px] border border-[#26262A] bg-[#131315] px-3 py-2 text-start text-[12.5px] text-[#85858A] hover:border-[#34343B] hover:text-[#C9C9CE]"
+          className="mb-2 block min-w-0 max-w-[74%] truncate rounded-[14px] border border-[#26262A] bg-[#131315] px-3 py-2 text-start text-[12.5px] text-[#85858A] hover:border-[#34343B] hover:text-[#C9C9CE]"
           dir="auto"
         >
           {replyPreview ? previewMessageText(replyPreview) : t`Earlier message`}
@@ -4015,7 +4015,7 @@ const MessageView = memo(function MessageView({
         {messageContext}
         <div className="flex justify-start">
           <div
-            className="max-w-[74%] space-y-2.5 rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]"
+            className="min-w-0 max-w-[74%] space-y-2.5 rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]"
             dir="auto"
           >
             {message.blocks.map((block, i) => {
@@ -4106,7 +4106,7 @@ const MessageView = memo(function MessageView({
           return (
             <div key={i} className="flex justify-start">
               <div
-                className="max-w-[74%] rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]"
+                className="min-w-0 max-w-[74%] rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]"
                 dir="auto"
               >
                 <ChatMarkdown streaming>{block.text}</ChatMarkdown>
@@ -4118,7 +4118,7 @@ const MessageView = memo(function MessageView({
           return (
             <div key={i} className="flex justify-start">
               <div
-                className="max-w-[74%] space-y-1.5 rounded-[20px] bg-[#1A1A1D] px-[18px] py-3"
+                className="min-w-0 max-w-[74%] space-y-1.5 rounded-[20px] bg-[#1A1A1D] px-[18px] py-3"
                 dir="ltr"
               >
                 <ToolSteps
@@ -4288,7 +4288,7 @@ const MessageView = memo(function MessageView({
           return (
             <div key={i} className="flex justify-start">
               <div
-                className="max-w-[74%] rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]"
+                className="min-w-0 max-w-[74%] rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]"
                 dir="auto"
               >
                 <ChatMarkdown>{block.text}</ChatMarkdown>
@@ -5512,7 +5512,7 @@ function McpApprovalCard({
 
   const summary = endpoint ?? `stdio · ${transport}`;
   return (
-    <BuiCard className="max-w-[74%] p-4">
+    <BuiCard className="min-w-0 max-w-[74%] p-4">
       <div className="flex items-center gap-2">
         <span className="grid h-7 w-7 place-items-center rounded-lg bg-[#30356A] text-xs text-[#E2E4FF]">
           M
@@ -5592,7 +5592,7 @@ function ChartBlockView({
   const expandedViewport = chartViewport(viewport.width, viewport.height);
   return (
     <>
-      <div className="group relative max-w-[74%] rounded-[20px] bg-[#17171A] p-4">
+      <div className="group relative min-w-0 max-w-[74%] rounded-[20px] bg-[#17171A] p-4">
         <ChartCanvas spec={spec} data={data} width={520} />
         <button
           type="button"
