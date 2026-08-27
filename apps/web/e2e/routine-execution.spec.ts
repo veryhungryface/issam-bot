@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 test("routine run-now completes and survives reload", async ({ page }, testInfo) => {
   const stamp = Date.now();
   await signup(page, `routine-${stamp}@rakazo.test`, "password12", "Routine");
-  await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
+  await completeOnboarding(page);
 
   await page.getByTitle("에이전트 브라우저").click();
   await expect(page.getByRole("button", { name: "지금 실행" })).toHaveCount(0);

@@ -1,15 +1,57 @@
-import type { ConnectorTool } from "@rakazo/adapter-kit";
 import { describe, expect, it } from "vitest";
-import {
-  deploymentApiKeyForProvider,
-  normalizeAgentToolName,
-  normalizeAgentToolNames,
-  PiAgentRuntime,
-} from "./pi-runtime.js";
+import { deploymentApiKeyForProvider, describeToolActivity, PiAgentRuntime } from "./pi-runtime.js";
 
-function tool(name: string): ConnectorTool {
-  return { name, description: name, inputSchema: { type: "object" } };
-}
+describe("describeToolActivity", () => {
+  it("summarizes builtin tools with their most informative argument", () => {
+    expect(describeToolActivity("shell", { command: "pnpm test --filter web" })).toBe(
+      "Running: pnpm test --filter web",
+    );
+    expect(describeToolActivity("read_file", { path: "notes/plan.md" })).toBe(
+      "Reading notes/plan.md",
+    );
+    expect(describeToolActivity("write_file", { path: "out.csv", content: "…" })).toBe(
+      "Writing out.csv",
+    );
+    expect(describeToolActivity("render_plot", { spec: {} })).toBe("Rendering a chart");
+    expect(describeToolActivity("add_mcp_server", { name: "Linear" })).toBe(
+      "Connecting MCP server: Linear",
+    );
+    expect(describeToolActivity("run_subagent", { name: "scout", task: "…" })).toBe(
+      "Delegating to helper: scout",
+    );
+  });
+
+  it("names MCP server and remote tool", () => {
+    expect(describeToolActivity("mcp__brex__list_expenses", {})).toBe("Using brex: list_expenses");
+    expect(describeToolActivity("mcp__demo-oauth__greet", {})).toBe("Using demo-oauth: greet");
+  });
+
+  it("truncates long details and collapses whitespace", () => {
+    const long = `x${"y".repeat(200)}`;
+    const line = describeToolActivity("shell", { command: `a\n\t${long}` });
+    expect(line.length).toBeLessThanOrEqual("Running: ".length + 91);
+    expect(line).toContain("…");
+    expect(line).not.toContain("\n");
+    expect(line).toMatch(/^Running: a x/);
+  });
+
+  it("redacts credentials from activity details", () => {
+    const token = "fake-token";
+    const line = describeToolActivity("shell", {
+      command: `curl -H 'Authorization: Bearer ${token}' https://example.test?api_key=fake-key password=fake-password`,
+    });
+
+    expect(line).toContain("Bearer [redacted]");
+    expect(line).toContain("api_key=[redacted]");
+    expect(line).not.toContain(token);
+    expect(line).not.toContain("fake-key");
+    expect(line).not.toContain("fake-password");
+  });
+
+  it("falls back to the tool name", () => {
+    expect(describeToolActivity("destination_write", undefined)).toBe("Using destination_write");
+  });
+});
 
 describe("Pi agent runtime", () => {
   it("reports an unknown model without calling a provider", async () => {
@@ -54,47 +96,5 @@ describe("Pi deployment credentials", () => {
   it("does not send an OpenRouter key to an unrelated provider", () => {
     expect(deploymentApiKeyForProvider("qwen", source)).toBeUndefined();
     expect(deploymentApiKeyForProvider("openai-codex", source)).toBeUndefined();
-  });
-});
-
-describe("Pi model-facing connector tool names", () => {
-  it("leaves builtin-compatible names unchanged", () => {
-    expect(normalizeAgentToolName("write_file")).toBe("write_file");
-    expect(normalizeAgentToolNames([tool("write_file"), tool("shell")])).toEqual([
-      "write_file",
-      "shell",
-    ]);
-  });
-
-  it("normalizes punctuation, whitespace, and Unicode to the provider-safe pattern", () => {
-    const names = normalizeAgentToolNames([
-      tool("destination.write"),
-      tool("Google Calendar / criar evento"),
-      tool("🦊"),
-    ]);
-
-    expect(names[0]).toBe("destination_write");
-    expect(names[1]).toBe("Google_Calendar_criar_evento");
-    expect(names[2]).toBe("connector_tool");
-    expect(names.every((name) => /^[a-zA-Z0-9_-]+$/.test(name))).toBe(true);
-  });
-
-  it("limits long names to the provider's 64-character maximum", () => {
-    const name = normalizeAgentToolName(`very-long-${"x".repeat(100)}`);
-
-    expect(name).toHaveLength(64);
-    expect(name).toMatch(/^[a-zA-Z0-9_-]+$/);
-  });
-
-  it("keeps normalized names unique and deterministic without shadowing valid names", () => {
-    const tools = [tool("foo.bar"), tool("foo bar"), tool("foo_bar"), tool("🦊"), tool("🦊")];
-
-    const first = normalizeAgentToolNames(tools);
-    const second = normalizeAgentToolNames(tools);
-
-    expect(second).toEqual(first);
-    expect(new Set(first).size).toBe(tools.length);
-    expect(first[2]).toBe("foo_bar");
-    expect(first.every((name) => /^[a-zA-Z0-9_-]+$/.test(name))).toBe(true);
   });
 });

@@ -2,18 +2,15 @@ import type { ModelCatalogEntry } from "@rakazo/contracts";
 import { waitForModelOAuthCompletion } from "@rakazo/core";
 import { rpc } from "./rpc";
 
-export type { ModelCatalogEntry, ModelCredential } from "@rakazo/contracts";
+export type { ModelCatalogEntry, ModelCredential, ModelOAuthBegin } from "@rakazo/contracts";
 export { cancelModelOAuthAttempt, finishModelOAuthAttempt } from "@rakazo/core";
 
+/** English fallback auth hint for a catalog entry (localize at the UI call site). */
 export function providerHint(entry: ModelCatalogEntry) {
-  if (entry.signIn === "device-code") {
-    if (entry.provider === "openai-codex") return "ChatGPT Plus/Pro";
-    if (entry.provider === "github-copilot") return "Copilot";
-    if (entry.provider === "xai") return "SuperGrok / API 키";
-    return "로그인";
-  }
-  if (entry.auth === "oauth") return "건너뛰기 또는 서버 키 사용";
-  return "API 키";
+  if (entry.authHint) return entry.authHint;
+  if (entry.signIn !== undefined) return "Sign in";
+  if (entry.auth === "oauth") return "Skip or deploy key";
+  return "API key";
 }
 
 export async function waitForModelOAuth(loginId: string, signal?: AbortSignal) {

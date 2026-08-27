@@ -300,6 +300,7 @@ async function releaseTeachingComputerControl(
       controlHolder: string;
       controlBotId: string | null;
       controlLeaseId: string | null;
+      controlRunId: string | null;
     } | null;
   },
   expectedLeaseId?: string | null,
@@ -322,11 +323,12 @@ async function releaseTeachingComputerControl(
       leaseId,
     );
   }
-  await deps.jobs.cancel(computerControlExpireJobKey(computer.id));
+  await deps.jobs.cancel(computerControlExpireJobKey(computer.id, leaseId));
   await deps.events.finalizeComputerControlRelease({
     workspaceId: actor.workspaceId,
     computerId: computer.id,
     botId: bot.id,
+    runId: computer.controlRunId,
     leaseId,
     holder: "bot",
     reason: "released",

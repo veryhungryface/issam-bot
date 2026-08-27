@@ -3,6 +3,7 @@ import {
   activeBotId,
   captureScreenshot,
   completeOnboarding,
+  openNewBot,
   realSandboxTimeout,
   rpc,
   signup,
@@ -17,11 +18,11 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
   const privateMarker = `private-${stamp}`;
 
   await signup(page, `team-computer-${stamp}@rakazo.test`, "password12", "Team Computer");
-  await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
+  await completeOnboarding(page);
   const chiefId = activeBotId(page);
 
   await openComputerPanel(page);
-  await expect(page.getByText("공유 브라우저", { exact: true }).last()).toBeVisible();
+  await expect(page.getByText("Team Computer", { exact: true }).last()).toBeVisible();
   await captureScreenshot(page, testInfo, "41-team-computer");
 
   const writerId = await createBot(page, "Writer", "team");
@@ -49,9 +50,7 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
 
   const privateId = await createBot(page, "Private Writer", "dedicated");
   await openComputerPanel(page);
-  await expect(
-    page.getByText("Private Writer 전용 브라우저", { exact: true }).last(),
-  ).toBeVisible();
+  await expect(page.getByText("Private Writer’s computer", { exact: true }).last()).toBeVisible();
   await captureScreenshot(page, testInfo, "43-private-computer");
   await expect(readFileResponse(page, privateId, "notes/result.txt")).resolves.toMatchObject({
     ok: false,
@@ -87,15 +86,15 @@ test("user control leaves another Team bot's screen available", async ({ page },
   const marker = `after-release-${stamp}`;
 
   await signup(page, `team-control-${stamp}@rakazo.test`, "password12", "Team Control");
-  await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
+  await completeOnboarding(page);
   const chiefId = activeBotId(page);
   const workerId = await createBot(page, "Worker", "team");
 
   await openBot(page, "Chief");
-  await page.getByTitle("에이전트 브라우저").click();
-  await page.getByRole("button", { name: "직접 제어", exact: true }).click();
-  await expect(page.getByRole("button", { name: "브라우저 닫기" })).toBeVisible();
-  await page.getByRole("button", { name: "브라우저 닫기" }).click();
+  await page.getByTitle("Agent computer").click();
+  await page.getByRole("button", { name: "Take control", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  await page.getByRole("button", { name: "Close computer" }).click();
 
   await openBot(page, "Worker");
   const workerRunId = await sendMessage(
@@ -134,7 +133,7 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
     "password12",
     "Active Team Control",
   );
-  await completeOnboarding(page, ["A bit of everything", "Clear and tight"]);
+  await completeOnboarding(page);
   const chiefId = activeBotId(page);
 
   await sendMessage(page, "keep working until I stop you");
@@ -147,6 +146,16 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
       async () => (await rpc<{ state: string }>(page, "computer/status", { botId: chiefId })).state,
     )
     .toBe("running");
+  await expect
+    .poll(
+      async () =>
+        (
+          await rpc<{ busyBotName: string | null }>(page, "computer/status", {
+            botId: chiefId,
+          })
+        ).busyBotName,
+    )
+    .not.toBeNull();
 
   const takeover = await rpcResponse(page, "computer/takeover", { botId: chiefId });
   expect(takeover.ok).toBe(false);
@@ -155,29 +164,47 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
     .poll(async () => (await threadSnapshot(page, chiefId)).run?.status ?? "idle")
     .toBe("running");
 
-  await rpc(page, "threads/stop", { botId: chiefId });
+  await page.getByTitle("Agent computer").click();
+  const takeControl = page.getByRole("button", { name: /Take control/i }).first();
+  await expect(takeControl).toBeDisabled();
+  await expect(page.getByText(/is using it/i).first()).toBeVisible();
+  await captureScreenshot(page, testInfo, "48b-take-control-blocked-while-busy");
+
+  // Stop through the shell so the client refreshes computer status (API stop alone
+  // does not emit a terminal thread event).
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
   await waitForIdle(page, chiefId);
   await expect
-    .poll(async () => (await rpcResponse(page, "computer/takeover", { botId: chiefId })).ok)
-    .toBe(true);
-  await page.getByTitle("에이전트 브라우저").click();
-  await expect(page.getByText("사용자가 제어 중", { exact: true })).toBeVisible();
+    .poll(
+      async () =>
+        (
+          await rpc<{ busyBotName: string | null }>(page, "computer/status", {
+            botId: chiefId,
+          })
+        ).busyBotName,
+    )
+    .toBeNull();
+  await expect(takeControl).toBeEnabled();
+  await takeControl.click();
+  await expect(
+    page.getByTestId("side-panel").getByText("You have control", { exact: true }),
+  ).toBeVisible();
   await captureScreenshot(page, testInfo, "49-team-computer-takeover-after-stop");
   await rpc(page, "computer/release", { botId: chiefId });
 });
 
 async function createBot(page: Page, name: string, mode: "team" | "dedicated") {
-  await page.getByTitle("새 봇").click();
-  await expect(page.getByText("새 봇", { exact: true })).toBeVisible();
-  const team = page.getByRole("button", { name: "공유", exact: true });
-  const privateComputer = page.getByRole("button", { name: "봇 전용", exact: true });
+  await openNewBot(page);
+  await expect(page.getByText("New bot", { exact: true })).toBeVisible();
+  const team = page.getByRole("button", { name: "Team", exact: true });
+  const privateComputer = page.getByRole("button", { name: "Private", exact: true });
   await expect(team).toHaveAttribute("aria-pressed", "true");
   if (mode === "dedicated") await privateComputer.click();
   await expect(mode === "team" ? team : privateComputer).toHaveAttribute("aria-pressed", "true");
-  await page.getByPlaceholder("봇 이름").fill(name);
-  await page.getByRole("button", { name: "만들기", exact: true }).click();
+  await page.getByPlaceholder("Name this bot").fill(name);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.waitForURL(/\/app\/[^/]+$/);
-  await expect(page.getByPlaceholder(`${name}에게 작업 지시`)).toBeVisible();
+  await expect(page.getByPlaceholder(`Message ${name}`)).toBeVisible();
   return activeBotId(page);
 }
 
@@ -188,11 +215,16 @@ async function setComputerMode(
   mode: "team" | "dedicated",
 ) {
   await page.getByRole("button", { name: botName, exact: true }).last().click();
-  await expect(page.locator("label:has-text('이름') input")).toHaveValue(botName);
-  await page
-    .getByRole("button", { name: mode === "team" ? "공유" : "봇 전용", exact: true })
+  const settings = page.getByTestId("bot-settings");
+  await expect(settings.locator("label:has-text('Name') input")).toHaveValue(botName);
+  const advanced = settings.getByTestId("bot-settings-advanced");
+  await advanced.evaluate((element) => {
+    (element as HTMLDetailsElement).open = true;
+  });
+  await settings
+    .getByRole("button", { name: mode === "team" ? "Team" : "Private", exact: true })
     .click();
-  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect
     .poll(async () => {
       const bots = await rpc<Array<{ id: string; computerMode: string }>>(page, "bots/list", {});
@@ -206,12 +238,12 @@ async function openBot(page: Page, name: string) {
     .getByRole("complementary")
     .getByRole("button", { name: new RegExp(`^${name}`) })
     .click();
-  await expect(page.getByPlaceholder(`${name}에게 작업 지시`)).toBeVisible();
+  await expect(page.getByPlaceholder(`Message ${name}`)).toBeVisible();
 }
 
 async function openComputerPanel(page: Page) {
-  await page.getByTitle("에이전트 브라우저").click();
-  await expect(page.getByRole("button", { name: "직접 제어", exact: true })).toBeVisible();
+  await page.getByTitle("Agent computer").click();
+  await expect(page.getByRole("button", { name: "Take control", exact: true })).toBeVisible();
 }
 
 async function sendAndWait(page: Page, botId: string, text: string) {
@@ -220,7 +252,7 @@ async function sendAndWait(page: Page, botId: string, text: string) {
 }
 
 async function sendMessage(page: Page, text: string) {
-  const composer = page.getByPlaceholder(/작업 지시/);
+  const composer = page.getByPlaceholder(/Message/);
   await composer.fill(text);
   const sent = page.waitForResponse(
     (response) =>

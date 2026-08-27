@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import type { ComputerStatus, TaughtSkill } from "@rakazo/contracts";
 import { useMemo, useState } from "react";
 import { rpc } from "../../lib/rpc";
@@ -22,6 +23,7 @@ export function TeachComputerSection({
   onStopTeaching?: () => Promise<void>;
   onAddRoutine: (skill: TaughtSkill) => void;
 }) {
+  const { t } = useLingui();
   const [goalOpen, setGoalOpen] = useState(false);
   const [goal, setGoal] = useState("");
   const [localBusy, setLocalBusy] = useState(false);
@@ -68,12 +70,19 @@ export function TeachComputerSection({
 
   return (
     <div className="mt-[30px]">
-      <div className="mb-3 text-[14px] text-[#85858A]">작업 가르치기</div>
+      <div className="mb-3 text-[14px] text-[#85858A]">
+        <Trans>Teach a task</Trans>
+      </div>
       {!teachAvailable ? (
         <div className="rounded-[11px] border border-[#232326] px-3 py-3 text-[13.5px] leading-[1.5] text-[#6C6C70]">
-          {computer?.kind === "desktop"
-            ? "작업 학습에는 화면이 있는 샌드박스 브라우저가 필요합니다. 데스크톱 호스트 봇은 셸 작업만 실행할 수 있습니다."
-            : "작업을 가르치려면 브라우저 화면을 여세요."}
+          {computer?.kind === "desktop" ? (
+            <Trans>
+              Teaching needs a graphical sandbox computer. Desktop-host bots can run shell tasks,
+              but not screen recording.
+            </Trans>
+          ) : (
+            <Trans>Open the computer view on web or desktop to teach a task.</Trans>
+          )}
         </div>
       ) : recording ? (
         <TeachRecordingChrome
@@ -85,7 +94,7 @@ export function TeachComputerSection({
       ) : goalOpen ? (
         <div className="rounded-[11px] border border-[#232326] bg-[#121214] px-3 py-3">
           <label htmlFor="teach-goal-input" className="text-[13px] text-[#85858A]">
-            어떤 작업을 시연할까요?
+            <Trans>What result will you demonstrate?</Trans>
           </label>
           <textarea
             id="teach-goal-input"
@@ -94,7 +103,7 @@ export function TeachComputerSection({
             onChange={(event) => setGoal(event.target.value)}
             rows={3}
             className="mt-2 w-full rounded-[10px] border border-[#26262A] bg-[#0E0E10] px-3 py-2 text-[14px] text-[#ECECEE] outline-none"
-            placeholder="CRM에서 이번 주 목록을 내려받아 공유 폴더에 저장하기"
+            placeholder={t`Export this week's list from the CRM and drop it in the shared folder`}
           />
           <div className="mt-3 flex gap-2">
             <button
@@ -103,14 +112,14 @@ export function TeachComputerSection({
               onClick={() => void startTeaching()}
               className="rounded-[11px] bg-[#F1F1EF] px-4 py-2 text-[14px] text-[#17171A] disabled:opacity-40"
             >
-              {busy ? "시작 중…" : "기록 시작"}
+              {busy ? <Trans>Starting…</Trans> : <Trans>Start recording</Trans>}
             </button>
             <button
               type="button"
               onClick={() => setGoalOpen(false)}
               className="rounded-[11px] border border-[#26262A] px-4 py-2 text-[14px] text-[#ECECEE]"
             >
-              취소
+              <Trans>Cancel</Trans>
             </button>
           </div>
         </div>
@@ -121,13 +130,15 @@ export function TeachComputerSection({
           onClick={() => setGoalOpen(true)}
           className="flex items-center gap-2.5 px-2.5 py-2.5 text-[14.5px] text-[#7A7A80]"
         >
-          + 작업 가르치기
+          <Trans>+ Teach a task</Trans>
         </button>
       )}
 
       {saved.length > 0 ? (
         <>
-          <div className="mt-[22px] mb-3 text-[14px] text-[#85858A]">저장된 작업</div>
+          <div className="mt-[22px] mb-3 text-[14px] text-[#85858A]">
+            <Trans>Saved skills</Trans>
+          </div>
           {saved.map((skill) => (
             <div key={skill.id} className="mb-2 rounded-[11px] border border-[#232326] px-3 py-3">
               <div className="text-[14px] text-[#ECECEE]">{skill.name || skill.goal}</div>
@@ -146,14 +157,14 @@ export function TeachComputerSection({
                   }}
                   className="rounded-[11px] border border-[#26262A] px-3 py-1.5 text-[13px] text-[#ECECEE]"
                 >
-                  테스트
+                  <Trans>Test</Trans>
                 </button>
                 <button
                   type="button"
                   onClick={() => onAddRoutine(skill)}
                   className="rounded-[11px] border border-[#26262A] px-3 py-1.5 text-[13px] text-[#ECECEE]"
                 >
-                  자동 작업에 추가
+                  <Trans>Add to routine</Trans>
                 </button>
                 <button
                   type="button"
@@ -169,7 +180,7 @@ export function TeachComputerSection({
                   }}
                   className="rounded-[11px] bg-[#F1F1EF] px-3 py-1.5 text-[13px] text-[#17171A] disabled:opacity-40"
                 >
-                  저장
+                  <Trans>Save</Trans>
                 </button>
               </div>
             </div>
