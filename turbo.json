@@ -3,6 +3,7 @@
   "globalPassThroughEnv": [
     "BROWSERBASE_API_KEY",
     "BROWSERBASE_PROJECT_ID",
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT",
     "OPENAI_API_KEY",
     "OPENROUTER_API_KEY",
     "QWEN_API_KEY"
@@ -17,6 +18,7 @@
         "BETTER_AUTH_SECRET",
         "DATABASE_URL",
         "ENCRYPTION_KEY",
+        "GIT_SHA",
         "PUBLIC_POSTHOG_HOST",
         "PUBLIC_POSTHOG_KEY"
       ],

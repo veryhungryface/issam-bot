@@ -1,82 +1,218 @@
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   CRON_FREQS,
   type CronFreq,
   type CronPreset,
   type CronUnit,
   cronFromPreset,
-  presetFromCron,
+  defaultCronPreset,
 } from "@rakazo/core";
 
 const UNITS: CronUnit[] = ["minutes", "hours", "days"];
 const NUMBERS = [1, 2, 3, 5, 10, 15, 30, 45];
-const TIME_LABELS: Record<string, string> = {
-  "6:00 AM": "오전 6:00",
-  "7:00 AM": "오전 7:00",
-  "8:00 AM": "오전 8:00",
-  "9:00 AM": "오전 9:00",
-  "12:00 PM": "오후 12:00",
-  "3:00 PM": "오후 3:00",
-  "6:00 PM": "오후 6:00",
-  "9:00 PM": "오후 9:00",
-};
-const TIMES = Object.keys(TIME_LABELS);
+const TIMES = [
+  "6:00 AM",
+  "7:00 AM",
+  "8:00 AM",
+  "9:00 AM",
+  "12:00 PM",
+  "3:00 PM",
+  "6:00 PM",
+  "9:00 PM",
+];
 
 const TIMED: CronFreq[] = ["Every day", "Weekdays", "Every week", "Every month"];
 
-const FREQ_LABELS: Record<CronFreq, string> = {
-  Interval: "간격 반복",
-  "Every hour": "매시간",
-  "Every day": "매일",
-  Weekdays: "평일",
-  "Every week": "매주",
-  "Every month": "매월",
-  Advanced: "고급 설정",
-};
-
-const UNIT_LABELS: Record<CronUnit, string> = {
-  minutes: "분",
-  hours: "시간",
-  days: "일",
-};
-
-function koreanTimeLabel(time: string): string {
-  return TIME_LABELS[time] ?? time;
+function cronFreqLabel(freq: CronFreq): string {
+  switch (freq) {
+    case "Every hour":
+      return t`Every hour`;
+    case "Every day":
+      return t`Every day`;
+    case "Weekdays":
+      return t`Weekdays`;
+    case "Every week":
+      return t`Every week`;
+    case "Every month":
+      return t`Every month`;
+    case "Interval":
+      return t`Interval`;
+    case "Advanced":
+      return t`Advanced`;
+    default:
+      return freq;
+  }
 }
 
-export function describeKoreanSchedule(preset: CronPreset): { lead: string; detail: string } {
+function cronUnitLabel(unit: CronUnit): string {
+  switch (unit) {
+    case "minutes":
+      return t`minutes`;
+    case "hours":
+      return t`hours`;
+    case "days":
+      return t`days`;
+    default:
+      return unit;
+  }
+}
+
+function cronUnitLabelSingular(unit: CronUnit): string {
+  switch (unit) {
+    case "minutes":
+      return t`minute`;
+    case "hours":
+      return t`hour`;
+    case "days":
+      return t`day`;
+    default:
+      return unit;
+  }
+}
+
+function describeCronPresetLocalized(preset: CronPreset): { lead: string; detail: string } {
   if (preset.freq === "Interval") {
-    return { lead: "반복", detail: `${preset.n}${UNIT_LABELS[preset.unit]}마다` };
+    const unitLabel =
+      preset.n === 1 ? cronUnitLabelSingular(preset.unit) : cronUnitLabel(preset.unit);
+    return {
+      lead: t`Every`,
+      detail: t`${preset.n} ${unitLabel}`,
+    };
   }
-  if (preset.freq === "Every hour") return { lead: "매시간", detail: "" };
+  if (preset.freq === "Every hour") {
+    return { lead: t`Every hour`, detail: "" };
+  }
   if (preset.freq === "Advanced") {
-    return { lead: "고급 일정", detail: preset.cron || "*/3 * * * *" };
+    return { lead: t`Cron`, detail: preset.cron || "*/3 * * * *" };
   }
-  const time = `${koreanTimeLabel(preset.time)}에`;
-  if (preset.freq === "Weekdays") return { lead: "평일", detail: time };
-  if (preset.freq === "Every week") return { lead: "매주 월요일", detail: time };
-  if (preset.freq === "Every month") return { lead: "매월 1일", detail: time };
-  return { lead: "매일", detail: time };
+  if (preset.freq === "Weekdays") {
+    return { lead: t`Weekdays`, detail: t`at ${preset.time}` };
+  }
+  if (preset.freq === "Every week") {
+    return { lead: t`Every Monday`, detail: t`at ${preset.time}` };
+  }
+  if (preset.freq === "Every month") {
+    return { lead: t`Monthly`, detail: t`on the 1st at ${preset.time}` };
+  }
+  return { lead: t`Every day`, detail: t`at ${preset.time}` };
 }
 
-export function formatKoreanCron(cron: string): string {
-  const { lead, detail } = describeKoreanSchedule(presetFromCron(cron));
-  return detail ? `${lead} ${detail}` : lead;
+export function RoutineSchedules({
+  value,
+  onChange,
+}: {
+  value: CronPreset[];
+  onChange: (next: CronPreset[]) => void;
+}) {
+  const { t } = useLingui();
+
+  return (
+    <div className="space-y-2">
+      {value.map((preset, index) => (
+        // Presets carry no stable id — index is the only key available, and
+        // rows never reorder (only append/remove at the end), so it's safe.
+        <div key={index} className="flex items-start gap-2">
+          <div className="flex-1">
+            <RoutineSchedule
+              value={preset}
+              onChange={(next) => onChange(value.map((p, i) => (i === index ? next : p)))}
+            />
+          </div>
+          {value.length > 1 ? (
+            <button
+              type="button"
+              aria-label={t`Remove this schedule`}
+              onClick={() => onChange(value.filter((_, i) => i !== index))}
+              className="mt-3 shrink-0 text-[#85858A] hover:text-[#ECECEE]"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          ) : null}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...value, defaultCronPreset()])}
+        className="text-[13.5px] text-[#9A9AA0] hover:text-[#ECECEE]"
+      >
+        <Trans>+ Add another schedule</Trans>
+      </button>
+    </div>
+  );
 }
 
-export function RoutineSchedule({
+function RoutineSchedule({
   value,
   onChange,
 }: {
   value: CronPreset;
   onChange: (next: CronPreset) => void;
 }) {
-  const { lead, detail } = describeKoreanSchedule(value);
+  const { t } = useLingui();
+  const { lead, detail } = describeCronPresetLocalized(value);
   const times = TIMES.includes(value.time) ? TIMES : [...TIMES, value.time];
   const numbers = NUMBERS.includes(value.n) ? NUMBERS : [...NUMBERS, value.n].sort((a, b) => a - b);
 
   function patch(partial: Partial<CronPreset>) {
     onChange({ ...value, ...partial });
   }
+
+  const intervalAmountSelect = (
+    <select
+      className="rk-schedule-select"
+      value={String(value.n)}
+      aria-label={t`Interval amount`}
+      onChange={(event) => patch({ n: Number(event.target.value) })}
+    >
+      {numbers.map((n) => (
+        <option key={n} value={n}>
+          {n}
+        </option>
+      ))}
+    </select>
+  );
+
+  const intervalUnitSelect = (
+    <select
+      className="rk-schedule-select"
+      value={value.unit}
+      aria-label={t`Interval unit`}
+      onChange={(event) => patch({ unit: event.target.value as CronUnit })}
+    >
+      {UNITS.map((unit) => (
+        <option key={unit} value={unit}>
+          {cronUnitLabel(unit)}
+        </option>
+      ))}
+    </select>
+  );
+
+  const timeSelect = (
+    <select
+      className="rk-schedule-select"
+      value={value.time}
+      aria-label={t`Time of day`}
+      onChange={(event) => patch({ time: event.target.value })}
+    >
+      {times.map((time) => (
+        <option key={time} value={time}>
+          {time}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div className="mt-2 rounded-[13px] border border-[#26262A] p-3">
@@ -103,7 +239,7 @@ export function RoutineSchedule({
         <select
           className="rk-schedule-select"
           value={value.freq}
-          aria-label="실행 주기"
+          aria-label={t`How often`}
           onChange={(event) => {
             const freq = event.target.value as CronFreq;
             if (freq === "Advanced") {
@@ -115,61 +251,21 @@ export function RoutineSchedule({
         >
           {CRON_FREQS.map((freq) => (
             <option key={freq} value={freq}>
-              {FREQ_LABELS[freq]}
+              {cronFreqLabel(freq)}
             </option>
           ))}
         </select>
         {value.freq === "Interval" ? (
-          <>
-            <span>매</span>
-            <select
-              className="rk-schedule-select"
-              value={String(value.n)}
-              aria-label="반복 간격"
-              onChange={(event) => patch({ n: Number(event.target.value) })}
-            >
-              {numbers.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <select
-              className="rk-schedule-select"
-              value={value.unit}
-              aria-label="반복 단위"
-              onChange={(event) => patch({ unit: event.target.value as CronUnit })}
-            >
-              {UNITS.map((unit) => (
-                <option key={unit} value={unit}>
-                  {UNIT_LABELS[unit]}
-                </option>
-              ))}
-            </select>
-          </>
+          <Trans>
+            every {intervalAmountSelect} {intervalUnitSelect}
+          </Trans>
         ) : null}
-        {TIMED.includes(value.freq) ? (
-          <>
-            <span>오전/오후</span>
-            <select
-              className="rk-schedule-select"
-              value={value.time}
-              aria-label="실행 시간"
-              onChange={(event) => patch({ time: event.target.value })}
-            >
-              {times.map((time) => (
-                <option key={time} value={time}>
-                  {koreanTimeLabel(time)}
-                </option>
-              ))}
-            </select>
-          </>
-        ) : null}
+        {TIMED.includes(value.freq) ? <Trans>at {timeSelect}</Trans> : null}
         {value.freq === "Advanced" ? (
           <input
             value={value.cron}
             placeholder="*/3 * * * *"
-            aria-label="고급 일정 표현식"
+            aria-label={t`Cron expression`}
             onChange={(event) => patch({ cron: event.target.value })}
             className="min-w-[120px] flex-1 rounded-lg border-0 bg-[#24242A] px-2.5 py-1.5 font-mono text-[13.5px] text-[#ECECEE] outline-none"
           />

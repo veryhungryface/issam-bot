@@ -12,9 +12,11 @@ const e2e = process.argv.includes("--e2e");
 const sandboxArg = process.argv.find((arg) => arg.startsWith("--sandbox="));
 const specArg = process.argv.find((arg) => arg.startsWith("--spec="));
 const grepArg = process.argv.find((arg) => arg.startsWith("--grep="));
+const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
 const e2eGrep = grepArg?.slice("--grep=".length);
+const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
 
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
@@ -24,6 +26,9 @@ if (!["fake", "e2b", "daytona", "box"].includes(sandboxProvider)) {
 }
 if (integration && sandboxProvider !== "fake") {
   throw new Error("Integration tests only support the fake sandbox");
+}
+if (agentRuntime !== "pi" && agentRuntime !== "scripted") {
+  throw new Error('Runtime must be "pi" or "scripted"');
 }
 if (sandboxProvider === "e2b" && !process.env.E2B_API_KEY) {
   throw new Error("E2B_API_KEY is required when --sandbox=e2b");
@@ -50,7 +55,7 @@ async function main() {
     process.env.VERIFY_DATABASE = "1";
     process.env.WAKEUP_DRIVER = "memory";
     process.env.SANDBOX_PROVIDER = sandboxProvider;
-    process.env.AGENT_RUNTIME = "scripted";
+    process.env.AGENT_RUNTIME = agentRuntime;
     process.env.COMPOSIO_API_KEY = "";
     process.env.BETTER_AUTH_SECRET = "test-secret-test-secret-32chars!";
     process.env.ENCRYPTION_KEY = "test-encryption-key-test-encryption-key";
@@ -82,6 +87,7 @@ async function main() {
           "packages/testkit/src/voice.test.ts",
           "packages/testkit/src/search.test.ts",
           "packages/testkit/src/executor-lifecycle.test.ts",
+          "packages/testkit/src/connections.test.ts",
           "packages/adapters/src/wakeup.postgres.test.ts",
           "packages/adapters/src/realtime.postgres.test.ts",
           "packages/adapters/src/job-reconciler.postgres.test.ts",
@@ -100,15 +106,29 @@ async function main() {
       return;
     }
 
-    const [{ ComposioEmulator }, { createApp }] = await Promise.all([
-      import("@rakazo/adapters"),
-      import("../../../../apps/api/src/app.ts"),
-    ]);
+    const [{ ComposioEmulator, PipedreamConnector, ThirdPartyConnectorEmulator }, { createApp }] =
+      await Promise.all([import("@rakazo/adapters"), import("../../../../apps/api/src/app.ts")]);
     const { serve } = await import("@hono/node-server");
+    const thirdParties = new ThirdPartyConnectorEmulator();
+    const pipedream = new PipedreamConnector(
+      {
+        clientId: "fake-client-id",
+        clientSecret: "fake-client-secret",
+        projectId: "fake-project-id",
+        environment: "development",
+        identitySecret: process.env.ENCRYPTION_KEY,
+      },
+      { fetch: thirdParties.fetch, resolveHostname: thirdParties.resolveHostname },
+    );
     const handles = await createApp({
       databaseUrl,
       prisma: undefined,
       composio: new ComposioEmulator(),
+      pipedream,
+      remoteConnectors: {
+        fetch: thirdParties.fetch,
+        resolveHostname: thirdParties.resolveHostname,
+      },
     });
     let activeRequests = 0;
     const requestWaiters = new Set<() => void>();
@@ -146,6 +166,8 @@ async function main() {
           {
             ...process.env,
             CI: "1",
+            // Pin English so e2e selectors match source messages regardless of runner locale.
+            VITE_DEFAULT_UI_LOCALE: "en",
           },
         );
       } catch (error) {
