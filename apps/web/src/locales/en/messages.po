@@ -517,7 +517,7 @@ msgstr "Choose a model to get started."
 
 #: src/pages/ModelSettingsOverlay.tsx:309
 msgid "Choose which connected model Rakazo uses."
-msgstr "Choose which connected model Rakazo uses."
+msgstr "Choose which connected model Issam Bot uses."
 
 #: src/pages/Shell.tsx:4809
 msgid "Clear"
@@ -980,7 +980,7 @@ msgstr "Create your first bot"
 
 #: src/pages/Auth.tsx:15
 msgid "Create your Rakazo"
-msgstr "Create your Rakazo"
+msgstr "Create your Issam Bot"
 
 #: src/pages/GroupPanel.tsx:134
 #: src/pages/Shell.tsx:4297
@@ -1830,7 +1830,7 @@ msgstr "Paste a replacement key"
 #: src/pages/ModelSettingsOverlay.tsx:415
 #: src/pages/Onboarding.tsx:280
 msgid "Paste the OpenAI-compatible address from your server. Rakazo adds /v1 if needed."
-msgstr "Paste the OpenAI-compatible address from your server. Rakazo adds /v1 if needed."
+msgstr "Paste the OpenAI-compatible address from your server. Issam Bot adds /v1 if needed."
 
 #: src/pages/VoiceSettingsOverlay.tsx:242
 msgid "Paste your API key"
@@ -1877,7 +1877,7 @@ msgstr "Queued"
 
 #: src/pages/PluginsOverlay.tsx:415
 msgid "Rakazo verifies the source before saving it. Credentials are encrypted and are never returned to clients or exposed to the model."
-msgstr "Rakazo verifies the source before saving it. Credentials are encrypted and are never returned to clients or exposed to the model."
+msgstr "Issam Bot verifies the source before saving it. Credentials are encrypted and are never returned to clients or exposed to the model."
 
 #: src/pages/Shell.tsx:4545
 msgid "Read replies aloud"
@@ -2009,7 +2009,7 @@ msgstr "Retry now"
 
 #: src/pages/McpOAuthCallback.tsx:65
 msgid "Return to Rakazo"
-msgstr "Return to Rakazo"
+msgstr "Return to Issam Bot"
 
 #: src/pages/Shell.tsx:2507
 #: src/pages/Shell.tsx:2560
@@ -2184,7 +2184,7 @@ msgstr "Sign in  →"
 
 #: src/pages/Auth.tsx:15
 msgid "Sign in to Rakazo"
-msgstr "Sign in to Rakazo"
+msgstr "Sign in to Issam Bot"
 
 #: src/pages/Auth.tsx:107
 msgid "Sign up"
@@ -2397,7 +2397,7 @@ msgstr "This server uses browser sign-in. Authorize it to let your agents use it
 
 #: src/pages/ModelSettingsOverlay.tsx:686
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
-msgstr "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
+msgstr "This subscription sign-in is not available in Issam Bot yet. Use a deployment credential or choose another provider."
 
 #: src/pages/RoutineSchedule.tsx:206
 msgid "Time of day"

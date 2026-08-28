@@ -114,6 +114,7 @@ import { type ArtifactTarget, decodeArtifactBase64 } from "../lib/artifact-open"
 import { authClient } from "../lib/auth";
 import { takeInitialBootstrap } from "../lib/bootstrap";
 import { chartViewport } from "../lib/chart-viewport";
+import { HIDE_MODEL_PICKER } from "../lib/deployment-flags";
 import { dictation } from "../lib/dictation";
 import { screenIframeSandbox as liveViewIframeSandbox } from "../lib/live-view";
 import { localTimezone } from "../lib/local-timezone";
@@ -2066,19 +2067,21 @@ export function ShellPage() {
                   <Trans>Settings</Trans>
                 </span>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setModelsOpen(true);
-                }}
-                className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 hover:bg-[#232327]"
-              >
-                <Cpu size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
-                <span className="flex-1 text-start text-[14.5px] text-[#ECECEE]">
-                  <Trans>Models</Trans>
-                </span>
-              </button>
+              {HIDE_MODEL_PICKER ? null : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setModelsOpen(true);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 hover:bg-[#232327]"
+                >
+                  <Cpu size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
+                  <span className="flex-1 text-start text-[14.5px] text-[#ECECEE]">
+                    <Trans>Models</Trans>
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -4655,32 +4658,36 @@ function BotSettings({
         <Suspense fallback={null}>
           <ScratchpadSection botId={bot.id} />
         </Suspense>
-        <label className="mt-4 block text-[14px] text-[#85858A]">
-          <Trans>Model</Trans>
-          <select
-            value={modelKey}
-            onChange={(event) => {
-              setModelKey(event.target.value);
-              setThinkingLevel("");
-            }}
-            className="mt-2 w-full rounded-[11px] border border-[#26262A] bg-transparent px-3.5 py-3 text-[#ECECEE]"
-          >
-            <option value="">
-              {t`Workspace default`}
-              {me?.defaultModel
-                ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel})`
-                : ""}
-            </option>
-            {modelKey && !connectedOptions.some((option) => option.key === modelKey) ? (
-              <option value={modelKey}>{parseModelOptionKey(modelKey)?.modelId ?? modelKey}</option>
-            ) : null}
-            {connectedOptions.map((option) => (
-              <option key={option.key} value={option.key}>
-                {option.label}
+        {HIDE_MODEL_PICKER ? null : (
+          <label className="mt-4 block text-[14px] text-[#85858A]">
+            <Trans>Model</Trans>
+            <select
+              value={modelKey}
+              onChange={(event) => {
+                setModelKey(event.target.value);
+                setThinkingLevel("");
+              }}
+              className="mt-2 w-full rounded-[11px] border border-[#26262A] bg-transparent px-3.5 py-3 text-[#ECECEE]"
+            >
+              <option value="">
+                {t`Workspace default`}
+                {me?.defaultModel
+                  ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel})`
+                  : ""}
               </option>
-            ))}
-          </select>
-        </label>
+              {modelKey && !connectedOptions.some((option) => option.key === modelKey) ? (
+                <option value={modelKey}>
+                  {parseModelOptionKey(modelKey)?.modelId ?? modelKey}
+                </option>
+              ) : null}
+              {connectedOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {thinkingOptions.length ? (
           <label className="mt-4 block text-[14px] text-[#85858A]">
             <Trans>Thinking</Trans>

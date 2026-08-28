@@ -7,6 +7,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { HIDE_MODEL_PICKER } from "../lib/deployment-flags";
 import { localizedProviderHint } from "../lib/localized-provider-hint";
 import type { ModelCatalogEntry } from "../lib/model-auth";
 import { rpc } from "../lib/rpc";
@@ -62,7 +63,7 @@ export function OnboardingPage() {
           setProvider(preferred.provider);
           setModelId(preferred.provider === OPENAI_COMPATIBLE_PROVIDER_ID ? "" : preferred.id);
         }
-        setStep("model");
+        setStep(HIDE_MODEL_PICKER ? "bot" : "model");
       })
       .catch(() => setStep("bot"));
     return () => {
