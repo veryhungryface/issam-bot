@@ -14,7 +14,7 @@ on:
       host:
         description: Target VPS address
         required: true
-        default: 172.245.30.225
+        default: 3.37.14.63
 
 permissions:
   contents: read

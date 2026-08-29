@@ -26,15 +26,15 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "http://172.245.30.225/health"
+      "destination": "http://3.37.14.63/health"
     },
     {
       "source": "/api/:path*",
-      "destination": "http://172.245.30.225/api/:path*"
+      "destination": "http://3.37.14.63/api/:path*"
     },
     {
       "source": "/rpc/:path*",
-      "destination": "http://172.245.30.225/rpc/:path*"
+      "destination": "http://3.37.14.63/rpc/:path*"
     },
     {
       "source": "/((?!assets/).*)",
