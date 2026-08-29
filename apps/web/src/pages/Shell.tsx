@@ -357,6 +357,8 @@ export function ShellPage() {
   const jumpGeneration = useRef(0);
   const initiallyScrolledThread = useRef<string | null>(null);
   const messageScroll = useRef<HTMLDivElement>(null);
+  // Whether the reader is at the transcript tail; live events auto-follow only then.
+  const followBottom = useRef(true);
   const pinnedAroundRef = useRef<{
     botId?: string;
     groupId?: string;
@@ -1261,6 +1263,27 @@ export function ShellPage() {
     initiallyScrolledThread.current = snapshot.threadId;
   }, [active, groupId, inGroup, snapshot?.botId, snapshot?.groupId, snapshot?.threadId]);
 
+  useEffect(() => {
+    const element = messageScroll.current;
+    if (!element) return;
+    const onScroll = () => {
+      followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+    };
+    onScroll();
+    element.addEventListener("scroll", onScroll, { passive: true });
+    return () => element.removeEventListener("scroll", onScroll);
+  }, [snapshot?.threadId]);
+
+  // Live SSE events only commit the snapshot; without this the transcript stays
+  // put while new bubbles append below the fold.
+  useLayoutEffect(() => {
+    if (!snapshot) return;
+    if (expandedHistoryThread.current === snapshot.threadId) return;
+    if (!followBottom.current) return;
+    const element = messageScroll.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [snapshot?.cursor, snapshot?.messages.length]);
+
   const openBot = useCallback((id: string) => navigate(`/app/${id}`), [navigate]);
   const loadOlder = useCallback(() => loadOlderMessagesRef.current(), []);
   const jumpToReplyMessage = useCallback((messageId: string) => {
@@ -1346,6 +1369,12 @@ export function ShellPage() {
         hasAttachments: attachments.length > 0,
       });
       if (plan.isNoOp) return;
+      // Sending always returns the reader to the tail, wherever they were.
+      followBottom.current = true;
+      window.requestAnimationFrame(() => {
+        const element = messageScroll.current;
+        if (element) element.scrollTop = element.scrollHeight;
+      });
       const reroutedToGroup = Boolean(
         plan.rerouteGroupId && plan.rerouteGroupId !== initialGroupTarget,
       );
@@ -1637,17 +1666,13 @@ export function ShellPage() {
     setRemoteTextError(null);
   }, [active?.id]);
 
-  // Browserbase Live View forwards raw key events to a remote Chromium without an
-  // IME, so direct Korean typing splits into jamo and mobile keyboards never rise.
-  // Surface the composed-text panel whenever the user takes control of a browser.
+  // The composed-text panel opens only from its button; auto-opening stole Tab
+  // and focus from people typing into the remote page. Still close it whenever
+  // control is lost so it never lingers over a view-only screen.
   const browserControlHeld =
     computer?.kind === "browserbase" && userHoldsComputerControl(computer, active?.id);
   useEffect(() => {
-    if (!browserControlHeld) {
-      setRemoteTextOpen(false);
-      return;
-    }
-    setRemoteTextOpen(true);
+    if (!browserControlHeld) setRemoteTextOpen(false);
   }, [browserControlHeld]);
 
   useEffect(() => {
@@ -1709,14 +1734,18 @@ export function ShellPage() {
     return () => window.clearInterval(timer);
   }, [panel, computerOpen, active?.id, computer?.state]);
 
-  async function openComputer() {
+  async function openComputer(options: { takeControl?: boolean } = {}) {
     if (!active) return;
-    const needsTakeover = !userHoldsComputerControl(computer, active.id);
+    // Viewing must not pause the bot: take the control lease only when the user
+    // explicitly asks for it or the bot is waiting for them on the screen.
+    const wantsControl = options.takeControl ?? snapshot?.run?.status === "waiting_takeover";
     const blocked = computerTakeoverBlocked(computer, snapshot?.run?.status);
+    const needsTakeover =
+      wantsControl && !blocked && !userHoldsComputerControl(computer, active.id);
     try {
       await bootComputer({
-        takeControl: needsTakeover && !blocked,
-        overlay: (needsTakeover && !blocked) || computer?.state !== "running",
+        takeControl: needsTakeover,
+        overlay: needsTakeover || computer?.state !== "running",
         force: computer?.state !== "running",
       });
       setComputerOpen(true);
@@ -2423,7 +2452,7 @@ export function ShellPage() {
                       size="sm"
                       disabled={takeoverBlocked}
                       title={takeoverBlocked ? t`Stop the bot first` : undefined}
-                      onClick={() => void openComputer()}
+                      onClick={() => void openComputer({ takeControl: true })}
                     >
                       <Trans>Take control</Trans>
                     </Button>
