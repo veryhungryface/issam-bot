@@ -6,6 +6,7 @@ export * from "./box-emulator.js";
 export * from "./box-sandbox.js";
 export * from "./browserbase-client.js";
 export * from "./browserbase-sandbox.js";
+export * from "./browserbase-usage.js";
 export * from "./builtin-skills.js";
 export * from "./builtin-tools.js";
 export * from "./cartesia-voice.js";

@@ -14,6 +14,17 @@ export interface BrowserbaseSession {
   status?: "PENDING" | "RUNNING" | "ERROR" | "TIMED_OUT" | "COMPLETED";
 }
 
+/** Session listing entry with the fields billing attribution needs. */
+export interface BrowserbaseSessionSummary {
+  id: string;
+  status?: string;
+  region?: string;
+  createdAt?: string;
+  startedAt?: string;
+  endedAt?: string;
+  userMetadata?: Record<string, unknown>;
+}
+
 export interface BrowserbaseLiveView {
   debuggerUrl?: string;
   debuggerFullscreenUrl?: string;
@@ -83,6 +94,12 @@ export class BrowserbaseClient {
 
   async getSession(sessionId: string): Promise<BrowserbaseSession | undefined> {
     return this.request(`/sessions/${encodeURIComponent(sessionId)}`, { allowNotFound: true });
+  }
+
+  async listSessions(status?: string): Promise<BrowserbaseSessionSummary[]> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    const sessions = await this.request<BrowserbaseSessionSummary[]>(`/sessions${query}`);
+    return Array.isArray(sessions) ? sessions : [];
   }
 
   async liveView(sessionId: string): Promise<BrowserbaseLiveView> {

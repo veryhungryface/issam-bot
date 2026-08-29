@@ -58,6 +58,7 @@ import {
   screenLeaseIdForRun,
   scriptedCatalogEntry,
   serializeModelSecret,
+  syncBrowserSessionUsage,
   takeoverLeaseMs,
   toComputerRef,
   toStringRecord,
@@ -2748,16 +2749,95 @@ export function createRouter(deps: RouterDeps) {
         }));
       }),
       summary: authed.usage.summary.handler(async ({ context }) => {
-        const result = await deps.prisma.usageRecord.aggregate({
-          where: { workspaceId: context.actor.workspaceId, userId: context.actor.userId },
-          _sum: { inputTokens: true, outputTokens: true },
-          _count: { _all: true },
-        });
+        await syncBrowserSessionUsage(deps.prisma, deps.sandbox);
+        const [result, browser] = await Promise.all([
+          deps.prisma.usageRecord.aggregate({
+            where: { workspaceId: context.actor.workspaceId, userId: context.actor.userId },
+            _sum: { inputTokens: true, outputTokens: true },
+            _count: { _all: true },
+          }),
+          deps.prisma.browserSessionUsage.aggregate({
+            where: { workspaceId: context.actor.workspaceId, userId: context.actor.userId },
+            _sum: { seconds: true },
+          }),
+        ]);
         return {
           inputTokens: result._sum.inputTokens ?? 0,
           outputTokens: result._sum.outputTokens ?? 0,
           runs: result._count._all,
+          browserSeconds: browser._sum.seconds ?? 0,
         };
+      }),
+      workspace: authed.usage.workspace.handler(async ({ context, input }) => {
+        const settings = await deps.prisma.deploymentSettings.findUnique({
+          where: { id: "default" },
+        });
+        // Per-user usage across the workspace is the deployment owner's view.
+        if (!settings?.ownerUserId || settings.ownerUserId !== context.actor.userId) {
+          throw new ORPCError("FORBIDDEN");
+        }
+        await syncBrowserSessionUsage(deps.prisma, deps.sandbox);
+        const since = new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+        const workspaceId = context.actor.workspaceId;
+        const [tokenRows, browserRows, users] = await Promise.all([
+          deps.prisma.usageRecord.groupBy({
+            by: ["userId"],
+            where: { workspaceId, createdAt: { gte: since } },
+            _sum: { inputTokens: true, outputTokens: true },
+            _count: { _all: true },
+          }),
+          deps.prisma.browserSessionUsage.groupBy({
+            by: ["userId"],
+            where: { workspaceId, startedAt: { gte: since } },
+            _sum: { seconds: true },
+            _count: { _all: true },
+          }),
+          deps.prisma.user.findMany({ select: { id: true, name: true, email: true } }),
+        ]);
+        const byUser = new Map<
+          string,
+          {
+            runs: number;
+            inputTokens: number;
+            outputTokens: number;
+            browserSeconds: number;
+            browserSessions: number;
+          }
+        >();
+        const entry = (userId: string) => {
+          let found = byUser.get(userId);
+          if (!found) {
+            found = {
+              runs: 0,
+              inputTokens: 0,
+              outputTokens: 0,
+              browserSeconds: 0,
+              browserSessions: 0,
+            };
+            byUser.set(userId, found);
+          }
+          return found;
+        };
+        for (const row of tokenRows) {
+          const target = entry(row.userId);
+          target.runs = row._count._all;
+          target.inputTokens = row._sum.inputTokens ?? 0;
+          target.outputTokens = row._sum.outputTokens ?? 0;
+        }
+        for (const row of browserRows) {
+          const target = entry(row.userId ?? "unattributed");
+          target.browserSeconds = row._sum.seconds ?? 0;
+          target.browserSessions = row._count._all;
+        }
+        const names = new Map(users.map((user) => [user.id, user]));
+        return [...byUser.entries()]
+          .map(([userId, sums]) => ({
+            userId,
+            name: names.get(userId)?.name ?? (userId === "unattributed" ? "(미분류 세션)" : userId),
+            email: names.get(userId)?.email ?? "",
+            ...sums,
+          }))
+          .sort((a, b) => b.browserSeconds + b.outputTokens - (a.browserSeconds + a.outputTokens));
       }),
     },
     export: {

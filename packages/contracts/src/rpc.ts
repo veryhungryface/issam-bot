@@ -530,7 +530,23 @@ export const appContract = {
         inputTokens: z.number(),
         outputTokens: z.number(),
         runs: z.number(),
+        browserSeconds: z.number(),
       }),
+    ),
+    /** Per-user breakdown for the deployment owner. */
+    workspace: oc.input(z.object({ days: z.number().int().min(1).max(365).default(30) })).output(
+      z.array(
+        z.object({
+          userId: z.string(),
+          name: z.string(),
+          email: z.string(),
+          runs: z.number(),
+          inputTokens: z.number(),
+          outputTokens: z.number(),
+          browserSeconds: z.number(),
+          browserSessions: z.number(),
+        }),
+      ),
     ),
   },
   export: {

@@ -346,7 +346,18 @@ export function ShellPage() {
     inputTokens: number;
     outputTokens: number;
     runs: number;
+    browserSeconds: number;
   } | null>(null);
+  const [workspaceUsage, setWorkspaceUsage] = useState<Array<{
+    userId: string;
+    name: string;
+    email: string;
+    runs: number;
+    inputTokens: number;
+    outputTokens: number;
+    browserSeconds: number;
+    browserSessions: number;
+  }> | null>(null);
   const autoBooted = useRef<string | null>(null);
   const routineSavePending = useRef(false);
   const routineSaveRequest = useRef(0);
@@ -2158,6 +2169,9 @@ export function ShellPage() {
                 className="flex w-full items-center gap-3 rounded-[11px] px-3 py-2.5 hover:bg-[#232327]"
                 onClick={async () => {
                   setUsage(await rpc.usage.summary());
+                  if (bootstrapMe?.isDeploymentOwner) {
+                    setWorkspaceUsage(await rpc.usage.workspace({ days: 30 }).catch(() => null));
+                  }
                 }}
               >
                 <Gauge size={16} strokeWidth={1.7} className="text-[#9A9AA0]" />
@@ -2166,11 +2180,29 @@ export function ShellPage() {
                 </span>
               </button>
               {usage ? (
-                <p className="px-3 pb-2 text-[12.5px] text-[#85858A]">
-                  <Trans>
-                    {usage.runs} runs · {usage.inputTokens + usage.outputTokens} tokens
-                  </Trans>
-                </p>
+                <div className="px-3 pb-2 text-[12.5px] leading-5 text-[#85858A]">
+                  <p className="m-0">
+                    {usage.runs}회 실행 · 토큰 입력 {usage.inputTokens.toLocaleString()} / 출력{" "}
+                    {usage.outputTokens.toLocaleString()}
+                  </p>
+                  <p className="m-0">브라우저 {formatBrowserMinutes(usage.browserSeconds)}</p>
+                  {workspaceUsage?.length ? (
+                    <div className="mt-2 border-t border-[#26262A] pt-2">
+                      <p className="m-0 mb-1 text-[11.5px] uppercase tracking-wide text-[#66666D]">
+                        사용자별 · 최근 30일
+                      </p>
+                      {workspaceUsage.map((row) => (
+                        <p key={row.userId} className="m-0 flex justify-between gap-3">
+                          <span className="truncate text-[#C9C9CE]">{row.name}</span>
+                          <span className="shrink-0 tabular-nums">
+                            {row.runs}회 · {(row.inputTokens + row.outputTokens).toLocaleString()}tk
+                            · {formatBrowserMinutes(row.browserSeconds)}
+                          </span>
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
               <button
                 type="button"
@@ -3900,6 +3932,14 @@ function MessageHoverActions({
       </button>
     </div>
   );
+}
+
+function formatBrowserMinutes(seconds: number): string {
+  if (seconds <= 0) return "0분";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
+  if (minutes === 0) return `${seconds}초`;
+  return `${minutes}분 ${seconds % 60}초`;
 }
 
 function firstThreadRoute(

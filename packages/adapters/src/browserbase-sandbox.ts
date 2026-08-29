@@ -292,6 +292,15 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     await applyBrowserAction(box, input, context);
   }
 
+  /** Recent provider sessions with billing-relevant timestamps and metadata. */
+  async listSessionUsage() {
+    const [completed, running] = await Promise.all([
+      this.client.listSessions("COMPLETED"),
+      this.client.listSessions("RUNNING"),
+    ]);
+    return [...completed, ...running];
+  }
+
   async observe(computer: ComputerRef, context: AdapterContext) {
     const box = await this.readyBox(computer, context);
     try {
@@ -771,6 +780,8 @@ function browserbaseMetadata(botId: string, context: AdapterContext): Record<str
   return {
     botId: safeMetadata(botId),
     workspaceId: safeMetadata(context.workspaceId),
+    // Attribute the session to a person so usage can be billed per user.
+    ...(context.userId ? { userId: safeMetadata(context.userId) } : {}),
     operationId: safeMetadata(context.operationId),
     ...(context.runId ? { runId: safeMetadata(context.runId) } : {}),
   };
