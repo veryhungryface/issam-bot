@@ -1666,6 +1666,22 @@ export function ShellPage() {
     setRemoteTextError(null);
   }, [active?.id]);
 
+  // When a run spins up the bot's browser, surface the side panel so the user
+  // can watch it work. Once per run, desktop only (the mobile panel is
+  // full-screen and would cover the conversation), and never over a panel the
+  // user already has open.
+  const autoOpenedPanelRun = useRef<string | null>(null);
+  useEffect(() => {
+    if (inGroup || !active) return;
+    const run = snapshot?.run;
+    if (!run || run.status !== "running") return;
+    if (computer?.state !== "booting" && computer?.state !== "running") return;
+    if (autoOpenedPanelRun.current === run.id) return;
+    autoOpenedPanelRun.current = run.id;
+    if (window.innerWidth < 768) return;
+    setPanel((current) => current ?? "computer");
+  }, [inGroup, active?.id, snapshot?.run?.id, snapshot?.run?.status, computer?.state]);
+
   // The composed-text panel opens only from its button; auto-opening stole Tab
   // and focus from people typing into the remote page. Still close it whenever
   // control is lost so it never lingers over a view-only screen.
