@@ -4,6 +4,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@rakazo/chat-ui/web";
 import { Download, FileText, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   type ArtifactTarget,
   downloadArtifact,
@@ -303,7 +304,9 @@ function FilePreviewModal({
     };
   }, [artifactId, mimeType, targetBotId, targetGroupId, t]);
 
-  return (
+  // Render through a portal so page-level overlays (computer side panel) can
+  // never intercept clicks on the modal.
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-5 backdrop-blur-sm">
       <button
         type="button"
@@ -379,7 +382,8 @@ function FilePreviewModal({
           )}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
