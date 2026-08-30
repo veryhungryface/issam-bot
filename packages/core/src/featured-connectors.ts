@@ -6,6 +6,16 @@ export const FEATURED_CONNECTOR_IDS = [
   "google-drive",
   "slack",
   "notion",
+  "youtube",
+  "github",
+  "discord",
+  "spotify",
+  "telegram",
+  "whatsapp",
+  "twitter",
+  "reddit",
+  "trello",
+  "airtable",
 ] as const;
 
 export type FeaturedConnectorId = (typeof FEATURED_CONNECTOR_IDS)[number];
@@ -16,6 +26,16 @@ export const FEATURED_CONNECTOR_LABELS: Record<FeaturedConnectorId, string> = {
   "google-drive": "Google Drive",
   slack: "Slack",
   notion: "Notion",
+  youtube: "YouTube",
+  github: "GitHub",
+  discord: "Discord",
+  spotify: "Spotify",
+  telegram: "Telegram",
+  whatsapp: "WhatsApp",
+  twitter: "X (Twitter)",
+  reddit: "Reddit",
+  trello: "Trello",
+  airtable: "Airtable",
 };
 
 const FEATURED_ALIASES: Record<FeaturedConnectorId, readonly string[]> = {
@@ -24,6 +44,16 @@ const FEATURED_ALIASES: Record<FeaturedConnectorId, readonly string[]> = {
   "google-drive": ["googledrive", "google drive", "google_drive", "gdrive"],
   slack: ["slack", "slackbot"],
   notion: ["notion", "notion.so"],
+  youtube: ["youtube", "yt"],
+  github: ["github", "git hub"],
+  discord: ["discord"],
+  spotify: ["spotify"],
+  telegram: ["telegram"],
+  whatsapp: ["whatsapp"],
+  twitter: ["twitter", "x", "xtwitter", "x twitter", "x twitter com"],
+  reddit: ["reddit"],
+  trello: ["trello"],
+  airtable: ["airtable"],
 };
 
 export type FeaturedConnectorTile = {

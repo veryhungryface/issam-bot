@@ -43,6 +43,16 @@ describe("featured connectors", () => {
     expect(featuredConnectorProvidersMatch("notion", "notion.so")).toBe(true);
   });
 
+  it("maps the popular long-tail catalog slugs", () => {
+    expect(matchFeaturedConnectorId("youtube")).toBe("youtube");
+    expect(matchFeaturedConnectorId("YT")).toBe("youtube");
+    expect(matchFeaturedConnectorId("git_hub")).toBe("github");
+    expect(matchFeaturedConnectorId("X")).toBe("twitter");
+    expect(matchFeaturedConnectorId("X (Twitter)")).toBe("twitter");
+    expect(matchFeaturedConnectorId("whatsapp")).toBe("whatsapp");
+    expect(matchFeaturedConnectorId("airtable")).toBe("airtable");
+  });
+
   it("returns null for unknown catalog entries", () => {
     expect(matchFeaturedConnectorId("salesforce")).toBeNull();
     expect(matchFeaturedConnectorId("outlook")).toBeNull();
@@ -58,7 +68,7 @@ describe("featured connectors", () => {
 
   it("marks all featured tiles missing when the catalog is empty", () => {
     const tiles = buildFeaturedConnectorTiles([]);
-    expect(tiles).toHaveLength(5);
+    expect(tiles).toHaveLength(15);
     expect(tiles.every((tile) => !tile.item && !tile.missing)).toBe(true);
   });
 

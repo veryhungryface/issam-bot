@@ -16,6 +16,10 @@ function itemKey(item: Pick<ConnectionCatalogItem, "connectorId" | "slug">) {
   return `${item.connectorId}:${item.slug}`;
 }
 
+function byName(left: ConnectionCatalogItem, right: ConnectionCatalogItem) {
+  return left.name.localeCompare(right.name);
+}
+
 function markConnected(
   items: ConnectionCatalogItem[],
   connectorId: string,
@@ -24,6 +28,59 @@ function markConnected(
 ) {
   return items.map((entry) =>
     entry.connectorId === connectorId && entry.slug === slug ? { ...entry, connected } : entry,
+  );
+}
+
+function CatalogRow({
+  name,
+  logo,
+  connected,
+  pending,
+  disabledNote,
+  onToggle,
+}: {
+  name: string;
+  logo: string | null;
+  connected: boolean;
+  pending: boolean;
+  disabledNote?: string;
+  onToggle?: () => void;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-[13px] px-2.5 py-2">
+      {logo ? (
+        <img
+          src={logo}
+          alt=""
+          className="h-9 w-9 shrink-0 rounded-xl bg-[#2C2C30] object-contain"
+        />
+      ) : (
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#2C2C30] text-sm font-semibold text-[#ECECEE]">
+          {name[0]}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[15px] font-medium text-[#ECECEE]">{name}</div>
+        {disabledNote ? (
+          <div className="truncate text-[12.5px] text-[#707077]">{disabledNote}</div>
+        ) : null}
+      </div>
+      {onToggle ? (
+        <Button type="button" variant="pill" size="sm" disabled={pending} onClick={onToggle}>
+          {pending ? (
+            connected ? (
+              <Trans>Removing…</Trans>
+            ) : (
+              <Trans>Adding…</Trans>
+            )
+          ) : connected ? (
+            <Trans>Remove</Trans>
+          ) : (
+            <Trans>Add</Trans>
+          )}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -50,6 +107,7 @@ export function PluginsOverlay({
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showAllApps, setShowAllApps] = useState(false);
   const connectionAttempt = useRef<AbortController | null>(null);
 
   async function refresh() {
@@ -71,26 +129,53 @@ export function PluginsOverlay({
     return () => connectionAttempt.current?.abort();
   }, []);
 
-  const featuredTiles = useMemo(() => buildFeaturedConnectorTiles(catalog), [catalog]);
-  const showFeatured = !query.trim();
+  const queryText = query.trim();
+  const searching = queryText.length > 0;
+  const showFeatured = !searching;
 
-  const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    const scoped = showFeatured
-      ? catalog.filter(
-          (item) =>
-            matchFeaturedConnectorId(item.slug) === null &&
-            matchFeaturedConnectorId(item.name) === null,
-        )
-      : catalog;
-    if (!needle) return scoped;
-    return scoped.filter(
-      (item) =>
-        item.name.toLowerCase().includes(needle) ||
-        item.slug.toLowerCase().includes(needle) ||
-        item.connectorId.toLowerCase().includes(needle),
+  const featuredTiles = useMemo(() => buildFeaturedConnectorTiles(catalog), [catalog]);
+
+  const connectedItems = useMemo(
+    () => catalog.filter((item) => item.connected).sort(byName),
+    [catalog],
+  );
+
+  const popularTiles = useMemo(
+    () =>
+      featuredTiles.filter(
+        (tile) => tile.item !== undefined && !tile.missing && !tile.item.connected,
+      ),
+    [featuredTiles],
+  );
+
+  const searchResults = useMemo(() => {
+    const needle = queryText.toLowerCase();
+    if (!needle) return [];
+    return catalog
+      .filter(
+        (item) =>
+          item.name.toLowerCase().includes(needle) ||
+          item.slug.toLowerCase().includes(needle) ||
+          item.connectorId.toLowerCase().includes(needle),
+      )
+      .sort(byName);
+  }, [catalog, queryText]);
+
+  const moreApps = useMemo(() => {
+    if (!showFeatured) return [];
+    const popularKeys = new Set(
+      popularTiles.flatMap((tile) => (tile.item ? [itemKey(tile.item)] : [])),
     );
-  }, [catalog, query, showFeatured]);
+    return catalog
+      .filter(
+        (item) =>
+          !item.connected &&
+          !popularKeys.has(itemKey(item)) &&
+          matchFeaturedConnectorId(item.slug) === null &&
+          matchFeaturedConnectorId(item.name) === null,
+      )
+      .sort(byName);
+  }, [catalog, popularTiles, showFeatured]);
 
   async function notifyAppConnected(item: ConnectionCatalogItem) {
     if (!activeBotId) return;
@@ -230,9 +315,9 @@ export function PluginsOverlay({
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(4,4,5,.62)] p-10">
-      <div className="flex h-[760px] w-[1080px] max-w-full flex-col overflow-hidden rounded-[26px] border border-[#232326] bg-[#141416] shadow-[0_40px_90px_rgba(0,0,0,.55)]">
-        <div className="flex items-start justify-between px-8 pt-7">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(4,4,5,.62)] p-4 md:p-10">
+      <div className="flex h-[min(760px,100%)] w-[1080px] max-w-full flex-col overflow-hidden rounded-[26px] border border-[#232326] bg-[#141416] shadow-[0_40px_90px_rgba(0,0,0,.55)]">
+        <div className="flex items-start justify-between px-6 pt-6 md:px-8 md:pt-7">
           <div className="text-2xl font-medium text-[#F1F1F2]">
             <Trans>Integrations</Trans>
           </div>
@@ -246,7 +331,7 @@ export function PluginsOverlay({
           </button>
         </div>
 
-        <div className="px-8 pt-4">
+        <div className="px-6 pt-4 md:px-8">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -256,7 +341,7 @@ export function PluginsOverlay({
           />
         </div>
 
-        <div id="integration-list" className="rk-scroll flex-1 overflow-y-auto px-8 py-6">
+        <div id="integration-list" className="rk-scroll flex-1 overflow-y-auto px-6 py-6 md:px-8">
           {catalogError ? <p className="mb-4 text-sm text-[#C94244]">{catalogError}</p> : null}
           {loading ? (
             <p className="text-[#6C6C70]">
@@ -264,172 +349,87 @@ export function PluginsOverlay({
             </p>
           ) : null}
 
-          {showFeatured ? (
-            <div className="mb-6" data-testid="featured-connectors">
-              {!loading && catalog.length === 0 ? (
-                <p className="text-[13.5px] leading-6 text-[#6C6C70]">
-                  {EMPTY_PLUGIN_CATALOG_MESSAGE}
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {featuredTiles.map((tile) => {
+          {!loading && catalog.length === 0 ? (
+            <p className="text-[13.5px] leading-6 text-[#6C6C70]">{EMPTY_PLUGIN_CATALOG_MESSAGE}</p>
+          ) : null}
+
+          {showFeatured && catalog.length > 0 ? (
+            <div data-testid="featured-connectors" className="mb-2">
+              {connectedItems.length > 0 ? (
+                <div className="mb-4">
+                  <div className="mb-2 text-[12px] font-medium tracking-[0.08em] text-[#707077] uppercase">
+                    <Trans>Connected</Trans>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {connectedItems.map((item) => (
+                      <CatalogRow
+                        key={itemKey(item)}
+                        name={item.name}
+                        logo={item.logo}
+                        connected
+                        pending={pending === itemKey(item)}
+                        onToggle={() => void revoke(item)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {popularTiles.length > 0 ? (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {popularTiles.map((tile) => {
                     const item = tile.item;
-                    const key = item ? itemKey(item) : tile.id;
-                    const disabled = tile.missing || !item;
-                    const connected = item?.connected ?? false;
+                    if (!item) return null;
                     return (
-                      <div
-                        key={key}
-                        className={`flex min-w-0 items-center gap-3 rounded-[13px] px-2.5 py-2 ${
-                          disabled ? "opacity-70" : ""
-                        }`}
-                      >
-                        {item?.logo ? (
-                          <img
-                            src={item.logo}
-                            alt=""
-                            className="h-9 w-9 shrink-0 rounded-xl bg-[#2C2C30] object-contain"
-                          />
-                        ) : (
-                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#2C2C30] text-sm font-semibold text-[#ECECEE]">
-                            {tile.label[0]}
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[15px] font-medium text-[#ECECEE]">
-                            {tile.label}
-                          </div>
-                          {disabled ? (
-                            <div className="truncate text-[12.5px] text-[#707077]">
-                              <Trans>Not in the plugin catalog</Trans>
-                            </div>
-                          ) : null}
-                        </div>
-                        {item && !tile.missing ? (
-                          <Button
-                            type="button"
-                            variant="pill"
-                            size="sm"
-                            disabled={pending === key}
-                            onClick={() => void (connected ? revoke(item) : connect(item))}
-                          >
-                            {pending === key ? (
-                              connected ? (
-                                <Trans>Removing…</Trans>
-                              ) : (
-                                <Trans>Adding…</Trans>
-                              )
-                            ) : connected ? (
-                              <Trans>Remove</Trans>
-                            ) : (
-                              <Trans>Add</Trans>
-                            )}
-                          </Button>
-                        ) : null}
-                      </div>
+                      <CatalogRow
+                        key={itemKey(item)}
+                        name={tile.label}
+                        logo={item.logo}
+                        connected={false}
+                        pending={pending === itemKey(item)}
+                        onToggle={() => void connect(item)}
+                      />
                     );
                   })}
                 </div>
-              )}
+              ) : null}
             </div>
           ) : null}
 
-          {!loading && catalog.length === 0 && !showFeatured ? (
-            <p className="text-[#6C6C70]">
-              <Trans>No managed app catalog is configured on this deployment.</Trans>
-            </p>
+          {searching && searchResults.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {searchResults.map((item) => (
+                <CatalogRow
+                  key={itemKey(item)}
+                  name={item.name}
+                  logo={item.logo}
+                  connected={item.connected}
+                  pending={pending === itemKey(item)}
+                  onToggle={() => void (item.connected ? revoke(item) : connect(item))}
+                />
+              ))}
+            </div>
           ) : null}
-          {!loading && catalog.length > 0 && visible.length === 0 && !showFeatured ? (
+          {searching && !loading && catalog.length > 0 && searchResults.length === 0 ? (
             <p className="text-[#6C6C70]">
               <Trans>No apps match your search.</Trans>
             </p>
           ) : null}
-          {visible.length > 0 ? (
-            <div className="grid grid-cols-2 gap-2">
-              {visible.map((item) => {
-                const key = itemKey(item);
-                return (
-                  <div
-                    key={key}
-                    className="flex min-w-0 items-center gap-3 rounded-[13px] px-2.5 py-2"
+
+          {!loading && catalog.length > 0 ? (
+            <div data-testid="custom-connectors" className="mt-6 border-t border-[#232326] pt-5">
+              <div className="text-sm font-medium text-[#A8A8AD]">
+                <Trans>Custom connectors</Trans>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {onOpenMcp ? (
+                  <button
+                    type="button"
+                    onClick={onOpenMcp}
+                    className="rounded-full border border-[#383844] px-3 py-1.5 text-xs text-[#C9C9CE] hover:bg-[#232327]"
                   >
-                    {item.logo ? (
-                      <img
-                        src={item.logo}
-                        alt=""
-                        className="h-9 w-9 shrink-0 rounded-xl bg-[#2C2C30] object-contain"
-                      />
-                    ) : (
-                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#2C2C30] text-sm font-semibold text-[#ECECEE]">
-                        {item.name[0]}
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-[15px] font-medium text-[#ECECEE]">
-                        {item.name}
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="pill"
-                      size="sm"
-                      disabled={pending === key}
-                      onClick={() => void (item.connected ? revoke(item) : connect(item))}
-                    >
-                      {pending === key ? (
-                        item.connected ? (
-                          <Trans>Removing…</Trans>
-                        ) : (
-                          <Trans>Adding…</Trans>
-                        )
-                      ) : item.connected ? (
-                        <Trans>Remove</Trans>
-                      ) : (
-                        <Trans>Add</Trans>
-                      )}
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-
-          <details
-            data-testid="integrations-advanced"
-            className="group mt-8"
-            onToggle={(event) => {
-              if (!(event.currentTarget as HTMLDetailsElement).open) {
-                setSourceKind(null);
-                setSourceError(null);
-                setSourceName("");
-                setSourceUrl("");
-                setCredential("");
-                setAuthType("none");
-                setAuthName("x-api-key");
-              }
-            }}
-          >
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[14px] text-[#85858A]">
-              <span className="text-[#85858A]">
-                <Trans>Advanced</Trans>
-              </span>
-              <span aria-hidden="true" className="transition-transform group-open:rotate-90">
-                ›
-              </span>
-            </summary>
-
-            <div className="mt-4 space-y-4">
-              {onOpenMcp ? (
-                <button
-                  type="button"
-                  onClick={onOpenMcp}
-                  className="rounded-full border border-[#383844] px-3 py-1.5 text-xs text-[#C9C9CE] hover:bg-[#232327]"
-                >
-                  <Trans>MCP servers</Trans>
-                </button>
-              ) : null}
-
-              <div className="flex flex-wrap gap-2">
+                    <Trans>MCP servers</Trans>
+                  </button>
+                ) : null}
                 <Button type="button" variant="pill" size="sm" onClick={() => beginSource("mcp")}>
                   <Trans>Add MCP server</Trans>
                 </Button>
@@ -441,10 +441,10 @@ export function PluginsOverlay({
                 </Button>
               </div>
 
-              {sourceError ? <p className="text-sm text-[#C94244]">{sourceError}</p> : null}
+              {sourceError ? <p className="mt-3 text-sm text-[#C94244]">{sourceError}</p> : null}
 
               {sourceKind ? (
-                <div className="space-y-3 rounded-[16px] border border-[#2C2C30] bg-[#101012] p-5">
+                <div className="mt-3 space-y-3 rounded-[16px] border border-[#2C2C30] bg-[#101012] p-5">
                   <div className="text-base font-medium text-[#ECECEE]">
                     {sourceKind === "treg" ? (
                       <Trans>Connect Treg</Trans>
@@ -539,7 +539,7 @@ export function PluginsOverlay({
                 </div>
               ) : null}
 
-              <div>
+              <div className="mt-5">
                 <div className="mb-3 text-sm font-medium text-[#A8A8AD]">
                   <Trans>Tool sources</Trans>
                 </div>
@@ -580,7 +580,34 @@ export function PluginsOverlay({
                 ))}
               </div>
             </div>
-          </details>
+          ) : null}
+
+          {showFeatured && moreApps.length > 0 ? (
+            <div className="mt-5">
+              <button
+                type="button"
+                data-testid="show-more-apps"
+                onClick={() => setShowAllApps((open) => !open)}
+                className="w-full rounded-[13px] border border-[#2C2C30] px-4 py-2.5 text-[14px] text-[#9A9AA0] hover:bg-[#1C1C1F]"
+              >
+                {showAllApps ? <Trans>Show fewer apps</Trans> : <Trans>Show more apps</Trans>}
+              </button>
+              {showAllApps ? (
+                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+                  {moreApps.map((item) => (
+                    <CatalogRow
+                      key={itemKey(item)}
+                      name={item.name}
+                      logo={item.logo}
+                      connected={item.connected}
+                      pending={pending === itemKey(item)}
+                      onToggle={() => void (item.connected ? revoke(item) : connect(item))}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -129,10 +129,10 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
     /Gmail[\s\S]*Google Calendar[\s\S]*Google Drive[\s\S]*Slack[\s\S]*Notion/,
   );
   await expect(page.getByText("GitHub", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add Treg", exact: true })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Add MCP server", exact: true })).toBeHidden();
-  await expect(page.getByRole("button", { name: "Add OpenAPI", exact: true })).toBeHidden();
-  await expect(page.getByText("Tool sources", { exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Add Treg", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add MCP server", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add OpenAPI", exact: true })).toBeVisible();
+  await expect(page.getByText("Tool sources", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Connect apps or add Treg, MCP, and OpenAPI tool sources.", { exact: true }),
   ).toBeHidden();
@@ -150,6 +150,7 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await expect(gmailRow.getByRole("button", { name: "Add", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "11b-connected-plugins-empty");
 
+  await page.getByTestId("show-more-apps").click();
   const linearRow = page
     .getByText("Linear", { exact: true })
     .locator("xpath=ancestor::*[.//button][1]");
@@ -161,17 +162,14 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await linearRow.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(linearRow.getByRole("button", { name: "Add", exact: true })).toBeVisible();
 
-  const advanced = page.getByTestId("integrations-advanced");
-  await advanced.evaluate((element) => {
-    (element as HTMLDetailsElement).open = true;
-  });
+  const custom = page.getByTestId("custom-connectors");
   await expect(page.getByRole("button", { name: "MCP servers", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add MCP server", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add OpenAPI", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Treg", exact: true })).toBeVisible();
   await expect(page.getByText("Tool sources", { exact: true })).toBeVisible();
-  // MCP → OpenAPI → Treg order inside Advanced.
-  const advancedActions = advanced.locator("button");
+  // MCP → OpenAPI → Treg order inside the custom connectors section.
+  const advancedActions = custom.locator("button");
   await expect(advancedActions.nth(0)).toHaveText("MCP servers");
   await expect(advancedActions.nth(1)).toHaveText("Add MCP server");
   await expect(advancedActions.nth(2)).toHaveText("Add OpenAPI");

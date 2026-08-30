@@ -2096,7 +2096,10 @@ export function ShellPage() {
         </div>
         <button
           type="button"
-          onClick={() => setPluginsOpen(true)}
+          onClick={() => {
+            setMobileSidebarOpen(false);
+            setPluginsOpen(true);
+          }}
           className="mx-3 mb-1 flex items-center gap-3 rounded-[11px] px-2.5 py-2 hover:bg-[#131315]"
         >
           <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-[#17171A] text-[#9A9AA0]">
