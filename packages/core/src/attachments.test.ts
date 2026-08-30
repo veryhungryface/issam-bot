@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   AttachmentValidationError,
+  attachmentExtensionForMimeType,
+  attachmentKindForMimeType,
   attachmentsForBot,
   blocksToAgentHistoryText,
   decodeAttachmentBase64,
   inferAttachmentMimeType,
+  messageBlockForArtifact,
   promptTextForAttachments,
   userTurnBlocksForRun,
   validateAttachmentMimeType,
@@ -54,7 +57,38 @@ describe("attachment helpers", () => {
     expect(inferAttachmentMimeType("notes.md", "")).toBe("text/markdown");
     expect(inferAttachmentMimeType("notes.markdown", "text/plain")).toBe("text/markdown");
     expect(inferAttachmentMimeType("notes.md", "application/pdf")).toBe("application/pdf");
+    expect(inferAttachmentMimeType("diagram.svg", "image/svg+xml")).toBe("image/svg+xml");
+    expect(inferAttachmentMimeType("clip.mp4", "")).toBe("video/mp4");
+    expect(inferAttachmentMimeType("clip.webm", "video/webm")).toBe("video/webm");
+    expect(inferAttachmentMimeType("audio.mp3", "")).toBe("audio/mpeg");
+    expect(inferAttachmentMimeType("audio.wav", "audio/wav")).toBe("audio/wav");
     expect(inferAttachmentMimeType("archive.zip", "")).toBeNull();
+  });
+
+  it("classifies image kinds and file kinds by mime type", () => {
+    expect(attachmentKindForMimeType("image/svg+xml")).toBe("image");
+    expect(attachmentKindForMimeType("video/mp4")).toBe("file");
+    expect(attachmentKindForMimeType("application/pdf")).toBe("file");
+    expect(attachmentExtensionForMimeType("image/svg+xml")).toBe(".svg");
+    expect(attachmentExtensionForMimeType("video/webm")).toBe(".webm");
+    expect(attachmentExtensionForMimeType("audio/mpeg")).toBe(".mp3");
+    expect(attachmentExtensionForMimeType("application/zip")).toBe("");
+    expect(
+      messageBlockForArtifact({
+        id: "art_svg",
+        name: "diagram.svg",
+        mimeType: "image/svg+xml",
+        size: 10,
+      }),
+    ).toMatchObject({ kind: "image" });
+    expect(
+      messageBlockForArtifact({
+        id: "art_mp4",
+        name: "clip.mp4",
+        mimeType: "video/mp4",
+        size: 10,
+      }),
+    ).toMatchObject({ kind: "file", size: 10 });
   });
 
   it("scopes current-turn images to user-triggered runs", () => {

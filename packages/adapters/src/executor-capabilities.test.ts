@@ -23,10 +23,17 @@ describe("executor sandbox capabilities", () => {
     const names = tools.map((tool) => tool.name);
 
     expect(names).toEqual(
-      expect.arrayContaining(["list_files", "read_file", "write_file", "attach_file"]),
+      expect.arrayContaining([
+        "list_files",
+        "read_file",
+        "write_file",
+        "attach_file",
+        "attach_screenshot",
+      ]),
     );
     expect(names).not.toContain("shell");
     expect(names).not.toContain("launch_app");
+    expect(tools.find((tool) => tool.name === "attach_screenshot")).toBeDefined();
     expect(tools.find((tool) => tool.name === "open_path")?.description).toContain("http(s)");
   });
 

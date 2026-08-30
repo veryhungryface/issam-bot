@@ -12,12 +12,13 @@ test("agent-attached files appear as downloadable cards", async ({ page }, testI
   await composer.fill("write notes/result.txt and attach it to the thread");
   await page.keyboard.press("Enter");
 
-  const fileCard = page.getByRole("button", { name: /result\.txt/ });
-  await expect(fileCard).toBeVisible({ timeout: 30_000 });
+  const previewButton = page.getByRole("button", { name: "Preview result.txt" });
+  await expect(previewButton).toBeVisible({ timeout: 30_000 });
   await captureScreenshot(page, testInfo, "current-file-card");
 
+  const downloadButton = page.getByRole("button", { name: "Download result.txt" });
   const downloadPromise = page.waitForEvent("download");
-  await fileCard.click();
+  await downloadButton.click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("result.txt");
 });
