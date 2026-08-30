@@ -95,6 +95,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
@@ -5809,20 +5810,23 @@ function ArtifactImage({
           {name}
         </div>
       )}
-      {open && src ? (
-        <button
-          type="button"
-          aria-label={t`Close image preview`}
-          className="fixed inset-0 z-50 grid place-items-center bg-[rgba(4,4,5,.82)] p-6"
-          onClick={() => setOpen(false)}
-        >
-          <img
-            src={src}
-            alt={name}
-            className="max-h-[85vh] max-w-[90vw] rounded-[12px] object-contain"
-          />
-        </button>
-      ) : null}
+      {open && src
+        ? createPortal(
+            <button
+              type="button"
+              aria-label={t`Close image preview`}
+              className="fixed inset-0 z-50 grid place-items-center bg-[rgba(4,4,5,.82)] p-6"
+              onClick={() => setOpen(false)}
+            >
+              <img
+                src={src}
+                alt={name}
+                className="max-h-[85vh] max-w-[90vw] rounded-[12px] object-contain"
+              />
+            </button>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
