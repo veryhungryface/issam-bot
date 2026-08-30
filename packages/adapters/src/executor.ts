@@ -23,7 +23,7 @@ import {
   runContinueJob,
 } from "@rakazo/adapter-kit";
 import type { MessageBlock, RunStatus } from "@rakazo/contracts";
-import { ATTACHMENT_MAX_BYTES, isAttachmentImageMimeType } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_BYTES, ATTACHMENT_RASTER_IMAGE_MIME_TYPES } from "@rakazo/contracts";
 import {
   type ActionApprovalRule,
   appendTextSegment,
@@ -213,6 +213,7 @@ const GRAPHICAL_AGENT_TOOLS = new Set([
   "computer_act",
   "open_path",
   "launch_app",
+  "attach_screenshot",
 ]);
 
 /** Gate builtin tools by what the sandbox provider can actually do (Browserbase has no shell, filesystem, or app launch). */
@@ -249,7 +250,7 @@ export function computerInstructionForSandboxCapabilities(
   capabilities: SandboxCapabilities,
 ): string {
   if (capabilities.graphical && !capabilities.filesystem && !capabilities.shell) {
-    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Use write_file and attach_file to deliver generated HTML or text as a safe chat download; local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
+    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Deliver results in their native format: documents as .md or .txt, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it is delivered as a download, never executed inline. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
   }
   if (capabilities.graphical) {
     const preciseWork = capabilities.shell
@@ -261,7 +262,7 @@ export function computerInstructionForSandboxCapabilities(
     const launching = capabilities.appLaunch
       ? "Use launch_app for installed applications."
       : "Installed application launching is unavailable.";
-    return `You have a persistent computer. Use computer_observe and computer_act for its visible desktop, including browsers and installed applications. ${opening} ${launching} ${preciseWork} On a Team Computer you have your own screen; other Team bots may run at the same time on theirs. Another user may interact with your screen while you run, so re-observe when it may have changed.`;
+    return `You have a persistent computer. Use computer_observe and computer_act for its visible desktop, including browsers and installed applications. ${opening} ${launching} ${preciseWork} Use attach_screenshot to show the current screen in chat. On a Team Computer you have your own screen; other Team bots may run at the same time on theirs. Another user may interact with your screen while you run, so re-observe when it may have changed.`;
   }
   return capabilities.shell
     ? "You have a persistent sandbox filesystem and shell. This backend does not provide model-visible graphical control, so use the file tools and shell."
@@ -1413,6 +1414,44 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return finish({
                 error: error instanceof Error ? error.message : "could not attach file",
                 path: filePath,
+              });
+            }
+          }
+          if (name === "attach_screenshot") {
+            if (await getActiveTeachingSession(deps.prisma, run.workspaceId, run.botId)) {
+              return { error: "Teaching is in progress. Stop teaching before using the computer." };
+            }
+            if (!deps.artifacts) {
+              return finish({ error: "artifact storage unavailable" });
+            }
+            try {
+              const observation = await withRecoveredComputer((active) =>
+                deps.sandbox.observe(active, context),
+              );
+              const extension = observation.mimeType === "image/jpeg" ? "jpg" : "png";
+              const attached = await attachWorkspaceFileToThread(
+                { prisma: deps.prisma, artifacts: deps.artifacts },
+                {
+                  workspaceId: run.workspaceId,
+                  userId: run.userId,
+                  botId: bot.id,
+                  groupId: thread.groupId ?? undefined,
+                  runId: run.id,
+                  filePath: `screenshots/screenshot-${Date.now()}.${extension}`,
+                  bytes: observation.image,
+                  operationId: executionId,
+                },
+              );
+              await publishMessage(deps, run, "bot", [attached.block]);
+              return finish({
+                ok: true,
+                artifactId: attached.artifactId,
+                pageUrl: observation.url,
+                pageTitle: observation.title,
+              });
+            } catch (error) {
+              return finish({
+                error: error instanceof Error ? error.message : "could not attach a screenshot",
               });
             }
           }
@@ -2850,7 +2889,11 @@ async function loadCurrentTurnImages(
 
   for (const block of imageBlocks) {
     const row = byId.get(block.artifactId);
-    if (!row || !isAttachmentImageMimeType(block.mimeType)) continue;
+    if (!row) continue;
+    // SVG renders in chat but is not accepted as model vision input.
+    if (!(ATTACHMENT_RASTER_IMAGE_MIME_TYPES as readonly string[]).includes(block.mimeType)) {
+      continue;
+    }
     const bytes = await deps.artifacts.get(row.storageKey, context);
     images.push({
       name: block.name,

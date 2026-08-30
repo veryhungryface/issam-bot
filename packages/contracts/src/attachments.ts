@@ -8,6 +8,22 @@ export const ATTACHMENT_IMAGE_MIME_TYPES = [
   "image/png",
   "image/webp",
   "image/gif",
+  "image/svg+xml",
+] as const;
+
+/** Raster images only: SVG is chat-renderable but is not valid model vision input. */
+export const ATTACHMENT_RASTER_IMAGE_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+] as const;
+
+export const ATTACHMENT_MEDIA_MIME_TYPES = [
+  "video/mp4",
+  "video/webm",
+  "audio/mpeg",
+  "audio/wav",
 ] as const;
 
 export const ATTACHMENT_FILE_MIME_TYPES = [
@@ -21,6 +37,7 @@ export const ATTACHMENT_FILE_MIME_TYPES = [
 
 export const ATTACHMENT_ALLOWED_MIME_TYPES = [
   ...ATTACHMENT_IMAGE_MIME_TYPES,
+  ...ATTACHMENT_MEDIA_MIME_TYPES,
   ...ATTACHMENT_FILE_MIME_TYPES,
 ] as const;
 

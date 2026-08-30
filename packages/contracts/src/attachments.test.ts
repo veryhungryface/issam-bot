@@ -41,4 +41,28 @@ describe("attachment contracts", () => {
       }),
     ).toMatchObject({ kind: "file", mimeType: "text/html" });
   });
+
+  it("allows SVG images, media, and document attachments", () => {
+    expect(ATTACHMENT_ALLOWED_MIME_TYPES).toContain("image/svg+xml");
+    for (const mimeType of ["video/mp4", "video/webm", "audio/mpeg", "audio/wav"]) {
+      expect(ATTACHMENT_ALLOWED_MIME_TYPES).toContain(mimeType);
+      expect(
+        MessageBlock.parse({
+          kind: "file",
+          artifactId: `art_${mimeType}`,
+          mimeType,
+          name: `clip-${mimeType}`,
+          size: 1,
+        }),
+      ).toMatchObject({ kind: "file", mimeType });
+    }
+    expect(
+      MessageBlock.parse({
+        kind: "image",
+        artifactId: "art_svg",
+        mimeType: "image/svg+xml",
+        name: "diagram.svg",
+      }),
+    ).toMatchObject({ kind: "image", mimeType: "image/svg+xml" });
+  });
 });

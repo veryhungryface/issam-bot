@@ -87,12 +87,18 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "attach_file",
     description:
-      "Attach a workspace file from this bot's home to the chat thread as an image or common file. HTML is delivered as a download and is never executed inline. The file stays in place.",
+      "Attach a workspace file from this bot's home to the chat thread in its native format: images (.png/.jpg/.webp/.gif/.svg), video (.mp4/.webm), audio (.mp3/.wav), documents (.pdf/.md/.txt), data (.csv/.json), or .html. The type is inferred from the file extension. HTML is delivered as a download and is never executed inline. The file stays in place.",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string" } },
       required: ["path"],
     },
+  },
+  {
+    name: "attach_screenshot",
+    description:
+      "Capture the current screen of this bot's computer and attach it to the chat as an image. Use it to show the user what the page or desktop looks like right now, or to share a visual result.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "shell",

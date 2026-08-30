@@ -155,6 +155,46 @@ describe("current-turn thread files", () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
+  it("attaches SVG, video, and audio files in their native formats", async () => {
+    const create = vi.fn().mockImplementation(({ data }) =>
+      Promise.resolve({
+        id: `row-${data.name}`,
+        name: data.name,
+        mimeType: data.mimeType,
+        size: data.size,
+      }),
+    );
+    const cases = [
+      { filePath: "diagram.svg", mimeType: "image/svg+xml", kind: "image" as const },
+      { filePath: "clip.mp4", mimeType: "video/mp4", kind: "file" as const },
+      { filePath: "clip.webm", mimeType: "video/webm", kind: "file" as const },
+      { filePath: "audio.mp3", mimeType: "audio/mpeg", kind: "file" as const },
+      { filePath: "tone.wav", mimeType: "audio/wav", kind: "file" as const },
+    ];
+    for (const expected of cases) {
+      const result = await attachWorkspaceFileToThread(
+        {
+          prisma: { artifact: { create } } as unknown as PrismaClient,
+          artifacts: {
+            put: vi.fn().mockResolvedValue({ id: "stored", hash: "hash" }),
+            remove: vi.fn(),
+          } as unknown as ArtifactStore,
+        },
+        {
+          workspaceId: "workspace-1",
+          userId: "user-1",
+          botId: "bot-1",
+          runId: "run-1",
+          filePath: expected.filePath,
+          bytes: new Uint8Array([1]),
+          operationId: `attach-${expected.filePath}`,
+        },
+      );
+      expect(result.block.kind).toBe(expected.kind);
+      expect(result.block.mimeType).toBe(expected.mimeType);
+    }
+  });
+
   it("copies Browserbase current-turn files into AgentHome without provider file access", async () => {
     const findMany = vi.fn().mockResolvedValue([
       {

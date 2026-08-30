@@ -19,43 +19,165 @@ type ArtifactFileCardProps = {
   size: number;
 };
 
+type PreviewKind = "markdown" | "text" | "pdf" | "html";
+
+function previewKindForMimeType(mimeType: string): PreviewKind | null {
+  if (mimeType === "text/markdown") return "markdown";
+  if (mimeType === "application/pdf") return "pdf";
+  if (mimeType === "text/html") return "html";
+  if (mimeType === "text/plain" || mimeType === "text/csv" || mimeType === "application/json") {
+    return "text";
+  }
+  return null;
+}
+
+function isInlineMediaMimeType(mimeType: string): boolean {
+  return mimeType.startsWith("video/") || mimeType.startsWith("audio/");
+}
+
 export function ArtifactFileCard(props: ArtifactFileCardProps) {
+  if (isInlineMediaMimeType(props.mimeType)) {
+    return <InlineMediaCard {...props} />;
+  }
+  if (!previewKindForMimeType(props.mimeType)) {
+    return <DownloadOnlyCard {...props} />;
+  }
+  return <PreviewableFileCard {...props} />;
+}
+
+function DownloadOnlyCard(props: ArtifactFileCardProps) {
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => void startDownload(props, setDownloadError)}
+        className="rounded-[20px] border border-[#26262A] bg-[#17171A] px-4 py-3 text-left text-[14px] text-[#DFDFE2] hover:bg-[#1F1F22]"
+      >
+        <div className="font-medium">{props.name}</div>
+        <div className="mt-1 text-[#85858A]">
+          {props.mimeType} · {formatBytes(props.size)}
+        </div>
+      </button>
+      {downloadError ? <DownloadError message={downloadError} /> : null}
+    </div>
+  );
+}
+
+async function startDownload(
+  props: ArtifactFileCardProps,
+  setError: (message: string | null) => void,
+) {
+  setError(null);
+  try {
+    await downloadArtifact(props.target, props.artifactId, props.name, props.mimeType);
+  } catch {
+    setError(t`Could not download ${props.name}. Try again.`);
+  }
+}
+
+function InlineMediaCard(props: ArtifactFileCardProps) {
   const { t } = useLingui();
-  const markdown = props.mimeType === "text/markdown";
+  const [src, setSrc] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const container = useRef<HTMLDivElement>(null);
+  const targetBotId = "botId" in props.target ? props.target.botId : undefined;
+  const targetGroupId = "groupId" in props.target ? props.target.groupId : undefined;
+
+  useEffect(() => {
+    const element = container.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "320px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSrc(null);
+    void fetchArtifactBytes(
+      targetBotId !== undefined ? { botId: targetBotId } : { groupId: targetGroupId! },
+      props.artifactId,
+    )
+      .then((bytes) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(
+          new Blob([new Uint8Array(bytes)], { type: props.mimeType }),
+        );
+        setSrc(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [props.artifactId, props.mimeType, targetBotId, targetGroupId, visible]);
+
+  return (
+    <div ref={container} className="max-w-[320px]">
+      {src ? (
+        props.mimeType.startsWith("video/") ? (
+          // biome-ignore lint/a11y/useMediaCaption: arbitrary chat media ships without caption tracks
+          <video
+            controls
+            preload="metadata"
+            src={src}
+            aria-label={props.name}
+            className="max-h-64 w-full rounded-[20px] bg-black"
+          />
+        ) : (
+          // biome-ignore lint/a11y/useMediaCaption: arbitrary chat media ships without caption tracks
+          <audio controls preload="metadata" src={src} aria-label={props.name} className="w-full" />
+        )
+      ) : (
+        <button
+          type="button"
+          onClick={() => void startDownload(props, setDownloadError)}
+          className="rounded-[20px] border border-[#26262A] bg-[#17171A] px-4 py-3 text-left text-[14px] text-[#85858A] hover:bg-[#1F1F22]"
+        >
+          {props.name} · {formatBytes(props.size)}
+        </button>
+      )}
+      <div className="mt-1 flex items-center gap-2 text-[13px] text-[#85858A]">
+        <span className="truncate">{props.name}</span>
+        <button
+          type="button"
+          aria-label={t`Download ${props.name}`}
+          title={t`Download ${props.name}`}
+          onClick={() => void startDownload(props, setDownloadError)}
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full hover:bg-[#222226] hover:text-[#ECECEE]"
+        >
+          <Download size={15} strokeWidth={1.8} />
+        </button>
+      </div>
+      {downloadError ? <DownloadError message={downloadError} /> : null}
+    </div>
+  );
+}
+
+function PreviewableFileCard(props: ArtifactFileCardProps) {
   const previewButton = useRef<HTMLButtonElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  async function startDownload() {
-    setDownloadError(null);
-    try {
-      await downloadArtifact(props.target, props.artifactId, props.name, props.mimeType);
-    } catch {
-      setDownloadError(t`Could not download ${props.name}. Try again.`);
-    }
-  }
-
   function closePreview() {
     setPreviewOpen(false);
     window.requestAnimationFrame(() => previewButton.current?.focus());
-  }
-
-  if (!markdown) {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={() => void startDownload()}
-          className="rounded-[20px] border border-[#26262A] bg-[#17171A] px-4 py-3 text-left text-[14px] text-[#DFDFE2] hover:bg-[#1F1F22]"
-        >
-          <div className="font-medium">{props.name}</div>
-          <div className="mt-1 text-[#85858A]">
-            {props.mimeType} · {formatBytes(props.size)}
-          </div>
-        </button>
-        {downloadError ? <DownloadError message={downloadError} /> : null}
-      </div>
-    );
   }
 
   return (
@@ -83,7 +205,7 @@ export function ArtifactFileCard(props: ArtifactFileCardProps) {
             type="button"
             aria-label={t`Download ${props.name}`}
             title={t`Download ${props.name}`}
-            onClick={() => void startDownload()}
+            onClick={() => void startDownload(props, setDownloadError)}
             className="grid w-14 shrink-0 place-items-center border-l border-[#343438] text-[#9A9AA0] hover:bg-[#222226] hover:text-[#ECECEE]"
           >
             <Download size={19} strokeWidth={1.8} />
@@ -91,12 +213,12 @@ export function ArtifactFileCard(props: ArtifactFileCardProps) {
         </div>
         {downloadError ? <DownloadError message={downloadError} /> : null}
       </div>
-      {previewOpen ? <MarkdownPreview {...props} onClose={closePreview} /> : null}
+      {previewOpen ? <FilePreviewModal {...props} onClose={closePreview} /> : null}
     </>
   );
 }
 
-function MarkdownPreview({
+function FilePreviewModal({
   target,
   artifactId,
   name,
@@ -110,7 +232,7 @@ function MarkdownPreview({
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [state, setState] = useState<
     | { status: "loading" }
-    | { status: "ready"; bytes: Uint8Array; markdown: string }
+    | { status: "ready"; bytes: Uint8Array; url: string | null }
     | { status: "error"; message: string }
   >({ status: "loading" });
   const targetBotId = "botId" in target ? target.botId : undefined;
@@ -150,16 +272,22 @@ function MarkdownPreview({
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
     const artifactTarget: ArtifactTarget =
       targetBotId !== undefined ? { botId: targetBotId } : { groupId: targetGroupId! };
     void fetchArtifactBytes(artifactTarget, artifactId)
       .then((bytes) => {
         if (cancelled) return;
+        if (previewKindForMimeType(mimeType) === "pdf") {
+          objectUrl = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType }));
+          setState({ status: "ready", bytes, url: objectUrl });
+          return;
+        }
         try {
-          const markdown = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-          setState({ status: "ready", bytes, markdown });
+          new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+          setState({ status: "ready", bytes, url: null });
         } catch {
-          setState({ status: "error", message: t`This file is not valid UTF-8 Markdown.` });
+          setState({ status: "error", message: t`Could not load this file.` });
         }
       })
       .catch((error) => {
@@ -171,8 +299,9 @@ function MarkdownPreview({
       });
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [artifactId, targetBotId, targetGroupId, t]);
+  }, [artifactId, mimeType, targetBotId, targetGroupId, t]);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-5 backdrop-blur-sm">
@@ -205,8 +334,11 @@ function MarkdownPreview({
               void (async () => {
                 setDownloadError(null);
                 try {
-                  if (state.status === "ready") downloadArtifactBytes(name, mimeType, state.bytes);
-                  else await downloadArtifact(target, artifactId, name, mimeType);
+                  if (state.status === "ready") {
+                    downloadArtifactBytes(name, mimeType, state.bytes);
+                  } else {
+                    await downloadArtifact(target, artifactId, name, mimeType);
+                  }
                 } catch {
                   setDownloadError(t`Could not download ${name}. Try again.`);
                 }
@@ -232,22 +364,62 @@ function MarkdownPreview({
           </div>
         ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <article className="mx-auto w-full max-w-[760px] px-8 py-10 text-[16px] leading-7 text-[#D5D5D8] sm:px-12 sm:py-12">
-            {state.status === "loading" ? (
-              <div className="text-[#85858A]">
-                <Trans>Loading preview…</Trans>
-              </div>
-            ) : state.status === "error" ? (
+          {state.status === "loading" ? (
+            <div className="px-8 py-10 text-[#85858A]">
+              <Trans>Loading preview…</Trans>
+            </div>
+          ) : state.status === "error" ? (
+            <div className="px-8 py-10">
               <div className="rounded-[14px] border border-[#5A2A2A] bg-[#2A1717] px-4 py-3 text-[#F1A8A8]">
                 {state.message}
               </div>
-            ) : (
-              <ChatMarkdown>{state.markdown}</ChatMarkdown>
-            )}
-          </article>
+            </div>
+          ) : (
+            <PreviewContent name={name} mimeType={mimeType} bytes={state.bytes} url={state.url} />
+          )}
         </div>
       </section>
     </div>
+  );
+}
+
+function PreviewContent({
+  name,
+  mimeType,
+  bytes,
+  url,
+}: {
+  name: string;
+  mimeType: string;
+  bytes: Uint8Array;
+  url: string | null;
+}) {
+  const kind = previewKindForMimeType(mimeType);
+  if (kind === "pdf") {
+    if (!url) return null;
+    return <iframe src={url} title={name} className="h-full min-h-[70vh] w-full border-0" />;
+  }
+  if (kind === "html") {
+    return (
+      <iframe
+        sandbox=""
+        srcDoc={new TextDecoder().decode(bytes)}
+        title={name}
+        className="h-full min-h-[70vh] w-full border-0 bg-white"
+      />
+    );
+  }
+  if (kind === "markdown") {
+    return (
+      <article className="mx-auto w-full max-w-[760px] px-8 py-10 text-[16px] leading-7 text-[#D5D5D8] sm:px-12 sm:py-12">
+        <ChatMarkdown>{new TextDecoder().decode(bytes)}</ChatMarkdown>
+      </article>
+    );
+  }
+  return (
+    <pre className="mx-auto w-full max-w-[960px] overflow-x-auto px-8 py-10 font-mono text-[13px] leading-6 whitespace-pre text-[#D5D5D8]">
+      {new TextDecoder().decode(bytes)}
+    </pre>
   );
 }
 
