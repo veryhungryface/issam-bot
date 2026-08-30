@@ -218,7 +218,7 @@ export function McpServersOverlay({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-[rgba(4,4,5,.62)] p-6">
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(4,4,5,.62)] p-6">
       <section
         className="flex max-h-full w-[1080px] max-w-full flex-col overflow-hidden rounded-[26px] border border-[#2A2A31] bg-[#141416] shadow-[0_40px_90px_rgba(0,0,0,.55)]"
         aria-label={t`MCP servers`}
