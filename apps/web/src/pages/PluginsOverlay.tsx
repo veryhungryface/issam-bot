@@ -381,7 +381,7 @@ export function PluginsOverlay({
           ) : null}
 
           {!loading && categoryChips.length >= 2 ? (
-            <div className="mb-4 flex flex-wrap gap-2" data-testid="category-chips">
+            <div className="mb-4 hidden flex-wrap gap-2 md:flex" data-testid="category-chips">
               <button
                 type="button"
                 aria-pressed={!activeCategory}
