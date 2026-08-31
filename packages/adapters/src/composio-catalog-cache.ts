@@ -3,6 +3,8 @@ export type ToolkitDirectoryEntry = {
   name: string;
   logo: string | null;
   noAuth: boolean;
+  description: string | null;
+  category: string | null;
 };
 
 export type ToolkitCatalogEntry = ToolkitDirectoryEntry & { connected: boolean };

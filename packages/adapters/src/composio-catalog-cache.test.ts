@@ -11,7 +11,16 @@ describe("composio toolkit directory cache", () => {
     const loader = async () => {
       loads += 1;
       await new Promise((resolve) => setTimeout(resolve, 10));
-      return [{ slug: "github", name: "GitHub", logo: null, noAuth: false }];
+      return [
+        {
+          slug: "github",
+          name: "GitHub",
+          logo: null,
+          noAuth: false,
+          description: null,
+          category: null,
+        },
+      ];
     };
     const [a, b] = await Promise.all([cache.get(loader), cache.get(loader)]);
     expect(loads).toBe(1);
@@ -27,7 +36,16 @@ describe("composio toolkit directory cache", () => {
     const cache = createToolkitDirectoryCache({ ttlMs: 10, now: () => now });
     const first = await cache.get(async () => {
       loads += 1;
-      return [{ slug: "gmail", name: "Gmail", logo: null, noAuth: false }];
+      return [
+        {
+          slug: "gmail",
+          name: "Gmail",
+          logo: null,
+          noAuth: false,
+          description: null,
+          category: null,
+        },
+      ];
     });
     expect(first[0]?.slug).toBe("gmail");
     now = 50;
@@ -41,12 +59,30 @@ describe("composio toolkit directory cache", () => {
     });
     expect(stale[0]?.slug).toBe("gmail");
     expect(loads).toBe(2);
-    resolveRefresh([{ slug: "slack", name: "Slack", logo: null, noAuth: false }]);
+    resolveRefresh([
+      {
+        slug: "slack",
+        name: "Slack",
+        logo: null,
+        noAuth: false,
+        description: null,
+        category: null,
+      },
+    ]);
     await refresh;
     await new Promise((resolve) => setTimeout(resolve, 0));
     const next = await cache.get(async () => {
       loads += 1;
-      return [{ slug: "linear", name: "Linear", logo: null, noAuth: false }];
+      return [
+        {
+          slug: "linear",
+          name: "Linear",
+          logo: null,
+          noAuth: false,
+          description: null,
+          category: null,
+        },
+      ];
     });
     expect(next[0]?.slug).toBe("slack");
     expect(loads).toBe(2);
@@ -55,8 +91,22 @@ describe("composio toolkit directory cache", () => {
   it("marks only connected slugs on the cached directory", () => {
     const items = mergeCatalogWithConnected(
       [
-        { slug: "github", name: "GitHub", logo: null, noAuth: false },
-        { slug: "hackernews", name: "Hacker News", logo: null, noAuth: true },
+        {
+          slug: "github",
+          name: "GitHub",
+          logo: null,
+          noAuth: false,
+          description: null,
+          category: null,
+        },
+        {
+          slug: "hackernews",
+          name: "Hacker News",
+          logo: null,
+          noAuth: true,
+          description: null,
+          category: null,
+        },
       ],
       ["hackernews"],
     );

@@ -160,7 +160,7 @@ msgstr "Active voice"
 msgid "Activity"
 msgstr "Activity"
 
-#: src/pages/PluginsOverlay.tsx:79
+#: src/pages/PluginsOverlay.tsx:90
 #: src/pages/ScratchpadSection.tsx:188
 msgid "Add"
 msgstr "Add"
@@ -185,15 +185,15 @@ msgstr "Add an HTTPS server URL."
 msgid "Add item"
 msgstr "Add item"
 
-#: src/pages/PluginsOverlay.tsx:436
+#: src/pages/PluginsOverlay.tsx:556
 msgid "Add MCP server"
 msgstr "Add MCP server"
 
-#: src/pages/PluginsOverlay.tsx:439
+#: src/pages/PluginsOverlay.tsx:559
 msgid "Add OpenAPI"
 msgstr "Add OpenAPI"
 
-#: src/pages/PluginsOverlay.tsx:454
+#: src/pages/PluginsOverlay.tsx:574
 msgid "Add remote MCP server"
 msgstr "Add remote MCP server"
 
@@ -206,12 +206,16 @@ msgstr "Add server"
 msgid "Add to routine"
 msgstr "Add to routine"
 
-#: src/pages/PluginsOverlay.tsx:442
+#: src/pages/PluginsOverlay.tsx:562
 msgid "Add Treg"
 msgstr "Add Treg"
 
+#: src/pages/PluginsOverlay.tsx:87
+msgid "Added"
+msgstr "Added"
+
 #: src/pages/McpServersOverlay.tsx:363
-#: src/pages/PluginsOverlay.tsx:74
+#: src/pages/PluginsOverlay.tsx:83
 msgid "Adding…"
 msgstr "Adding…"
 
@@ -232,6 +236,10 @@ msgstr "Agent computer"
 #: src/pages/McpServersOverlay.tsx:431
 msgid "Agents:"
 msgstr "Agents:"
+
+#: src/pages/PluginsOverlay.tsx:395
+msgid "All"
+msgstr "All"
 
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx:20
@@ -300,7 +308,7 @@ msgstr "Answered: {answer}"
 msgid "API key"
 msgstr "API key"
 
-#: src/pages/PluginsOverlay.tsx:490
+#: src/pages/PluginsOverlay.tsx:610
 msgid "API key header"
 msgstr "API key header"
 
@@ -416,7 +424,7 @@ msgstr "Authorize"
 msgid "Base URL"
 msgstr "Base URL"
 
-#: src/pages/PluginsOverlay.tsx:487
+#: src/pages/PluginsOverlay.tsx:607
 msgid "Bearer token"
 msgstr "Bearer token"
 
@@ -472,7 +480,7 @@ msgstr "Can't reach the server."
 #: src/components/AskCard.tsx:129
 #: src/components/ComputerMaintenanceActions.tsx:108
 #: src/components/teach/TeachComputerSection.tsx:122
-#: src/pages/PluginsOverlay.tsx:538
+#: src/pages/PluginsOverlay.tsx:658
 #: src/pages/Shell.tsx:5008
 #: src/pages/Shell.tsx:5080
 #: src/pages/Shell.tsx:5195
@@ -559,7 +567,7 @@ msgstr "Close computer"
 msgid "Close image preview"
 msgstr "Close image preview"
 
-#: src/pages/PluginsOverlay.tsx:326
+#: src/pages/PluginsOverlay.tsx:353
 msgid "Close integrations"
 msgstr "Close integrations"
 
@@ -674,14 +682,14 @@ msgstr "Connect remote or local tool servers and choose which agents can use the
 msgid "Connect this provider to use it as your personal model."
 msgstr "Connect this provider to use it as your personal model."
 
-#: src/pages/PluginsOverlay.tsx:452
+#: src/pages/PluginsOverlay.tsx:572
 msgid "Connect Treg"
 msgstr "Connect Treg"
 
 #: src/pages/McpOAuthCallback.tsx:53
 #: src/pages/MemorySettingsOverlay.tsx:163
 #: src/pages/ModelSettingsOverlay.tsx:377
-#: src/pages/PluginsOverlay.tsx:363
+#: src/pages/PluginsOverlay.tsx:445
 #: src/pages/Shell.tsx:5468
 #: src/pages/VoiceSettingsOverlay.tsx:202
 msgid "Connected"
@@ -718,7 +726,7 @@ msgid "Connecting…"
 msgstr "Connecting…"
 
 #. placeholder {0}: item.name
-#: src/pages/PluginsOverlay.tsx:227
+#: src/pages/PluginsOverlay.tsx:254
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "Connection to {0} is still pending. You can close this and check again."
 
@@ -763,7 +771,7 @@ msgstr "Could not clear conversation"
 msgid "Could not complete OAuth"
 msgstr "Could not complete OAuth"
 
-#: src/pages/PluginsOverlay.tsx:231
+#: src/pages/PluginsOverlay.tsx:258
 msgid "Could not connect"
 msgstr "Could not connect"
 
@@ -829,7 +837,7 @@ msgstr "Could not download {0}. Try again."
 msgid "Could not download {name}. Try again."
 msgstr "Could not download {name}. Try again."
 
-#: src/pages/PluginsOverlay.tsx:298
+#: src/pages/PluginsOverlay.tsx:325
 msgid "Could not install connector"
 msgstr "Could not install connector"
 
@@ -837,7 +845,7 @@ msgstr "Could not install connector"
 msgid "Could not load approval rules"
 msgstr "Could not load approval rules"
 
-#: src/pages/PluginsOverlay.tsx:126
+#: src/pages/PluginsOverlay.tsx:139
 msgid "Could not load integrations"
 msgstr "Could not load integrations"
 
@@ -871,7 +879,7 @@ msgstr "Could not reach this model server"
 msgid "Could not remove"
 msgstr "Could not remove"
 
-#: src/pages/PluginsOverlay.tsx:311
+#: src/pages/PluginsOverlay.tsx:338
 msgid "Could not remove connector"
 msgstr "Could not remove connector"
 
@@ -887,7 +895,7 @@ msgstr "Could not remove rule"
 msgid "Could not render chart"
 msgstr "Could not render chart"
 
-#: src/pages/PluginsOverlay.tsx:257
+#: src/pages/PluginsOverlay.tsx:284
 msgid "Could not revoke connection"
 msgstr "Could not revoke connection"
 
@@ -988,11 +996,11 @@ msgstr "Create your Issam Bot"
 msgid "Creating…"
 msgstr "Creating…"
 
-#: src/pages/PluginsOverlay.tsx:508
+#: src/pages/PluginsOverlay.tsx:628
 msgid "Credential"
 msgstr "Credential"
 
-#: src/pages/PluginsOverlay.tsx:566
+#: src/pages/PluginsOverlay.tsx:686
 msgid "credential saved"
 msgstr "credential saved"
 
@@ -1004,7 +1012,7 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron expression"
 
-#: src/pages/PluginsOverlay.tsx:423
+#: src/pages/PluginsOverlay.tsx:543
 msgid "Custom connectors"
 msgstr "Custom connectors"
 
@@ -1106,7 +1114,7 @@ msgstr "Disconnecting…"
 msgid "Dismissed — reconnect anytime from MCP settings."
 msgstr "Dismissed — reconnect anytime from MCP settings."
 
-#: src/pages/PluginsOverlay.tsx:462
+#: src/pages/PluginsOverlay.tsx:582
 msgid "Display name"
 msgstr "Display name"
 
@@ -1243,6 +1251,10 @@ msgstr "Failed to stop"
 msgid "Failure handling"
 msgstr "Failure handling"
 
+#: src/pages/PluginsOverlay.tsx:474
+msgid "Featured"
+msgstr "Featured"
+
 #: src/pages/ModelSettingsOverlay.tsx:426
 #: src/pages/Onboarding.tsx:291
 msgid "Find models"
@@ -1281,7 +1293,7 @@ msgid "Hang up"
 msgstr "Hang up"
 
 #: src/pages/McpServersOverlay.tsx:342
-#: src/pages/PluginsOverlay.tsx:498
+#: src/pages/PluginsOverlay.tsx:618
 msgid "Header name"
 msgstr "Header name"
 
@@ -1333,7 +1345,7 @@ msgstr "I’m done"
 msgid "If you heard that, voice is ready."
 msgstr "If you heard that, voice is ready."
 
-#: src/pages/PluginsOverlay.tsx:456
+#: src/pages/PluginsOverlay.tsx:576
 msgid "Import OpenAPI JSON"
 msgstr "Import OpenAPI JSON"
 
@@ -1353,7 +1365,7 @@ msgstr "Instance API key"
 msgid "Instruction"
 msgstr "Instruction"
 
-#: src/pages/PluginsOverlay.tsx:322
+#: src/pages/PluginsOverlay.tsx:349
 #: src/pages/Shell.tsx:2109
 msgid "Integrations"
 msgstr "Integrations"
@@ -1417,7 +1429,7 @@ msgstr "Load earlier messages"
 msgid "Loading activity…"
 msgstr "Loading activity…"
 
-#: src/pages/PluginsOverlay.tsx:348
+#: src/pages/PluginsOverlay.tsx:375
 msgid "Loading integrations…"
 msgstr "Loading integrations…"
 
@@ -1483,7 +1495,7 @@ msgstr "Max"
 
 #: src/pages/McpServersOverlay.tsx:224
 #: src/pages/McpServersOverlay.tsx:229
-#: src/pages/PluginsOverlay.tsx:432
+#: src/pages/PluginsOverlay.tsx:552
 msgid "MCP servers"
 msgstr "MCP servers"
 
@@ -1656,20 +1668,24 @@ msgstr "New routine"
 msgid "New section"
 msgstr "New section"
 
-#: src/pages/PluginsOverlay.tsx:416
+#: src/pages/PluginsOverlay.tsx:515
+msgid "No apps in this category."
+msgstr "No apps in this category."
+
+#: src/pages/PluginsOverlay.tsx:536
 msgid "No apps match your search."
 msgstr "No apps match your search."
 
-#: src/pages/PluginsOverlay.tsx:568
+#: src/pages/PluginsOverlay.tsx:688
 msgid "no auth"
 msgstr "no auth"
 
-#: src/pages/PluginsOverlay.tsx:484
+#: src/pages/PluginsOverlay.tsx:604
 msgid "No authentication"
 msgstr "No authentication"
 
 #. placeholder {0}: item.name
-#: src/pages/PluginsOverlay.tsx:253
+#: src/pages/PluginsOverlay.tsx:280
 msgid "No connection record found for {0}."
 msgstr "No connection record found for {0}."
 
@@ -1685,7 +1701,7 @@ msgstr "No exceptions. Actions run automatically."
 msgid "No longer active"
 msgstr "No longer active"
 
-#: src/pages/PluginsOverlay.tsx:550
+#: src/pages/PluginsOverlay.tsx:670
 msgid "No MCP or API tool sources installed yet."
 msgstr "No MCP or API tool sources installed yet."
 
@@ -1881,7 +1897,7 @@ msgstr "Providers"
 msgid "Queued"
 msgstr "Queued"
 
-#: src/pages/PluginsOverlay.tsx:513
+#: src/pages/PluginsOverlay.tsx:633
 msgid "Rakazo verifies the source before saving it. Credentials are encrypted and are never returned to clients or exposed to the model."
 msgstr "Issam Bot verifies the source before saving it. Credentials are encrypted and are never returned to clients or exposed to the model."
 
@@ -1924,8 +1940,7 @@ msgid "Release"
 msgstr "Release"
 
 #: src/components/ApprovalRulesSettings.tsx:138
-#: src/pages/PluginsOverlay.tsx:77
-#: src/pages/PluginsOverlay.tsx:579
+#: src/pages/PluginsOverlay.tsx:699
 #: src/pages/ScratchpadSection.tsx:162
 msgid "Remove"
 msgstr "Remove"
@@ -1934,6 +1949,10 @@ msgstr "Remove"
 #: src/pages/Shell.tsx:3589
 msgid "Remove {0}"
 msgstr "Remove {0}"
+
+#: src/pages/PluginsOverlay.tsx:76
+msgid "Remove {name}"
+msgstr "Remove {name}"
 
 #. placeholder {0}: mention.name
 #: src/pages/Shell.tsx:3744
@@ -1957,8 +1976,8 @@ msgstr "Removed with chat, computer, and memory."
 msgid "Removed, but list refresh failed"
 msgstr "Removed, but list refresh failed"
 
-#: src/pages/PluginsOverlay.tsx:72
-#: src/pages/PluginsOverlay.tsx:579
+#: src/pages/PluginsOverlay.tsx:81
+#: src/pages/PluginsOverlay.tsx:699
 msgid "Removing…"
 msgstr "Removing…"
 
@@ -2089,8 +2108,8 @@ msgstr "Say yes or no, or answer in a sentence."
 msgid "Search"
 msgstr "Search"
 
-#: src/pages/PluginsOverlay.tsx:338
-#: src/pages/PluginsOverlay.tsx:339
+#: src/pages/PluginsOverlay.tsx:365
+#: src/pages/PluginsOverlay.tsx:366
 msgid "Search apps"
 msgstr "Search apps"
 
@@ -2173,11 +2192,11 @@ msgstr "Shared"
 msgid "Show computer"
 msgstr "Show computer"
 
-#: src/pages/PluginsOverlay.tsx:596
+#: src/pages/PluginsOverlay.tsx:715
 msgid "Show fewer apps"
 msgstr "Show fewer apps"
 
-#: src/pages/PluginsOverlay.tsx:598
+#: src/pages/PluginsOverlay.tsx:715
 msgid "Show more apps"
 msgstr "Show more apps"
 
@@ -2419,11 +2438,11 @@ msgstr "Time of day"
 msgid "Title"
 msgstr "Title"
 
-#: src/pages/PluginsOverlay.tsx:546
+#: src/pages/PluginsOverlay.tsx:666
 msgid "Tool sources"
 msgstr "Tool sources"
 
-#: src/pages/PluginsOverlay.tsx:508
+#: src/pages/PluginsOverlay.tsx:628
 msgid "Treg token"
 msgstr "Treg token"
 
@@ -2470,11 +2489,11 @@ msgstr "Use a found model"
 msgid "Use this model"
 msgstr "Use this model"
 
-#: src/pages/PluginsOverlay.tsx:529
+#: src/pages/PluginsOverlay.tsx:649
 msgid "Verify and add"
 msgstr "Verify and add"
 
-#: src/pages/PluginsOverlay.tsx:527
+#: src/pages/PluginsOverlay.tsx:647
 msgid "Verifying…"
 msgstr "Verifying…"
 
