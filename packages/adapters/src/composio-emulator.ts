@@ -11,12 +11,54 @@ import {
 } from "./composio-connector.js";
 
 const DEFAULT_CATALOG: ReadonlyArray<Omit<ComposioCatalogItem, "connected">> = [
-  { slug: "GMAIL", name: "Gmail", logo: null, noAuth: false },
-  { slug: "GOOGLECALENDAR", name: "Google Calendar", logo: null, noAuth: false },
-  { slug: "GOOGLEDRIVE", name: "Google Drive", logo: null, noAuth: false },
-  { slug: "SLACK", name: "Slack", logo: null, noAuth: false },
-  { slug: "GITHUB", name: "GitHub", logo: null, noAuth: false },
-  { slug: "NOTION", name: "Notion", logo: null, noAuth: false },
+  {
+    slug: "GMAIL",
+    name: "Gmail",
+    logo: null,
+    noAuth: false,
+    description: "Search, read, draft, and manage email.",
+    category: "Email",
+  },
+  {
+    slug: "GOOGLECALENDAR",
+    name: "Google Calendar",
+    logo: null,
+    noAuth: false,
+    description: "Search events and schedule meetings.",
+    category: "Scheduling",
+  },
+  {
+    slug: "GOOGLEDRIVE",
+    name: "Google Drive",
+    logo: null,
+    noAuth: false,
+    description: "Search, read, create, and share files.",
+    category: "Files",
+  },
+  {
+    slug: "SLACK",
+    name: "Slack",
+    logo: null,
+    noAuth: false,
+    description: "Send messages and manage channels and users.",
+    category: "Communication",
+  },
+  {
+    slug: "GITHUB",
+    name: "GitHub",
+    logo: null,
+    noAuth: false,
+    description: "Manage repositories, issues, and pull requests.",
+    category: "Code",
+  },
+  {
+    slug: "NOTION",
+    name: "Notion",
+    logo: null,
+    noAuth: false,
+    description: "Search, read, and update pages and databases.",
+    category: "Docs",
+  },
 ];
 
 /** Deterministic, offline Composio catalog and connection emulator for product tests. */

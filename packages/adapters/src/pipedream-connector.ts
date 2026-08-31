@@ -113,6 +113,8 @@ export class PipedreamConnector implements ManagedConnectorProvider {
         logo: app.img_src ?? null,
         connected: connectedSet.has(app.name_slug),
         noAuth: false,
+        description: null,
+        category: null,
       })),
       query ?? "",
     );

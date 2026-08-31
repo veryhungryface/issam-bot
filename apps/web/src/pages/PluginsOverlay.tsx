@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { CapabilityInstall, ConnectionCatalogItem } from "@rakazo/contracts";
 import {
@@ -34,16 +35,16 @@ function markConnected(
 function CatalogRow({
   name,
   logo,
+  description,
   connected,
   pending,
-  disabledNote,
   onToggle,
 }: {
   name: string;
   logo: string | null;
+  description?: string | null;
   connected: boolean;
   pending: boolean;
-  disabledNote?: string;
   onToggle?: () => void;
 }) {
   return (
@@ -61,12 +62,20 @@ function CatalogRow({
       )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px] font-medium text-[#ECECEE]">{name}</div>
-        {disabledNote ? (
-          <div className="truncate text-[12.5px] text-[#707077]">{disabledNote}</div>
+        {description ? (
+          <div className="truncate text-[12.5px] leading-5 text-[#85858A]">{description}</div>
         ) : null}
       </div>
       {onToggle ? (
-        <Button type="button" variant="pill" size="sm" disabled={pending} onClick={onToggle}>
+        <Button
+          type="button"
+          variant="pill"
+          size="sm"
+          disabled={pending}
+          onClick={onToggle}
+          aria-label={connected ? t`Remove ${name}` : undefined}
+          className={connected ? "text-[#57AB5A]" : undefined}
+        >
           {pending ? (
             connected ? (
               <Trans>Removing…</Trans>
@@ -74,7 +83,9 @@ function CatalogRow({
               <Trans>Adding…</Trans>
             )
           ) : connected ? (
-            <Trans>Remove</Trans>
+            <>
+              <span aria-hidden="true">✓</span> <Trans>Added</Trans>
+            </>
           ) : (
             <Trans>Add</Trans>
           )}
@@ -108,6 +119,8 @@ export function PluginsOverlay({
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAllApps, setShowAllApps] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [showConnected, setShowConnected] = useState(false);
   const connectionAttempt = useRef<AbortController | null>(null);
 
   async function refresh() {
@@ -143,7 +156,8 @@ export function PluginsOverlay({
   const popularTiles = useMemo(
     () =>
       featuredTiles.filter(
-        (tile) => tile.item !== undefined && !tile.missing && !tile.item.connected,
+        (tile): tile is typeof tile & { item: ConnectionCatalogItem } =>
+          tile.item !== undefined && !tile.missing,
       ),
     [featuredTiles],
   );
@@ -169,13 +183,26 @@ export function PluginsOverlay({
     return catalog
       .filter(
         (item) =>
-          !item.connected &&
           !popularKeys.has(itemKey(item)) &&
           matchFeaturedConnectorId(item.slug) === null &&
           matchFeaturedConnectorId(item.name) === null,
       )
       .sort(byName);
   }, [catalog, popularTiles, showFeatured]);
+
+  const categoryChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of catalog) {
+      if (!item.category) continue;
+      counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [catalog]);
+
+  const categoryItems = useMemo(() => {
+    if (!activeCategory) return [];
+    return catalog.filter((item) => item.category === activeCategory).sort(byName);
+  }, [catalog, activeCategory]);
 
   async function notifyAppConnected(item: ConnectionCatalogItem) {
     if (!activeBotId) return;
@@ -353,46 +380,140 @@ export function PluginsOverlay({
             <p className="text-[13.5px] leading-6 text-[#6C6C70]">{EMPTY_PLUGIN_CATALOG_MESSAGE}</p>
           ) : null}
 
-          {showFeatured && catalog.length > 0 ? (
+          {!loading && categoryChips.length >= 2 ? (
+            <div className="mb-4 flex flex-wrap gap-2" data-testid="category-chips">
+              <button
+                type="button"
+                aria-pressed={!activeCategory}
+                onClick={() => setActiveCategory(null)}
+                className={`rounded-full border px-3 py-1.5 text-[13px] ${
+                  activeCategory === null
+                    ? "border-[#4C8DFF] bg-[#1B2A44] text-[#C9C9CE]"
+                    : "border-[#2C2C30] text-[#85858A] hover:bg-[#1C1C1F]"
+                }`}
+              >
+                <Trans>All</Trans>
+              </button>
+              {categoryChips.map(([name, count]) => (
+                <button
+                  key={name}
+                  type="button"
+                  aria-pressed={activeCategory === name}
+                  onClick={() => setActiveCategory((current) => (current === name ? null : name))}
+                  className={`rounded-full border px-3 py-1.5 text-[13px] ${
+                    activeCategory === name
+                      ? "border-[#4C8DFF] bg-[#1B2A44] text-[#C9C9CE]"
+                      : "border-[#2C2C30] text-[#85858A] hover:bg-[#1C1C1F]"
+                  }`}
+                >
+                  {name} · {count}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {showFeatured && catalog.length > 0 && !activeCategory ? (
             <div data-testid="featured-connectors" className="mb-2">
               {connectedItems.length > 0 ? (
                 <div className="mb-4">
-                  <div className="mb-2 text-[12px] font-medium tracking-[0.08em] text-[#707077] uppercase">
-                    <Trans>Connected</Trans>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {connectedItems.map((item) => (
-                      <CatalogRow
-                        key={itemKey(item)}
-                        name={item.name}
-                        logo={item.logo}
-                        connected
-                        pending={pending === itemKey(item)}
-                        onToggle={() => void revoke(item)}
-                      />
-                    ))}
-                  </div>
+                  <button
+                    type="button"
+                    data-testid="connected-summary"
+                    aria-expanded={showConnected}
+                    onClick={() => setShowConnected((open) => !open)}
+                    className="flex items-center gap-2.5 rounded-[13px] border border-[#2C2C30] px-3 py-2 hover:bg-[#1C1C1F]"
+                  >
+                    <span className="flex -space-x-2">
+                      {connectedItems.slice(0, 4).map((item) => (
+                        <span
+                          key={itemKey(item)}
+                          className="grid h-7 w-7 place-items-center rounded-full border border-[#141416] bg-[#2C2C30] text-[11px] font-semibold text-[#ECECEE]"
+                        >
+                          {item.logo ? (
+                            <img
+                              src={item.logo}
+                              alt=""
+                              className="h-full w-full rounded-full object-contain"
+                            />
+                          ) : (
+                            item.name[0]
+                          )}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="text-[13.5px] text-[#C9C9CE]">
+                      <Trans>Connected</Trans> · {connectedItems.length}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`text-[#85858A] transition-transform ${showConnected ? "rotate-90" : ""}`}
+                    >
+                      ›
+                    </span>
+                  </button>
+                  {showConnected ? (
+                    <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {connectedItems.map((item) => (
+                        <CatalogRow
+                          key={itemKey(item)}
+                          name={item.name}
+                          logo={item.logo}
+                          description={item.description}
+                          connected
+                          pending={pending === itemKey(item)}
+                          onToggle={() => void revoke(item)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {popularTiles.length > 0 ? (
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {popularTiles.map((tile) => {
-                    const item = tile.item;
-                    if (!item) return null;
-                    return (
-                      <CatalogRow
-                        key={itemKey(item)}
-                        name={tile.label}
-                        logo={item.logo}
-                        connected={false}
-                        pending={pending === itemKey(item)}
-                        onToggle={() => void connect(item)}
-                      />
-                    );
-                  })}
+                <div>
+                  <div className="mb-2 text-[12px] font-medium tracking-[0.08em] text-[#707077] uppercase">
+                    <Trans>Featured</Trans>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {popularTiles.map((tile) => {
+                      const item = tile.item;
+                      if (!item) return null;
+                      return (
+                        <CatalogRow
+                          key={itemKey(item)}
+                          name={tile.label}
+                          logo={item.logo}
+                          description={item.description}
+                          connected={item.connected}
+                          pending={pending === itemKey(item)}
+                          onToggle={() => void (item.connected ? revoke(item) : connect(item))}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
             </div>
+          ) : null}
+
+          {showFeatured && activeCategory && categoryItems.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              {categoryItems.map((item) => (
+                <CatalogRow
+                  key={itemKey(item)}
+                  name={item.name}
+                  logo={item.logo}
+                  description={item.description}
+                  connected={item.connected}
+                  pending={pending === itemKey(item)}
+                  onToggle={() => void (item.connected ? revoke(item) : connect(item))}
+                />
+              ))}
+            </div>
+          ) : null}
+          {showFeatured && activeCategory && !loading && categoryItems.length === 0 ? (
+            <p className="text-[#6C6C70]">
+              <Trans>No apps in this category.</Trans>
+            </p>
           ) : null}
 
           {searching && searchResults.length > 0 ? (
@@ -402,6 +523,7 @@ export function PluginsOverlay({
                   key={itemKey(item)}
                   name={item.name}
                   logo={item.logo}
+                  description={item.description}
                   connected={item.connected}
                   pending={pending === itemKey(item)}
                   onToggle={() => void (item.connected ? revoke(item) : connect(item))}
@@ -582,7 +704,7 @@ export function PluginsOverlay({
             </div>
           ) : null}
 
-          {showFeatured && moreApps.length > 0 ? (
+          {showFeatured && !activeCategory && moreApps.length > 0 ? (
             <div className="mt-5">
               <button
                 type="button"
@@ -599,6 +721,7 @@ export function PluginsOverlay({
                       key={itemKey(item)}
                       name={item.name}
                       logo={item.logo}
+                      description={item.description}
                       connected={item.connected}
                       pending={pending === itemKey(item)}
                       onToggle={() => void (item.connected ? revoke(item) : connect(item))}

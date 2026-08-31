@@ -160,7 +160,7 @@ msgstr "सक्रिय आवाज़"
 msgid "Activity"
 msgstr "गतिविधि"
 
-#: src/pages/PluginsOverlay.tsx:79
+#: src/pages/PluginsOverlay.tsx:90
 #: src/pages/ScratchpadSection.tsx:188
 msgid "Add"
 msgstr "जोड़ें"
@@ -185,15 +185,15 @@ msgstr "एक HTTPS सर्वर URL दर्ज करें।"
 msgid "Add item"
 msgstr "आइटम जोड़ें"
 
-#: src/pages/PluginsOverlay.tsx:436
+#: src/pages/PluginsOverlay.tsx:556
 msgid "Add MCP server"
 msgstr "MCP सर्वर जोड़ें"
 
-#: src/pages/PluginsOverlay.tsx:439
+#: src/pages/PluginsOverlay.tsx:559
 msgid "Add OpenAPI"
 msgstr "OpenAPI जोड़ें"
 
-#: src/pages/PluginsOverlay.tsx:454
+#: src/pages/PluginsOverlay.tsx:574
 msgid "Add remote MCP server"
 msgstr "रिमोट MCP सर्वर जोड़ें"
 
@@ -206,12 +206,16 @@ msgstr "सर्वर जोड़ें"
 msgid "Add to routine"
 msgstr "रूटीन में जोड़ें"
 
-#: src/pages/PluginsOverlay.tsx:442
+#: src/pages/PluginsOverlay.tsx:562
 msgid "Add Treg"
 msgstr "Treg जोड़ें"
 
+#: src/pages/PluginsOverlay.tsx:87
+msgid "Added"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx:363
-#: src/pages/PluginsOverlay.tsx:74
+#: src/pages/PluginsOverlay.tsx:83
 msgid "Adding…"
 msgstr "जोड़ा जा रहा है…"
 
@@ -232,6 +236,10 @@ msgstr "एजेंट कंप्यूटर"
 #: src/pages/McpServersOverlay.tsx:431
 msgid "Agents:"
 msgstr "एजेंट:"
+
+#: src/pages/PluginsOverlay.tsx:395
+msgid "All"
+msgstr ""
 
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx:20
@@ -300,7 +308,7 @@ msgstr "उत्तर: {answer}"
 msgid "API key"
 msgstr "API कुंजी"
 
-#: src/pages/PluginsOverlay.tsx:490
+#: src/pages/PluginsOverlay.tsx:610
 msgid "API key header"
 msgstr "API कुंजी हेडर"
 
@@ -416,7 +424,7 @@ msgstr "ऑथराइज़ करें"
 msgid "Base URL"
 msgstr "बेस URL"
 
-#: src/pages/PluginsOverlay.tsx:487
+#: src/pages/PluginsOverlay.tsx:607
 msgid "Bearer token"
 msgstr "बियरर टोकन"
 
@@ -472,7 +480,7 @@ msgstr "सर्वर तक नहीं पहुंचा जा सका�
 #: src/components/AskCard.tsx:129
 #: src/components/ComputerMaintenanceActions.tsx:108
 #: src/components/teach/TeachComputerSection.tsx:122
-#: src/pages/PluginsOverlay.tsx:538
+#: src/pages/PluginsOverlay.tsx:658
 #: src/pages/Shell.tsx:5008
 #: src/pages/Shell.tsx:5080
 #: src/pages/Shell.tsx:5195
@@ -559,7 +567,7 @@ msgstr "कंप्यूटर बंद करें"
 msgid "Close image preview"
 msgstr "छवि प्रीव्यू बंद करें"
 
-#: src/pages/PluginsOverlay.tsx:326
+#: src/pages/PluginsOverlay.tsx:353
 msgid "Close integrations"
 msgstr "इंटीग्रेशन बंद करें"
 
@@ -674,14 +682,14 @@ msgstr "रिमोट या लोकल टूल सर्वर कने�
 msgid "Connect this provider to use it as your personal model."
 msgstr "इस प्रोवाइडर को अपने व्यक्तिगत मॉडल के रूप में उपयोग करने के लिए कनेक्ट करें।"
 
-#: src/pages/PluginsOverlay.tsx:452
+#: src/pages/PluginsOverlay.tsx:572
 msgid "Connect Treg"
 msgstr "Treg कनेक्ट करें"
 
 #: src/pages/McpOAuthCallback.tsx:53
 #: src/pages/MemorySettingsOverlay.tsx:163
 #: src/pages/ModelSettingsOverlay.tsx:377
-#: src/pages/PluginsOverlay.tsx:363
+#: src/pages/PluginsOverlay.tsx:445
 #: src/pages/Shell.tsx:5468
 #: src/pages/VoiceSettingsOverlay.tsx:202
 msgid "Connected"
@@ -718,7 +726,7 @@ msgid "Connecting…"
 msgstr "कनेक्ट हो रहा है…"
 
 #. placeholder {0}: item.name
-#: src/pages/PluginsOverlay.tsx:227
+#: src/pages/PluginsOverlay.tsx:254
 msgid "Connection to {0} is still pending. You can close this and check again."
 msgstr "{0} से कनेक्शन अभी लंबित है। आप इसे बंद करके बाद में जांच सकते हैं।"
 
@@ -763,7 +771,7 @@ msgstr "बातचीत साफ़ नहीं की जा सकी"
 msgid "Could not complete OAuth"
 msgstr "OAuth पूरा नहीं हो सका"
 
-#: src/pages/PluginsOverlay.tsx:231
+#: src/pages/PluginsOverlay.tsx:258
 msgid "Could not connect"
 msgstr "कनेक्ट नहीं हो सका"
 
@@ -829,7 +837,7 @@ msgstr "{0} डाउनलोड नहीं हो सका। पुनः 
 msgid "Could not download {name}. Try again."
 msgstr "{name} डाउनलोड नहीं हो सका। पुनः प्रयास करें।"
 
-#: src/pages/PluginsOverlay.tsx:298
+#: src/pages/PluginsOverlay.tsx:325
 msgid "Could not install connector"
 msgstr "कनेक्टर इंस्टॉल नहीं हो सका"
 
@@ -837,7 +845,7 @@ msgstr "कनेक्टर इंस्टॉल नहीं हो सक�
 msgid "Could not load approval rules"
 msgstr "अनुमोदन नियम लोड नहीं हो सके"
 
-#: src/pages/PluginsOverlay.tsx:126
+#: src/pages/PluginsOverlay.tsx:139
 msgid "Could not load integrations"
 msgstr "इंटीग्रेशन लोड नहीं हो सके"
 
@@ -871,7 +879,7 @@ msgstr "इस मॉडल सर्वर तक नहीं पहुंच�
 msgid "Could not remove"
 msgstr "हटाया नहीं जा सका"
 
-#: src/pages/PluginsOverlay.tsx:311
+#: src/pages/PluginsOverlay.tsx:338
 msgid "Could not remove connector"
 msgstr "कनेक्टर हटाया नहीं जा सका"
 
@@ -887,7 +895,7 @@ msgstr "नियम हटाया नहीं जा सका"
 msgid "Could not render chart"
 msgstr "चार्ट रेंडर नहीं हो सका"
 
-#: src/pages/PluginsOverlay.tsx:257
+#: src/pages/PluginsOverlay.tsx:284
 msgid "Could not revoke connection"
 msgstr "कनेक्शन रद्द नहीं किया जा सका"
 
@@ -988,11 +996,11 @@ msgstr "अपना Rakazo बनाएं"
 msgid "Creating…"
 msgstr "बनाया जा रहा है…"
 
-#: src/pages/PluginsOverlay.tsx:508
+#: src/pages/PluginsOverlay.tsx:628
 msgid "Credential"
 msgstr "क्रेडेंशियल"
 
-#: src/pages/PluginsOverlay.tsx:566
+#: src/pages/PluginsOverlay.tsx:686
 msgid "credential saved"
 msgstr "क्रेडेंशियल सहेजा गया"
 
@@ -1004,7 +1012,7 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron एक्सप्रेशन"
 
-#: src/pages/PluginsOverlay.tsx:423
+#: src/pages/PluginsOverlay.tsx:543
 msgid "Custom connectors"
 msgstr ""
 
@@ -1106,7 +1114,7 @@ msgstr "डिस्कनेक्ट हो रहा है…"
 msgid "Dismissed — reconnect anytime from MCP settings."
 msgstr "खारिज किया गया — MCP सेटिंग्स से कभी भी पुनः कनेक्ट करें।"
 
-#: src/pages/PluginsOverlay.tsx:462
+#: src/pages/PluginsOverlay.tsx:582
 msgid "Display name"
 msgstr "प्रदर्शित नाम"
 
@@ -1243,6 +1251,10 @@ msgstr "रोकने में विफल"
 msgid "Failure handling"
 msgstr "विफलता प्रबंधन"
 
+#: src/pages/PluginsOverlay.tsx:474
+msgid "Featured"
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx:426
 #: src/pages/Onboarding.tsx:291
 msgid "Find models"
@@ -1281,7 +1293,7 @@ msgid "Hang up"
 msgstr "कॉल समाप्त करें"
 
 #: src/pages/McpServersOverlay.tsx:342
-#: src/pages/PluginsOverlay.tsx:498
+#: src/pages/PluginsOverlay.tsx:618
 msgid "Header name"
 msgstr "हेडर नाम"
 
@@ -1333,7 +1345,7 @@ msgstr "मेरा काम हो गया"
 msgid "If you heard that, voice is ready."
 msgstr "अगर आपने वह सुना, तो आवाज़ तैयार है।"
 
-#: src/pages/PluginsOverlay.tsx:456
+#: src/pages/PluginsOverlay.tsx:576
 msgid "Import OpenAPI JSON"
 msgstr "OpenAPI JSON इम्पोर्ट करें"
 
@@ -1353,7 +1365,7 @@ msgstr "इंस्टेंस API कुंजी"
 msgid "Instruction"
 msgstr "निर्देश"
 
-#: src/pages/PluginsOverlay.tsx:322
+#: src/pages/PluginsOverlay.tsx:349
 #: src/pages/Shell.tsx:2109
 msgid "Integrations"
 msgstr "इंटीग्रेशन"
@@ -1417,7 +1429,7 @@ msgstr "पुराने संदेश लोड करें"
 msgid "Loading activity…"
 msgstr "गतिविधि लोड हो रही है…"
 
-#: src/pages/PluginsOverlay.tsx:348
+#: src/pages/PluginsOverlay.tsx:375
 msgid "Loading integrations…"
 msgstr "इंटीग्रेशन लोड हो रहे हैं…"
 
@@ -1483,7 +1495,7 @@ msgstr "अधिकतम"
 
 #: src/pages/McpServersOverlay.tsx:224
 #: src/pages/McpServersOverlay.tsx:229
-#: src/pages/PluginsOverlay.tsx:432
+#: src/pages/PluginsOverlay.tsx:552
 msgid "MCP servers"
 msgstr "MCP सर्वर"
 
@@ -1656,20 +1668,24 @@ msgstr "नया रूटीन"
 msgid "New section"
 msgstr "नया सेक्शन"
 
-#: src/pages/PluginsOverlay.tsx:416
+#: src/pages/PluginsOverlay.tsx:515
+msgid "No apps in this category."
+msgstr ""
+
+#: src/pages/PluginsOverlay.tsx:536
 msgid "No apps match your search."
 msgstr "आपकी खोज से कोई ऐप मेल नहीं खाता।"
 
-#: src/pages/PluginsOverlay.tsx:568
+#: src/pages/PluginsOverlay.tsx:688
 msgid "no auth"
 msgstr "कोई प्रमाणीकरण नहीं"
 
-#: src/pages/PluginsOverlay.tsx:484
+#: src/pages/PluginsOverlay.tsx:604
 msgid "No authentication"
 msgstr "कोई प्रमाणीकरण नहीं"
 
 #. placeholder {0}: item.name
-#: src/pages/PluginsOverlay.tsx:253
+#: src/pages/PluginsOverlay.tsx:280
 msgid "No connection record found for {0}."
 msgstr "{0} के लिए कोई कनेक्शन रिकॉर्ड नहीं मिला।"
 
@@ -1685,7 +1701,7 @@ msgstr "कोई अपवाद नहीं। कार्रवाइया
 msgid "No longer active"
 msgstr "अब सक्रिय नहीं"
 
-#: src/pages/PluginsOverlay.tsx:550
+#: src/pages/PluginsOverlay.tsx:670
 msgid "No MCP or API tool sources installed yet."
 msgstr "अभी तक कोई MCP या API टूल स्रोत इंस्टॉल नहीं है।"
 
@@ -1881,7 +1897,7 @@ msgstr "प्रोवाइडर्स"
 msgid "Queued"
 msgstr "कतार में"
 
-#: src/pages/PluginsOverlay.tsx:513
+#: src/pages/PluginsOverlay.tsx:633
 msgid "Rakazo verifies the source before saving it. Credentials are encrypted and are never returned to clients or exposed to the model."
 msgstr "Rakazo सहेजने से पहले स्रोत की पुष्टि करता है। क्रेडेंशियल एन्क्रिप्टेड होते हैं और कभी क्लाइंट को नहीं लौटाए जाते, न ही मॉडल को दिखाए जाते हैं।"
 
@@ -1924,8 +1940,7 @@ msgid "Release"
 msgstr "नियंत्रण छोड़ें"
 
 #: src/components/ApprovalRulesSettings.tsx:138
-#: src/pages/PluginsOverlay.tsx:77
-#: src/pages/PluginsOverlay.tsx:579
+#: src/pages/PluginsOverlay.tsx:699
 #: src/pages/ScratchpadSection.tsx:162
 msgid "Remove"
 msgstr "हटाएं"
@@ -1934,6 +1949,10 @@ msgstr "हटाएं"
 #: src/pages/Shell.tsx:3589
 msgid "Remove {0}"
 msgstr "{0} हटाएं"
+
+#: src/pages/PluginsOverlay.tsx:76
+msgid "Remove {name}"
+msgstr ""
 
 #. placeholder {0}: mention.name
 #: src/pages/Shell.tsx:3744
@@ -1957,8 +1976,8 @@ msgstr "चैट, कंप्यूटर और मेमोरी सहि�
 msgid "Removed, but list refresh failed"
 msgstr "हटाया गया, लेकिन सूची रिफ़्रेश विफल रही"
 
-#: src/pages/PluginsOverlay.tsx:72
-#: src/pages/PluginsOverlay.tsx:579
+#: src/pages/PluginsOverlay.tsx:81
+#: src/pages/PluginsOverlay.tsx:699
 msgid "Removing…"
 msgstr "हटाया जा रहा है…"
 
@@ -2089,8 +2108,8 @@ msgstr "हां या ना कहें, या एक वाक्य म�
 msgid "Search"
 msgstr "खोजें"
 
-#: src/pages/PluginsOverlay.tsx:338
-#: src/pages/PluginsOverlay.tsx:339
+#: src/pages/PluginsOverlay.tsx:365
+#: src/pages/PluginsOverlay.tsx:366
 msgid "Search apps"
 msgstr "ऐप खोजें"
 
@@ -2173,11 +2192,11 @@ msgstr "साझा"
 msgid "Show computer"
 msgstr "कंप्यूटर दिखाएं"
 
-#: src/pages/PluginsOverlay.tsx:596
+#: src/pages/PluginsOverlay.tsx:715
 msgid "Show fewer apps"
 msgstr ""
 
-#: src/pages/PluginsOverlay.tsx:598
+#: src/pages/PluginsOverlay.tsx:715
 msgid "Show more apps"
 msgstr ""
 
@@ -2419,11 +2438,11 @@ msgstr "दिन का समय"
 msgid "Title"
 msgstr "शीर्षक"
 
-#: src/pages/PluginsOverlay.tsx:546
+#: src/pages/PluginsOverlay.tsx:666
 msgid "Tool sources"
 msgstr "टूल स्रोत"
 
-#: src/pages/PluginsOverlay.tsx:508
+#: src/pages/PluginsOverlay.tsx:628
 msgid "Treg token"
 msgstr "Treg टोकन"
 
@@ -2470,11 +2489,11 @@ msgstr "मिला हुआ मॉडल उपयोग करें"
 msgid "Use this model"
 msgstr "यह मॉडल उपयोग करें"
 
-#: src/pages/PluginsOverlay.tsx:529
+#: src/pages/PluginsOverlay.tsx:649
 msgid "Verify and add"
 msgstr "पुष्टि करके जोड़ें"
 
-#: src/pages/PluginsOverlay.tsx:527
+#: src/pages/PluginsOverlay.tsx:647
 msgid "Verifying…"
 msgstr "पुष्टि की जा रही है…"
 

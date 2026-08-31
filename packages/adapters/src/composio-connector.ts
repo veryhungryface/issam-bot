@@ -236,13 +236,16 @@ export class ComposioConnector implements ComposioProvider {
   }
 
   private async loadDirectory(): Promise<ToolkitDirectoryEntry[]> {
-    const session = await this.sessionFor("__rakazo_catalog__");
-    const toolkits = await collectPages((cursor) => session.toolkits({ limit: 50, cursor }));
-    return toolkits.map((toolkit) => ({
+    // The top-level toolkit listing carries meta (description, categories) that the
+    // session-scoped listing omits; one call covers the whole catalog (limit cap 1000).
+    const items = await this.sdk().toolkits.get({ limit: 1000 });
+    return items.map((toolkit) => ({
       slug: toolkit.slug,
       name: toolkit.name,
-      logo: toolkit.logo ?? null,
-      noAuth: Boolean(toolkit.isNoAuth),
+      logo: toolkit.meta?.logo ?? null,
+      noAuth: Boolean(toolkit.noAuth),
+      description: toolkit.meta?.description ?? null,
+      category: toolkit.meta?.categories?.[0]?.name ?? null,
     }));
   }
 
