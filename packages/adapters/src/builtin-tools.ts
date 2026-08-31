@@ -101,6 +101,50 @@ export const builtinAgentTools: ConnectorTool[] = [
     inputSchema: { type: "object", properties: {} },
   },
   {
+    name: "create_document",
+    description:
+      "Generate a real document file from Markdown and attach it to the chat as a download. Formats: hwpx (Korean Hangul OWPML — headings, lists, tables, bold; supports Korean official-document presets), docx (Word — headings, paragraphs, lists, tables, bold), xlsx (Excel — each Markdown table becomes a worksheet), pptx (PowerPoint — each H1 becomes a slide, bullets become content). Use it whenever the user asks for a downloadable document: 학습지, 보고서, 공문서, spreadsheets, decks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        format: {
+          type: "string",
+          enum: ["hwpx", "docx", "xlsx", "pptx"],
+          description: "Output file format.",
+        },
+        title: {
+          type: "string",
+          description: "Document title, also used as the file name.",
+        },
+        markdown: {
+          type: "string",
+          description:
+            "Full document content as Markdown. Use #/##/### headings, paragraphs, - or 1. lists, **bold**, and | a | b | tables.",
+        },
+        preset: {
+          type: "string",
+          description:
+            "hwpx only: Korean official-document preset — 개조식, 보고서, 계획서, 기안문, 공고문, 보도자료, 통지, or 회의록.",
+        },
+        path: {
+          type: "string",
+          description: "Optional output path in this bot's home. Default documents/<title>.<ext>.",
+        },
+      },
+      required: ["format", "title", "markdown"],
+    },
+  },
+  {
+    name: "read_document",
+    description:
+      "Read a binary document from this bot's home and return its full content as Markdown text. Supports hwp, hwpx, pdf, docx, xlsx, and xls — use it for user-attached files that read_file cannot open (it detects the format automatically).",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+    },
+  },
+  {
     name: "shell",
     description:
       "Run a command inside this bot's computer. cwd defaults to the bot's folder on a Team Computer and the workspace root on a Private Computer.",

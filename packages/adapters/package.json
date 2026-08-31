@@ -24,11 +24,15 @@
     "@rakazo/core": "workspace:*",
     "@rakazo/db": "workspace:*",
     "d3-dsv": "^3.0.1",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
     "graphile-worker": "^0.17.3",
     "jsdom": "^30.0.1",
     "koffi": "^2.9.0",
+    "kordoc": "^4.12.0",
     "pg": "^8.16.3",
     "playwright-core": "1.55.0",
+    "pptxgenjs": "^4.0.1",
     "sharp": "^0.35.3",
     "undici": "^7.22.0",
     "zod": "^4.1.5"
@@ -37,6 +41,7 @@
     "@types/d3-dsv": "^3.0.7",
     "@types/jsdom": "^30.0.0",
     "@types/pg": "^8.15.5",
+    "jszip": "^3.10.1",
     "typescript": "^5.9.2",
     "vitest": "^4.1.10"
   }
