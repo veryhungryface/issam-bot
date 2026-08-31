@@ -69,6 +69,7 @@ import {
   listAgentWorkspaceFiles,
   readAgentWorkspaceFile,
   usesAgentHomeFiles,
+  writeAgentWorkspaceFile,
   writeAgentWorkspaceTextFile,
 } from "./agent-workspace-files.js";
 import { buildApprovalAskBlock } from "./approval-ask.js";
@@ -114,6 +115,12 @@ import {
 } from "./computer-support.js";
 import { observationToolResult, parseComputerActions } from "./computer-tools.js";
 import { checkpointAndRecordComputerWorkspace } from "./computer-workspace.js";
+import {
+  createDocumentBytes,
+  isDocumentFormat,
+  parseDocumentMarkdown,
+  sanitizeDocumentFileName,
+} from "./document-tools.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import {
   COMPACTION_BATCH_SIZE,
@@ -250,7 +257,7 @@ export function computerInstructionForSandboxCapabilities(
   capabilities: SandboxCapabilities,
 ): string {
   if (capabilities.graphical && !capabilities.filesystem && !capabilities.shell) {
-    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Deliver results in their native format: documents as .md or .txt, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it is delivered as a download, never executed inline. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
+    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Deliver results in their native format: Korean documents (학습지, 보고서, 공문서) as .hwpx or .docx, slide decks as .pptx, and spreadsheets as .xlsx via create_document, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. When the user attaches hwp, hwpx, pdf, docx, xlsx, or xls files, read them with read_document. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it is delivered as a download, never executed inline. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
   }
   if (capabilities.graphical) {
     const preciseWork = capabilities.shell
@@ -1452,6 +1459,89 @@ export function createRunExecutor(deps: ExecutorDeps) {
             } catch (error) {
               return finish({
                 error: error instanceof Error ? error.message : "could not attach a screenshot",
+              });
+            }
+          }
+          if (name === "create_document") {
+            if (!deps.artifacts) {
+              return finish({ error: "artifact storage unavailable" });
+            }
+            const format = String(args.format ?? "").toLowerCase();
+            if (!isDocumentFormat(format)) {
+              return finish({ error: `unsupported document format: ${format || "(empty)"}` });
+            }
+            const title = String(args.title ?? "").trim();
+            const markdown = textContentArg(args.markdown ?? args.content, "");
+            if (!title) {
+              return finish({ error: "document title is required" });
+            }
+            if (!markdown.trim()) {
+              return finish({ error: "document content (markdown) is required" });
+            }
+            const preset = args.preset === undefined ? undefined : String(args.preset);
+            try {
+              const bytes = await createDocumentBytes(format, markdown, { title, preset });
+              if (bytes.byteLength > ATTACHMENT_MAX_BYTES) {
+                return finish({ error: "document exceeds the 10 MiB attachment limit" });
+              }
+              const fileName = sanitizeDocumentFileName(title, format);
+              const requestedPath =
+                typeof args.path === "string" && args.path.trim()
+                  ? args.path.trim()
+                  : `documents/${fileName}`;
+              const storedPath = resolveBotWorkspacePath(computerMode, bot.id, requestedPath);
+              await writeAgentWorkspaceFile(workspaceFileDeps(), storedPath, bytes);
+              const attached = await attachWorkspaceFileToThread(
+                { prisma: deps.prisma, artifacts: deps.artifacts },
+                {
+                  workspaceId: run.workspaceId,
+                  userId: run.userId,
+                  botId: bot.id,
+                  groupId: thread.groupId ?? undefined,
+                  runId: run.id,
+                  filePath: requestedPath,
+                  bytes,
+                  operationId: executionId,
+                },
+              );
+              await publishMessage(deps, run, "bot", [attached.block]);
+              return finish({
+                ok: true,
+                artifactId: attached.artifactId,
+                path: requestedPath,
+                bytes: bytes.byteLength,
+              });
+            } catch (error) {
+              return finish({
+                error: error instanceof Error ? error.message : "could not create the document",
+              });
+            }
+          }
+          if (name === "read_document") {
+            const filePath = String(args.path ?? "");
+            const storedPath = resolveBotWorkspacePath(computerMode, bot.id, filePath);
+            let bytes: Uint8Array;
+            try {
+              bytes = await readAgentWorkspaceFile(workspaceFileDeps(), storedPath, {
+                maxBytes: ATTACHMENT_MAX_BYTES,
+              });
+            } catch {
+              return finish({ error: "file not found or unreadable", path: filePath });
+            }
+            try {
+              const parsed = await parseDocumentMarkdown(bytes);
+              return finish({
+                ok: true,
+                path: filePath,
+                fileType: parsed.fileType,
+                markdown: parsed.markdown,
+                truncated: parsed.truncated,
+                ...(parsed.warnings.length ? { warnings: parsed.warnings } : {}),
+              });
+            } catch (error) {
+              return finish({
+                error: error instanceof Error ? error.message : "could not read the document",
+                path: filePath,
               });
             }
           }

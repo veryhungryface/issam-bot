@@ -29,11 +29,14 @@ describe("executor sandbox capabilities", () => {
         "write_file",
         "attach_file",
         "attach_screenshot",
+        "create_document",
+        "read_document",
       ]),
     );
     expect(names).not.toContain("shell");
     expect(names).not.toContain("launch_app");
     expect(tools.find((tool) => tool.name === "attach_screenshot")).toBeDefined();
+    expect(tools.find((tool) => tool.name === "create_document")).toBeDefined();
     expect(tools.find((tool) => tool.name === "open_path")?.description).toContain("http(s)");
   });
 

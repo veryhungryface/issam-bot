@@ -62,6 +62,19 @@ describe("attachment helpers", () => {
     expect(inferAttachmentMimeType("clip.webm", "video/webm")).toBe("video/webm");
     expect(inferAttachmentMimeType("audio.mp3", "")).toBe("audio/mpeg");
     expect(inferAttachmentMimeType("audio.wav", "audio/wav")).toBe("audio/wav");
+    expect(inferAttachmentMimeType("학습지.hwp", "")).toBe("application/haansofthwp");
+    expect(inferAttachmentMimeType("학습지.hwpx", "application/haansofthwp+zip")).toBe(
+      "application/haansofthwp+zip",
+    );
+    expect(inferAttachmentMimeType("report.docx", "")).toBe(
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    expect(inferAttachmentMimeType("data.xlsx", "")).toBe(
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    expect(inferAttachmentMimeType("deck.pptx", "")).toBe(
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    );
     expect(inferAttachmentMimeType("archive.zip", "")).toBeNull();
   });
 

@@ -33,6 +33,11 @@ export const ATTACHMENT_FILE_MIME_TYPES = [
   "text/csv",
   "text/html",
   "application/json",
+  "application/haansofthwp",
+  "application/haansofthwp+zip",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ] as const;
 
 export const ATTACHMENT_ALLOWED_MIME_TYPES = [
