@@ -414,15 +414,109 @@ export type ParsedDocument = {
   truncated: boolean;
 };
 
+const PARSE_TIMEOUT_MS = 90_000;
+
+/**
+ * kordoc.parse on hostile real-world files (scanned PDFs, big tables) can
+ * allocate far beyond the worker's container budget — one such parse OOMs the
+ * whole worker and crash-loops every retry. Run it in a disposable child
+ * process with its own heap cap and a hard timeout: if it dies, the worker
+ * survives and the run fails gracefully.
+ */
+async function parseDocumentInChildProcess(bytes: Uint8Array): Promise<{
+  success: boolean;
+  fileType?: string;
+  markdown?: string;
+  warnings?: string[];
+  error?: string;
+}> {
+  const { spawn } = await import("node:child_process");
+  const child = spawn(
+    process.execPath,
+    [
+      "--max-old-space-size=192",
+      "-e",
+      `
+      let input = [];
+      process.stdin.on("data", (chunk) => input.push(chunk));
+      process.stdin.on("end", async () => {
+        try {
+          const kordoc = require("kordoc");
+          const result = await kordoc.parse(Buffer.concat(input), { ocr: false });
+          process.stdout.write(JSON.stringify({
+            ok: true,
+            fileType: result?.fileType,
+            markdown: result?.markdown,
+            warnings: result?.warnings,
+          }));
+        } catch (error) {
+          process.stdout.write(JSON.stringify({ ok: false, error: String(error?.message ?? error) }));
+        }
+        process.exit(0);
+      });
+    `,
+    ],
+    { stdio: ["pipe", "pipe", "pipe"] },
+  );
+
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      settle(() => reject(new DocumentToolError("document parsing timed out")));
+    }, PARSE_TIMEOUT_MS);
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    child.on("error", (error) =>
+      settle(() =>
+        reject(new DocumentToolError(`document parser failed to start: ${error.message}`)),
+      ),
+    );
+    child.on("close", (code) => {
+      settle(() => {
+        const output = Buffer.concat(chunks).toString("utf8");
+        let parsed: {
+          ok?: boolean;
+          error?: string;
+          fileType?: string;
+          markdown?: string;
+          warnings?: string[];
+        };
+        try {
+          parsed = JSON.parse(output);
+        } catch {
+          throw new DocumentToolError(
+            `document parser exited unexpectedly (code ${code}) — the file may be too complex to parse`,
+          );
+        }
+        if (!parsed.ok) {
+          throw new DocumentToolError(
+            `could not parse document: ${parsed.error ?? "unknown error"}`,
+          );
+        }
+        resolve({
+          success: true,
+          fileType: parsed.fileType,
+          markdown: parsed.markdown,
+          warnings: parsed.warnings,
+        });
+      });
+    });
+    child.stdin.write(Buffer.from(bytes));
+    child.stdin.end();
+  });
+}
+
 export async function parseDocumentMarkdown(bytes: Uint8Array): Promise<ParsedDocument> {
-  const kordoc = await import("kordoc");
-  const result = await kordoc.parse(Buffer.from(bytes));
-  if (!result?.success) {
-    const message =
-      result && typeof result === "object" && "code" in result
-        ? String((result as { code?: unknown }).code)
-        : "unsupported or unreadable document";
-    throw new DocumentToolError(`could not parse document: ${message}`);
+  const result = await parseDocumentInChildProcess(bytes);
+  if (!result.success) {
+    throw new DocumentToolError(`could not parse document: ${result.error ?? "unknown error"}`);
   }
   const markdown = String(result.markdown ?? "");
   const truncated = markdown.length > MAX_PARSED_DOCUMENT_CHARS;

@@ -3410,6 +3410,7 @@ const Composer = memo(function Composer({
 }) {
   const { t } = useLingui();
   const [draft, setDraft] = useState("");
+  const [dragActive, setDragActive] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
@@ -3665,7 +3666,25 @@ const Composer = memo(function Composer({
           })}
         </div>
       ) : null}
-      <div className="flex items-end gap-3.5 rounded-full border border-[#202023] bg-[#131315] py-[9px] pe-2.5 ps-3">
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop attachment target; keyboard and AT users use the Attach file button */}
+      <div
+        className={`flex items-end gap-3.5 rounded-full border bg-[#131315] py-[9px] pe-2.5 ps-3 ${
+          dragActive ? "border-[#4C8DFF] bg-[#16202f]" : "border-[#202023]"
+        }`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (!disabled) setDragActive(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+          if (!disabled) void onAttachmentPick(event.dataTransfer.files);
+        }}
+      >
         <input
           ref={fileInputRef}
           type="file"
