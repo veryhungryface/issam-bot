@@ -40,10 +40,113 @@ export function ArtifactFileCard(props: ArtifactFileCardProps) {
   if (isInlineMediaMimeType(props.mimeType)) {
     return <InlineMediaCard {...props} />;
   }
+  if (props.mimeType === "text/html") {
+    return <InlineHtmlCard {...props} />;
+  }
   if (!previewKindForMimeType(props.mimeType)) {
     return <DownloadOnlyCard {...props} />;
   }
   return <PreviewableFileCard {...props} />;
+}
+
+/** HTML results render right in the transcript inside a scripts-only sandbox
+    (no same-origin, so the page gets no cookies or app APIs). */
+function InlineHtmlCard(props: ArtifactFileCardProps) {
+  const { t } = useLingui();
+  const [html, setHtml] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [visible, setVisible] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const container = useRef<HTMLDivElement>(null);
+  const targetBotId = "botId" in props.target ? props.target.botId : undefined;
+  const targetGroupId = "groupId" in props.target ? props.target.groupId : undefined;
+
+  useEffect(() => {
+    const element = container.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "320px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    void fetchArtifactBytes(
+      targetBotId !== undefined ? { botId: targetBotId } : { groupId: targetGroupId! },
+      props.artifactId,
+    )
+      .then((bytes) => {
+        if (cancelled) return;
+        try {
+          setHtml(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+        } catch {
+          setFailed(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.artifactId, targetBotId, targetGroupId, visible]);
+
+  if (failed) return <PreviewableFileCard {...props} />;
+
+  return (
+    <div ref={container} className="w-full max-w-[560px]">
+      <div className="overflow-hidden rounded-[20px] border border-[#343438] bg-[#1B1B1E]">
+        {html ? (
+          <iframe
+            sandbox="allow-scripts"
+            srcDoc={html}
+            title={props.name}
+            className="h-[300px] w-full border-0 bg-white"
+          />
+        ) : (
+          <div className="grid h-[120px] place-items-center text-[13px] text-[#85858A]">
+            <Trans>Loading preview…</Trans>
+          </div>
+        )}
+        <div className="flex items-center gap-1 border-t border-[#343438] px-3 py-1.5 text-[13px] text-[#85858A]">
+          <span className="min-w-0 flex-1 truncate">
+            {props.name} · {formatBytes(props.size)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="shrink-0 rounded-md px-2 py-1 hover:bg-[#222226] hover:text-[#ECECEE]"
+          >
+            <Trans>Expand</Trans>
+          </button>
+          <button
+            type="button"
+            aria-label={t`Download ${props.name}`}
+            title={t`Download ${props.name}`}
+            onClick={() => void startDownload(props, setDownloadError)}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full hover:bg-[#222226] hover:text-[#ECECEE]"
+          >
+            <Download size={15} strokeWidth={1.8} />
+          </button>
+        </div>
+      </div>
+      {downloadError ? <DownloadError message={downloadError} /> : null}
+      {expanded ? <FilePreviewModal {...props} onClose={() => setExpanded(false)} /> : null}
+    </div>
+  );
 }
 
 function DownloadOnlyCard(props: ArtifactFileCardProps) {
@@ -404,7 +507,7 @@ function PreviewContent({
   if (kind === "html") {
     return (
       <iframe
-        sandbox=""
+        sandbox="allow-scripts"
         srcDoc={new TextDecoder().decode(bytes)}
         title={name}
         className="h-full min-h-[70vh] w-full border-0 bg-white"

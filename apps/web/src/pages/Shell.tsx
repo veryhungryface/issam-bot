@@ -1710,6 +1710,7 @@ export function ShellPage() {
   // full-screen and would cover the conversation), and never over a panel the
   // user already has open.
   const autoOpenedPanelRun = useRef<string | null>(null);
+  const panelAutoOpened = useRef(false);
   useEffect(() => {
     if (inGroup || !active) return;
     const run = snapshot?.run;
@@ -1718,7 +1719,11 @@ export function ShellPage() {
     if (autoOpenedPanelRun.current === run.id) return;
     autoOpenedPanelRun.current = run.id;
     if (window.innerWidth < 768) return;
-    setPanel((current) => current ?? "computer");
+    setPanel((current) => {
+      if (current !== null) return current;
+      panelAutoOpened.current = true;
+      return "computer";
+    });
   }, [inGroup, active?.id, snapshot?.run?.id, snapshot?.run?.status, computer?.state]);
 
   // The composed-text panel opens only from its button; auto-opening stole Tab
@@ -2329,7 +2334,11 @@ export function ShellPage() {
                 type="button"
                 title={t`Agent computer`}
                 onClick={() => {
-                  const next = panel === "computer" ? null : "computer";
+                  // A panel the run auto-opened is adopted (not closed) by the
+                  // first explicit press — the user is asking to see it.
+                  const adopted = panel === "computer" && panelAutoOpened.current;
+                  panelAutoOpened.current = false;
+                  const next = panel === "computer" && !adopted ? null : "computer";
                   setPanel(next);
                   if (next === "computer" && active) {
                     // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
