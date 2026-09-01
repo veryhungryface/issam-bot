@@ -4102,6 +4102,11 @@ const MessageView = memo(function MessageView({
     </>
   );
   if (isNarration) {
+    // Steps-only messages are internal activity; once finished they render as nothing.
+    const hasVisibleContent = message.blocks.some(
+      (block) => block.kind === "text" || block.kind === "progress",
+    );
+    if (!hasVisibleContent && !isLive) return null;
     return (
       <>
         {messageContext}
@@ -4112,6 +4117,8 @@ const MessageView = memo(function MessageView({
           >
             {message.blocks.map((block, i) => {
               if (block.kind === "steps") {
+                // Live tool activity only — finished answers stay clean (Grok-style).
+                if (!isLive) return null;
                 const isCurrentBlock = isLive && i === message.blocks.length - 1;
                 return (
                   <div key={i} dir="ltr">
@@ -4207,6 +4214,8 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "steps") {
+          // Live tool activity only — finished answers stay clean (Grok-style).
+          if (!isLive) return null;
           return (
             <div key={i} className="flex justify-start">
               <div
