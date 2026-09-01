@@ -103,7 +103,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "create_document",
     description:
-      "Generate a real document file from Markdown and attach it to the chat as a download. Formats: hwpx (Korean Hangul OWPML — headings, lists, tables, bold; supports Korean official-document presets), docx (Word — headings, paragraphs, lists, tables, bold), xlsx (Excel — each Markdown table becomes a worksheet), pptx (PowerPoint — each H1 becomes a slide, bullets become content). Use it whenever the user asks for a downloadable document: 학습지, 보고서, 공문서, spreadsheets, decks.",
+      "Generate a real document file from Markdown and attach it to the chat as a download. Formats: hwpx (Korean Hangul OWPML — headings, lists, tables, bold; supports Korean official-document presets), docx (Word — headings, paragraphs, lists, tables, bold), xlsx (Excel — each Markdown table becomes a worksheet), pptx (PowerPoint — each H1 becomes a slide, bullets become content). Use it whenever the user asks for a downloadable document: 학습지, 보고서, 공문서, spreadsheets, decks. The file appears in the chat as a download card automatically — never paste file paths or download links in your reply.",
     inputSchema: {
       type: "object",
       properties: {
