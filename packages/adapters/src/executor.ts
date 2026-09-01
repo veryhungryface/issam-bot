@@ -2272,8 +2272,54 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   { kind: "text", text: redactSecrets(assembled, runSecrets) },
                 ]);
               }
+              // Show the user what the bot is looking at so they know what to do.
+              let screenshotArtifactId: string | undefined;
+              if (deps.artifacts) {
+                try {
+                  const observation = await deps.sandbox.observe(computer, context);
+                  let bytes = observation.image;
+                  try {
+                    const sharpModule = await import("sharp");
+                    bytes = new Uint8Array(
+                      await sharpModule
+                        .default(bytes)
+                        .resize({ width: 640, withoutEnlargement: true })
+                        .jpeg({ quality: 70 })
+                        .toBuffer(),
+                    );
+                  } catch {
+                    // keep the original capture when downscaling is unavailable
+                  }
+                  const extension =
+                    bytes === observation.image
+                      ? observation.mimeType === "image/jpeg"
+                        ? "jpg"
+                        : "png"
+                      : "jpg";
+                  const stored = await attachWorkspaceFileToThread(
+                    { prisma: deps.prisma, artifacts: deps.artifacts },
+                    {
+                      workspaceId: run.workspaceId,
+                      userId: run.userId,
+                      botId: bot.id,
+                      runId: run.id,
+                      filePath: `screenshots/takeover-${Date.now()}.${extension}`,
+                      bytes,
+                      operationId: `takeover:${run.id}`,
+                    },
+                  ).catch(() => undefined);
+                  screenshotArtifactId = stored?.artifactId;
+                } catch {
+                  // a failed capture must not block the takeover request
+                }
+              }
               await publishMessage(deps, run, "bot", [
-                { kind: "computer", state: "Ready", text: safeReason },
+                {
+                  kind: "computer",
+                  state: "Ready",
+                  text: safeReason,
+                  ...(screenshotArtifactId ? { screenshotArtifactId } : {}),
+                },
               ]);
               await deps.prisma.computer.updateMany({
                 where: { id: storedComputer.id },
