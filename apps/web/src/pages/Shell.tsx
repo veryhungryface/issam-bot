@@ -1368,6 +1368,33 @@ export function ShellPage() {
     revokePendingAttachmentPreviews([attachment]);
     setPendingAttachments((current) => current.filter((item) => item.id !== attachment.id));
   }, []);
+  const [dropZoneActive, setDropZoneActive] = useState(false);
+  useEffect(() => {
+    let hideTimer: number | undefined;
+    const isFileDrag = (event: DragEvent) =>
+      Array.from(event.dataTransfer?.types ?? []).includes("Files");
+    const onDragOver = (event: DragEvent) => {
+      if (!isFileDrag(event)) return;
+      event.preventDefault();
+      setDropZoneActive(true);
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => setDropZoneActive(false), 400);
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!isFileDrag(event)) return;
+      event.preventDefault();
+      setDropZoneActive(false);
+      window.clearTimeout(hideTimer);
+      void onAttachmentPick(event.dataTransfer?.files ?? null);
+    };
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("drop", onDrop);
+      window.clearTimeout(hideTimer);
+    };
+  }, [onAttachmentPick]);
   const sendMessage = useCallback(
     async (text: string, mentions: ComposerMention[] = []) => {
       const initialBotTarget = activeBotId.current;
@@ -1836,6 +1863,16 @@ export function ShellPage() {
       data-ready={shellReady}
       className="relative flex h-full min-w-0 overflow-hidden bg-[#050506] text-[#DFDFE2]"
     >
+      {dropZoneActive ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(4,4,5,.72)] p-6"
+        >
+          <div className="rounded-[24px] border-2 border-dashed border-[#4C8DFF] bg-[#141416]/90 px-10 py-8 text-center text-[15px] font-medium text-[#ECECEE]">
+            <Trans>Drop files to attach</Trans>
+          </div>
+        </div>
+      ) : null}
       {bootstrapMe !== undefined ? (
         <HostComputerPrompt initialMe={bootstrapMe ?? undefined} />
       ) : null}
@@ -3410,7 +3447,6 @@ const Composer = memo(function Composer({
 }) {
   const { t } = useLingui();
   const [draft, setDraft] = useState("");
-  const [dragActive, setDragActive] = useState(false);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [slashQuery, setSlashQuery] = useState<string | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
@@ -3666,25 +3702,7 @@ const Composer = memo(function Composer({
           })}
         </div>
       ) : null}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop attachment target; keyboard and AT users use the Attach file button */}
-      <div
-        className={`flex items-end gap-3.5 rounded-full border bg-[#131315] py-[9px] pe-2.5 ps-3 ${
-          dragActive ? "border-[#4C8DFF] bg-[#16202f]" : "border-[#202023]"
-        }`}
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!disabled) setDragActive(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          setDragActive(false);
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragActive(false);
-          if (!disabled) void onAttachmentPick(event.dataTransfer.files);
-        }}
-      >
+      <div className="flex items-end gap-3.5 rounded-full border border-[#202023] bg-[#131315] py-[9px] pe-2.5 ps-3">
         <input
           ref={fileInputRef}
           type="file"
