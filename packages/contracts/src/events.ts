@@ -122,6 +122,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("computer"),
     state: z.string(),
     text: z.string(),
+    /** Screenshot of the screen at takeover-request time, stored as an artifact. */
+    screenshotArtifactId: Id.optional(),
   }),
   z.object({ kind: z.literal("meta"), text: z.string() }),
   z.object({

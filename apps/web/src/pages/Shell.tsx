@@ -2369,6 +2369,9 @@ export function ShellPage() {
           voiceReady={Boolean(voiceStatus?.ready)}
           speakingMessageId={speakingMessageId}
           onSpeak={speakMessage}
+          takeoverWaiting={snapshot?.run?.status === "waiting_takeover"}
+          onTakeComputerControl={() => void openComputer({ takeControl: true })}
+          onComputerRelease={releaseComputer}
         />
         {recordingSkill ? (
           <div className="px-6 pb-2 text-center text-[13px] text-[#E65707]">
@@ -3301,6 +3304,9 @@ const Transcript = memo(function Transcript({
   voiceReady,
   speakingMessageId,
   onSpeak,
+  takeoverWaiting,
+  onTakeComputerControl,
+  onComputerRelease,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
   artifactTarget: ArtifactTarget;
@@ -3323,6 +3329,9 @@ const Transcript = memo(function Transcript({
   voiceReady: boolean;
   speakingMessageId: string | null;
   onSpeak: (message: ThreadMessage) => void;
+  takeoverWaiting?: boolean;
+  onTakeComputerControl?: () => void;
+  onComputerRelease?: (reason: ComputerReleaseReason) => Promise<void>;
 }) {
   const { t } = useLingui();
   const messageById = useMemo(
@@ -3372,6 +3381,9 @@ const Transcript = memo(function Transcript({
             voiceReady={voiceReady}
             speaking={speakingMessageId === message.id}
             onSpeak={() => onSpeak(message)}
+            takeoverWaiting={takeoverWaiting}
+            onTakeComputerControl={onTakeComputerControl}
+            onComputerRelease={onComputerRelease}
           />
         </div>
       ))}
@@ -4089,6 +4101,9 @@ const MessageView = memo(function MessageView({
   voiceReady,
   speaking,
   onSpeak,
+  takeoverWaiting,
+  onTakeComputerControl,
+  onComputerRelease,
 }: {
   artifactTarget: ArtifactTarget;
   canAnswer: boolean;
@@ -4107,6 +4122,9 @@ const MessageView = memo(function MessageView({
   voiceReady: boolean;
   speaking: boolean;
   onSpeak: () => void;
+  takeoverWaiting?: boolean;
+  onTakeComputerControl?: () => void;
+  onComputerRelease?: (reason: ComputerReleaseReason) => Promise<void>;
 }) {
   const { t } = useLingui();
   const isNarration =
@@ -4478,22 +4496,63 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "computer") {
+          const waiting = takeoverWaiting === true;
+          const screenshotId = block.screenshotArtifactId;
+          const screenshotBotId = "botId" in artifactTarget ? artifactTarget.botId : message.botId;
           return (
             <div
               key={i}
-              className="w-[340px] rounded-[18px] border border-[#232326] bg-[#17171A] px-[18px] py-4"
+              className="w-[min(420px,100%)] rounded-[18px] border border-[#232326] bg-[#17171A] px-[18px] py-4"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[15px] font-medium text-[#ECECEE]">
                   <Trans>Computer</Trans>
                 </span>
-                <span className="rounded-full bg-[rgba(48,162,75,.14)] px-[11px] py-1 text-[13px] text-[#4ECB71]">
-                  {block.state}
-                </span>
+                {waiting ? (
+                  <span className="rounded-full bg-[rgba(240,180,41,.14)] px-[11px] py-1 text-[13px] text-[#F0B429]">
+                    <Trans>Action needed</Trans>
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-[rgba(48,162,75,.14)] px-[11px] py-1 text-[13px] text-[#4ECB71]">
+                    {block.state}
+                  </span>
+                )}
               </div>
               <div className="my-2.5 text-[14.5px] leading-[1.5] text-[#A8A8AD]">
                 <ChatMarkdown>{block.text}</ChatMarkdown>
               </div>
+              {screenshotBotId && screenshotId ? (
+                <div className="mb-3 overflow-hidden rounded-[12px] border border-[#232326]">
+                  <ArtifactImage
+                    target={{ botId: screenshotBotId }}
+                    artifactId={screenshotId}
+                    name={t`Screen at takeover`}
+                  />
+                </div>
+              ) : null}
+              {waiting && onTakeComputerControl && onComputerRelease ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" size="sm" onClick={() => onTakeComputerControl()}>
+                    <Trans>Take control</Trans>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onComputerRelease("done")}
+                  >
+                    <Trans>I'm done</Trans>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void onComputerRelease("skipped")}
+                  >
+                    <Trans>Skip</Trans>
+                  </Button>
+                </div>
+              ) : null}
             </div>
           );
         }
