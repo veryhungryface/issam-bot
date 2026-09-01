@@ -76,8 +76,18 @@ function CodeBlock(props: React.ComponentPropsWithoutRef<"pre">) {
 }
 
 const components: Components = {
-  a({ node: _node, ...props }) {
-    return <a {...props} target="_blank" rel="noreferrer noopener" />;
+  a({ node: _node, children, href, ...props }) {
+    // Links the agent invents to local workspace paths (e.g. documents/x.hwpx)
+    // can never resolve in the chat — render them as plain text instead of a
+    // dead anchor.
+    if (!href || !/^(https?:|mailto:)/i.test(href)) {
+      return <span>{children}</span>;
+    }
+    return (
+      <a {...props} href={href} target="_blank" rel="noreferrer noopener">
+        {children}
+      </a>
+    );
   },
   img({ node: _node, ...props }) {
     return <img {...props} alt={props.alt ?? ""} loading="lazy" />;

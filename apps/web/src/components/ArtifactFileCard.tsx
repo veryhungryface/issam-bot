@@ -57,9 +57,7 @@ function DownloadOnlyCard(props: ArtifactFileCardProps) {
         className="rounded-[20px] border border-[#26262A] bg-[#17171A] px-4 py-3 text-left text-[14px] text-[#DFDFE2] hover:bg-[#1F1F22]"
       >
         <div className="font-medium">{props.name}</div>
-        <div className="mt-1 text-[#85858A]">
-          {props.mimeType} · {formatBytes(props.size)}
-        </div>
+        <div className="mt-1 text-[#85858A]">{formatBytes(props.size)}</div>
       </button>
       {downloadError ? <DownloadError message={downloadError} /> : null}
     </div>
