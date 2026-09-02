@@ -137,10 +137,17 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "read_document",
     description:
-      "Read a binary document from this bot's home and return its full content as Markdown text. Supports hwp, hwpx, pdf, docx, xlsx, and xls — use it for user-attached files that read_file cannot open (it detects the format automatically).",
+      "Read a binary document from this bot's home and return its content as Markdown text. Supports hwp, hwpx, pdf, docx, xlsx, and xls — use it for user-attached files that read_file cannot open (it detects the format automatically). Long documents are served 30 pages per call: the first call returns pages 1-30 plus the total page count; answer from those pages and ask the user before requesting the next range.",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string" } },
+      properties: {
+        path: { type: "string" },
+        pages: {
+          type: "string",
+          description:
+            'Page range to read, e.g. "31-60" (at most 30 pages per call). Omit for the first 30 pages.',
+        },
+      },
       required: ["path"],
     },
   },
