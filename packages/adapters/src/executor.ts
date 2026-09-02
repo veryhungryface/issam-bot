@@ -117,7 +117,9 @@ import { observationToolResult, parseComputerActions } from "./computer-tools.js
 import { checkpointAndRecordComputerWorkspace } from "./computer-workspace.js";
 import {
   createDocumentBytes,
+  DOCUMENT_READ_PAGE_WINDOW,
   isDocumentFormat,
+  normalizeDocumentPageRange,
   parseDocumentMarkdown,
   sanitizeDocumentFileName,
 } from "./document-tools.js";
@@ -257,7 +259,7 @@ export function computerInstructionForSandboxCapabilities(
   capabilities: SandboxCapabilities,
 ): string {
   if (capabilities.graphical && !capabilities.filesystem && !capabilities.shell) {
-    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Deliver results in their native format: Korean documents (학습지, 보고서, 공문서) as .hwpx or .docx, slide decks as .pptx, and spreadsheets as .xlsx via create_document, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Files you create or attach already appear in the chat as download cards — never paste file paths or download links in your reply. When the user attaches hwp, hwpx, pdf, docx, xlsx, or xls files, read them with read_document. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it renders as a live sandboxed preview card in the chat. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
+    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Deliver results in their native format: Korean documents (학습지, 보고서, 공문서) as .hwpx or .docx, slide decks as .pptx, and spreadsheets as .xlsx via create_document, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Files you create or attach already appear in the chat as download cards — never paste file paths or download links in your reply. When the user attaches hwp, hwpx, pdf, docx, xlsx, or xls files, read them with read_document. Documents over 30 pages come back one 30-page window at a time: answer from the window you read, say which pages it covered, and ask the user (예: 이어서 31-60페이지도 볼까요?) before reading the next range. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it renders as a live sandboxed preview card in the chat. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
   }
   if (capabilities.graphical) {
     const preciseWork = capabilities.shell
@@ -1529,13 +1531,39 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return finish({ error: "file not found or unreadable", path: filePath });
             }
             try {
-              const parsed = await parseDocumentMarkdown(bytes);
+              const range = normalizeDocumentPageRange(
+                args.pages ? String(args.pages) : `1-${DOCUMENT_READ_PAGE_WINDOW}`,
+              );
+              const parsed = await parseDocumentMarkdown(bytes, { pages: range });
+              const totalPages = parsed.pageCount;
+              if (totalPages !== undefined && range.start > totalPages) {
+                return finish({
+                  error: `the document has only ${totalPages} pages; the requested range starts at page ${range.start}`,
+                  path: filePath,
+                  totalPages,
+                });
+              }
+              const end = totalPages === undefined ? range.end : Math.min(range.end, totalPages);
+              const hasMore = totalPages !== undefined && totalPages > end;
+              const approximate = parsed.pageMode === "section";
               return finish({
                 ok: true,
                 path: filePath,
                 fileType: parsed.fileType,
                 markdown: parsed.markdown,
                 truncated: parsed.truncated,
+                pagesRead: `${range.start}-${end}`,
+                ...(totalPages !== undefined ? { totalPages } : {}),
+                ...(approximate ? { pageBoundaries: "approximate (section-based)" } : {}),
+                ...(hasMore
+                  ? {
+                      note:
+                        `This window covers pages ${range.start}-${end} of ${totalPages}. ` +
+                        `Answer the user from these pages first, tell them which pages you covered, ` +
+                        `and ask whether to continue (e.g. "이어서 ${end + 1}-${Math.min(end + DOCUMENT_READ_PAGE_WINDOW, totalPages)}페이지도 볼까요?"). ` +
+                        `Only call read_document with pages "${end + 1}-${Math.min(end + DOCUMENT_READ_PAGE_WINDOW, totalPages)}" after the user asks to continue.`,
+                    }
+                  : {}),
                 ...(parsed.warnings.length ? { warnings: parsed.warnings } : {}),
               });
             } catch (error) {

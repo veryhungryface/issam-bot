@@ -25,6 +25,26 @@ export const MAX_DOCUMENT_SOURCE_CHARS = 120_000;
 /** Cap the markdown returned by read_document so a huge file cannot flood model context. */
 export const MAX_PARSED_DOCUMENT_CHARS = 120_000;
 
+/** Long documents are served this many pages per read_document call; the agent
+ * answers from the returned window and asks the user before reading the next one. */
+export const DOCUMENT_READ_PAGE_WINDOW = 30;
+
+export type DocumentPageRange = { start: number; end: number };
+
+/** Accepts "N" or "N-M" (1-based, inclusive) and clamps the span to the page window. */
+export function normalizeDocumentPageRange(value: string): DocumentPageRange {
+  const match = /^\s*(\d{1,5})\s*(?:-\s*(\d{1,5})\s*)?$/.exec(value);
+  if (!match) {
+    throw new DocumentToolError(`invalid page range: ${value} (use "31" or "31-60")`);
+  }
+  const start = Number(match[1]);
+  const end = match[2] ? Number(match[2]) : start + DOCUMENT_READ_PAGE_WINDOW - 1;
+  if (start < 1 || end < start) {
+    throw new DocumentToolError(`invalid page range: ${value} (use "31" or "31-60")`);
+  }
+  return { start, end: Math.min(end, start + DOCUMENT_READ_PAGE_WINDOW - 1) };
+}
+
 export const HWPX_PRESETS = [
   "개조식",
   "보고서",
@@ -412,6 +432,10 @@ export type ParsedDocument = {
   markdown: string;
   warnings: string[];
   truncated: boolean;
+  /** Total pages/sections in the whole document, regardless of the range read. */
+  pageCount?: number;
+  /** "layout" = real typeset pages; "section" = section-based approximation. */
+  pageMode?: "layout" | "section";
 };
 
 const PARSE_TIMEOUT_MS = 90_000;
@@ -423,11 +447,16 @@ const PARSE_TIMEOUT_MS = 90_000;
  * process with its own heap cap and a hard timeout: if it dies, the worker
  * survives and the run fails gracefully.
  */
-async function parseDocumentInChildProcess(bytes: Uint8Array): Promise<{
+async function parseDocumentInChildProcess(
+  bytes: Uint8Array,
+  pages?: DocumentPageRange,
+): Promise<{
   success: boolean;
   fileType?: string;
   markdown?: string;
   warnings?: string[];
+  pageCount?: number;
+  pageMode?: "layout" | "section";
   error?: string;
 }> {
   const { spawn } = await import("node:child_process");
@@ -442,12 +471,15 @@ async function parseDocumentInChildProcess(bytes: Uint8Array): Promise<{
       process.stdin.on("end", async () => {
         try {
           const kordoc = require("kordoc");
-          const result = await kordoc.parse(Buffer.concat(input), { ocr: false });
+          const pages = process.env.KORDOC_PAGES || undefined;
+          const result = await kordoc.parse(Buffer.concat(input), { ocr: false, ...(pages ? { pages } : {}) });
           process.stdout.write(JSON.stringify({
             ok: true,
             fileType: result?.fileType,
             markdown: result?.markdown,
             warnings: result?.warnings,
+            pageCount: result?.pageCount ?? result?.metadata?.pageCount,
+            pageMode: result?.metadata?.pageMode,
           }));
         } catch (error) {
           process.stdout.write(JSON.stringify({ ok: false, error: String(error?.message ?? error) }));
@@ -456,7 +488,13 @@ async function parseDocumentInChildProcess(bytes: Uint8Array): Promise<{
       });
     `,
     ],
-    { stdio: ["pipe", "pipe", "pipe"] },
+    {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        ...(pages ? { KORDOC_PAGES: `${pages.start}-${pages.end}` } : {}),
+      },
+    },
   );
 
   return new Promise((resolve, reject) => {
@@ -487,6 +525,8 @@ async function parseDocumentInChildProcess(bytes: Uint8Array): Promise<{
           fileType?: string;
           markdown?: string;
           warnings?: string[];
+          pageCount?: number;
+          pageMode?: "layout" | "section";
         };
         try {
           parsed = JSON.parse(output);
@@ -505,6 +545,8 @@ async function parseDocumentInChildProcess(bytes: Uint8Array): Promise<{
           fileType: parsed.fileType,
           markdown: parsed.markdown,
           warnings: parsed.warnings,
+          pageCount: parsed.pageCount,
+          pageMode: parsed.pageMode,
         });
       });
     });
@@ -513,8 +555,11 @@ async function parseDocumentInChildProcess(bytes: Uint8Array): Promise<{
   });
 }
 
-export async function parseDocumentMarkdown(bytes: Uint8Array): Promise<ParsedDocument> {
-  const result = await parseDocumentInChildProcess(bytes);
+export async function parseDocumentMarkdown(
+  bytes: Uint8Array,
+  opts: { pages?: DocumentPageRange } = {},
+): Promise<ParsedDocument> {
+  const result = await parseDocumentInChildProcess(bytes, opts.pages);
   if (!result.success) {
     throw new DocumentToolError(`could not parse document: ${result.error ?? "unknown error"}`);
   }
@@ -523,7 +568,17 @@ export async function parseDocumentMarkdown(bytes: Uint8Array): Promise<ParsedDo
   return {
     fileType: String(result.fileType ?? ""),
     markdown: truncated ? markdown.slice(0, MAX_PARSED_DOCUMENT_CHARS) : markdown,
-    warnings: Array.isArray(result.warnings) ? result.warnings.map(String) : [],
+    warnings: Array.isArray(result.warnings)
+      ? result.warnings.map((warning) => {
+          if (warning && typeof warning === "object") {
+            const { code, message } = warning as { code?: string; message?: string };
+            return [code, message].filter(Boolean).join(": ") || JSON.stringify(warning);
+          }
+          return String(warning);
+        })
+      : [],
     truncated,
+    ...(typeof result.pageCount === "number" ? { pageCount: result.pageCount } : {}),
+    ...(result.pageMode ? { pageMode: result.pageMode } : {}),
   };
 }

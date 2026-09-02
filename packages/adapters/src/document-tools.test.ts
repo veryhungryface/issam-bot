@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   createDocumentBytes,
+  DOCUMENT_READ_PAGE_WINDOW,
+  DocumentToolError,
   documentFormatForPath,
   hwpxPreset,
+  normalizeDocumentPageRange,
   parseDocumentMarkdown,
   parseMarkdownBlocks,
   sanitizeDocumentFileName,
@@ -33,6 +36,32 @@ describe("document tools", () => {
     expect(parsed.fileType).toBe("hwpx");
     expect(parsed.markdown).toContain("문해력");
     expect(parsed.markdown).toContain("산업자 선정");
+  });
+
+  it("normalizes page ranges and clamps them to the read window", () => {
+    expect(normalizeDocumentPageRange("31-60")).toEqual({ start: 31, end: 60 });
+    expect(normalizeDocumentPageRange("5")).toEqual({
+      start: 5,
+      end: 4 + DOCUMENT_READ_PAGE_WINDOW,
+    });
+    expect(normalizeDocumentPageRange("1-100")).toEqual({
+      start: 1,
+      end: DOCUMENT_READ_PAGE_WINDOW,
+    });
+    expect(() => normalizeDocumentPageRange("0-5")).toThrow(DocumentToolError);
+    expect(() => normalizeDocumentPageRange("10-3")).toThrow(DocumentToolError);
+    expect(() => normalizeDocumentPageRange("abc")).toThrow(DocumentToolError);
+  });
+
+  it("reports page counts and honors a page range when parsing", async () => {
+    const bytes = await createDocumentBytes("hwpx", WORKSHEET_MARKDOWN, { title: "페이지 테스트" });
+    const parsed = await parseDocumentMarkdown(bytes, { pages: { start: 1, end: 30 } });
+    expect(parsed.markdown).toContain("문해력");
+    expect(parsed.pageCount).toBeGreaterThanOrEqual(1);
+    expect(["layout", "section"]).toContain(parsed.pageMode);
+    const beyond = await parseDocumentMarkdown(bytes, { pages: { start: 100, end: 129 } });
+    expect(beyond.markdown).toBe("");
+    expect(beyond.pageCount).toBe(parsed.pageCount);
   });
 
   it("generates a docx that parses back to the same content", async () => {
