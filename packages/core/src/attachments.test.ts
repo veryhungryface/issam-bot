@@ -23,6 +23,19 @@ describe("attachment helpers", () => {
     expect(() => decodeAttachmentBase64("aGVsbG8")).toThrow(AttachmentValidationError);
   });
 
+  it("decodes multi-megabyte payloads without overflowing the regex engine", () => {
+    // A ~3.4MB file encodes to ~4.5M base64 chars, which used to throw RangeError in V8.
+    const bytes = new Uint8Array(9 * 1024 * 1024).fill(0x41);
+    const encoded = Buffer.from(bytes).toString("base64");
+    const decoded = decodeAttachmentBase64(encoded);
+    expect(decoded.byteLength).toBe(bytes.byteLength);
+    expect(() => decodeAttachmentBase64(`${encoded.slice(0, -1)}!`)).toThrow(
+      AttachmentValidationError,
+    );
+    const invalidDeep = `${encoded.slice(0, 5_000_000)}!${encoded.slice(5_000_001)}`;
+    expect(() => decodeAttachmentBase64(invalidDeep)).toThrow(AttachmentValidationError);
+  });
+
   it("builds prompt text and history summaries", () => {
     expect(
       promptTextForAttachments("caption", [

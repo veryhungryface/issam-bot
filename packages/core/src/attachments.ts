@@ -14,16 +14,28 @@ export class AttachmentValidationError extends Error {
   }
 }
 
+/** V8's regex engine overflows its backtrack stack on multi-megabyte inputs, so
+ * validate the body in bounded chunks and only the 4-char tail with padding rules. */
+const BASE64_VALIDATION_CHUNK = 1 << 20;
+
+function isValidBase64(value: string): boolean {
+  if (value.length % 4 !== 0) return false;
+  const bodyEnd = Math.max(0, value.length - 4);
+  for (let start = 0; start < bodyEnd; start += BASE64_VALIDATION_CHUNK) {
+    const chunk = value.slice(start, Math.min(start + BASE64_VALIDATION_CHUNK, bodyEnd));
+    if (!/^[A-Za-z0-9+/]*$/.test(chunk)) return false;
+  }
+  const tail = value.slice(bodyEnd);
+  return /^(?:[A-Za-z0-9+/]{4}|[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(tail);
+}
+
 export function decodeAttachmentBase64(contentBase64: string): Uint8Array {
   const normalized = contentBase64.trim();
   if (!normalized) throw new AttachmentValidationError("Attachment content is empty");
   if (normalized.length > ATTACHMENT_MAX_BASE64_LENGTH) {
     throw new AttachmentValidationError("Attachment exceeds the 10 MiB limit");
   }
-  if (
-    normalized.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(normalized)
-  ) {
+  if (!isValidBase64(normalized)) {
     throw new AttachmentValidationError("Attachment content is not valid base64");
   }
   let bytes: Buffer;
