@@ -63,6 +63,17 @@ export function modelAcceptsImageInput(provider: string, modelId: string): boole
   ) {
     model = models.getModel("openrouter", resolved.id);
   }
+  if (
+    !model &&
+    resolved.provider === "openai" &&
+    process.env.PI_DEFAULT_PROVIDER?.trim() === "openai" &&
+    resolved.id === process.env.PI_DEFAULT_MODEL?.trim()
+  ) {
+    // Mirror pi-runtime's configuredOpenAiModel fallback: a deployment default
+    // newer than the static catalog is treated as vision-capable so the
+    // computer tools are not stripped before the model even runs.
+    return true;
+  }
   return Boolean(model?.input.includes("image"));
 }
 

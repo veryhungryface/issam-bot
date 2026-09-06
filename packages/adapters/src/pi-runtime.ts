@@ -141,6 +141,14 @@ export class PiAgentRuntime implements AgentRuntime {
         ) {
           model = configuredOpenRouterModel(modelId);
         }
+        if (
+          !model &&
+          provider === "openai" &&
+          envDefaultProvider === "openai" &&
+          modelId === envDefaultModel
+        ) {
+          model = configuredOpenAiModel(modelId);
+        }
         if (!model) {
           queue.push({ type: "text", text: `Unknown model ${provider}/${modelId}` });
           queue.push({ type: "done" });
@@ -380,6 +388,27 @@ function toPiImages(images: AgentRunRequest["currentTurnImages"]) {
     data: Buffer.from(image.data).toString("base64"),
     mimeType: image.mimeType,
   }));
+}
+
+/**
+ * A deployment-configured OpenAI model that is newer than Pi's static catalog
+ * (e.g. gpt-6-astra before the snapshot catches up). Marked as accepting image
+ * input so computer tools stay available; the API rejects images itself if the
+ * endpoint turns out to be text-only.
+ */
+export function configuredOpenAiModel(id: string): Model<"openai-responses"> {
+  return {
+    id,
+    name: id,
+    api: "openai-responses",
+    provider: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    reasoning: true,
+    input: ["text", "image"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 400_000,
+    maxTokens: 128_000,
+  };
 }
 
 function configuredOpenRouterModel(id: string): Model<"openai-completions"> {
