@@ -4,7 +4,8 @@ import { _electron as electron, expect, test } from "@playwright/test";
 
 const styles = readFileSync(path.resolve(import.meta.dirname, "../../web/src/styles.css"), "utf8");
 const fixture = `<!doctype html>
-<html lang="en">
+<!-- main.tsx adds rakazo-desktop when the desktop bridge is present; drag regions are scoped to it. -->
+<html lang="en" class="rakazo-desktop">
   <head><meta charset="utf-8"><title>Rakazo window drag</title><style>${styles}</style></head>
   <body>
     <main>Desktop fixture ready</main>
