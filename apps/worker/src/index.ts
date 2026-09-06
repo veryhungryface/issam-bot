@@ -5,13 +5,17 @@ loadRootEnv();
 
 import {
   type BrowserbaseRegion,
+  ChatSdkMessagingSurface,
   createBackgroundJobHandlers,
+  createCloudAgentConnection,
   createConnectorStack,
   createJobReconciler,
+  createMessagingContextLoader,
   createPostgresReconciliationLeadership,
   createRunExecutor,
   createRunSandbox,
-  deploymentApiKeyForProvider,
+  createRunSecretWriter,
+  createWebProvider,
   EncryptedSecretStore,
   ExpoPushProvider,
   GraphileJobPublisher,
@@ -19,21 +23,31 @@ import {
   InMemoryJobQueue,
   InstalledConnectorProvider,
   isComposioEnabled,
+  isMessagingSurfaceEnabled,
   isPipedreamEnabled,
   LocalAgentHomeStore,
   LocalArtifactStore,
   McpConnector,
   McpOAuthBroker,
+  messagingEnvFromProcess,
+  messagingPlatformsFromEnv,
   PiAgentRuntime,
   PipedreamConnector,
   PostgresRealtimeFanout,
   pipedreamConfigFromEnv,
+  reconcileCloudAgents,
+  resolveDeploymentModel,
+  resolveSandboxProvider,
   ScriptedAgentRuntime,
-  WorkspaceMemoryProviderResolver,
+  SpaceMemoryProviderResolver,
 } from "@rakazo/adapters";
-import { resolveEncryptionKey } from "@rakazo/core";
+import { resolveEncryptionKey, resolveSupervisorToken } from "@rakazo/core";
 import { createDb, createThreadEvents } from "@rakazo/db";
+import { SERVICE_NAMES } from "@rakazo/logging";
+import { createRootLogger } from "@rakazo/logging/axiom";
 import { MarkdownMemoryStore } from "@rakazo/memory";
+
+const logger = createRootLogger(SERVICE_NAMES.worker);
 
 function browserbaseRegion(value: string | undefined): BrowserbaseRegion {
   const region = value?.trim() || "ap-southeast-1";
@@ -56,15 +70,19 @@ async function main() {
     connectionString: process.env.REALTIME_DATABASE_URL ?? databaseUrl,
     publisher: pool,
   });
-  const events = createThreadEvents(prisma, realtime);
-  const defaultModelProvider = process.env.PI_DEFAULT_PROVIDER ?? "openrouter";
-  const defaultModelId = process.env.PI_DEFAULT_MODEL ?? "deepseek/deepseek-v4-flash-0731";
-  const deploymentModelKey = deploymentApiKeyForProvider(defaultModelProvider);
+  const secrets = new EncryptedSecretStore(resolveEncryptionKey(process.env));
+  const events = createThreadEvents(prisma, realtime, {
+    runSecretWriter: createRunSecretWriter(secrets),
+  });
   const runtime =
     process.env.AGENT_RUNTIME === "scripted" ? new ScriptedAgentRuntime() : new PiAgentRuntime();
   const dataDir = process.env.DATA_DIR ?? "./data";
-  const sandbox = createRunSandbox(process.env.SANDBOX_PROVIDER ?? "docker", {
+  // Same resolver the API uses, so both processes agree on provider, model and key.
+  const { key: deploymentModelKey } = resolveDeploymentModel();
+  const sandboxProvider = resolveSandboxProvider(process.env);
+  const sandbox = createRunSandbox(sandboxProvider, {
     supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
+    supervisorToken: sandboxProvider === "docker" ? resolveSupervisorToken(process.env) : undefined,
     e2bApiKey: process.env.E2B_API_KEY,
     daytonaApiKey: process.env.DAYTONA_API_KEY,
     daytonaApiUrl: process.env.DAYTONA_API_URL,
@@ -80,7 +98,6 @@ async function main() {
     dataDir,
     prisma,
   });
-  const secrets = new EncryptedSecretStore(resolveEncryptionKey(process.env));
   const mcpOAuth = new McpOAuthBroker(prisma, secrets);
   const mcp = new McpConnector(
     prisma,
@@ -104,6 +121,13 @@ async function main() {
   const pipedream = isPipedreamEnabled(pipedreamConfig)
     ? new PipedreamConnector(pipedreamConfig)
     : undefined;
+  const messagingPlatforms = messagingPlatformsFromEnv(messagingEnvFromProcess(process.env));
+  const messaging = isMessagingSurfaceEnabled(messagingPlatforms, {
+    deploymentModelKey,
+    openSignup: process.env.MESSAGING_OPEN_SIGNUP === "true",
+  })
+    ? new ChatSdkMessagingSurface(messagingPlatforms)
+    : undefined;
   const stack = createConnectorStack(isComposioEnabled(process.env.COMPOSIO_API_KEY), undefined, [
     new InstalledConnectorProvider(prisma, secrets),
     ...(pipedream ? [pipedream] : []),
@@ -111,12 +135,14 @@ async function main() {
   ]);
   const connector = stack.destination;
   await connector.start();
-  const memoryProviders = new WorkspaceMemoryProviderResolver(prisma, secrets);
+  const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const home = new LocalAgentHomeStore(dataDir);
   const artifacts = new LocalArtifactStore(dataDir);
   const inMemoryJobs = process.env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
   const jobs: JobPublisher = inMemoryJobs ?? new GraphileJobPublisher(databaseUrl);
   const jobHost: JobWorkerHost = inMemoryJobs ?? new GraphileJobWorkerHost(databaseUrl);
+  // One provider instance so emulator launches and polls share the same Map.
+  const cloudAgent = createCloudAgentConnection();
   const executor = createRunExecutor({
     prisma,
     runtime,
@@ -126,20 +152,24 @@ async function main() {
     home,
     artifacts,
     connector: stack.connector,
+    connectors: stack.connector,
     listConnectedPluginSlugs: stack.composio?.listConnectedSlugs.bind(stack.composio),
     secrets: [
+      deploymentModelKey ?? "",
       process.env.OPENAI_API_KEY ?? "",
       process.env.OPENROUTER_API_KEY ?? "",
       process.env.COMPOSIO_API_KEY ?? "",
+      process.env.CURSOR_API_KEY ?? "",
     ].filter(Boolean),
     secretStore: secrets,
     deploymentModelKey,
-    deploymentModelProvider: defaultModelProvider,
-    deploymentModelId: defaultModelId,
     dataDir,
     notifications: new ExpoPushProvider(dataDir),
     jobs,
     events,
+    messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
+    web: createWebProvider(),
+    cloudAgent,
   });
 
   const jobHandlers = createBackgroundJobHandlers({
@@ -154,14 +184,16 @@ async function main() {
     secretStore: secrets,
     memoryProviders,
     deploymentModelKey,
-    deploymentModelProvider: defaultModelProvider,
-    deploymentModelId: defaultModelId,
+    messaging,
+    cloudAgent,
   });
   await jobHost.start(jobHandlers);
   const reconciler = createJobReconciler({
     prisma,
     jobs,
+    events,
     leadership: createPostgresReconciliationLeadership(pool),
+    reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
   });
   reconciler.start();
 
@@ -169,22 +201,27 @@ async function main() {
   const stop = async () => {
     if (stopping) return;
     stopping = true;
-    await reconciler.stop();
-    await jobHost.stop();
-    await jobs.close();
-    await realtime.close();
-    await connector.stop();
-    await mcp.close();
-    await prisma.$disconnect().catch(() => undefined);
-    await pool.end().catch(() => undefined);
+    try {
+      await reconciler.stop();
+      await jobHost.stop();
+      await jobs.close();
+      await realtime.close();
+      await connector.stop();
+      await mcp.close();
+      await prisma.$disconnect().catch(() => undefined);
+      await pool.end().catch(() => undefined);
+    } finally {
+      await logger.flush({ timeoutMs: 2_000 });
+    }
   };
   process.once("SIGTERM", () => void stop());
   process.once("SIGINT", () => void stop());
 
-  console.log("rakazo worker ready");
+  logger.info("worker ready");
 }
 
-main().catch((error) => {
-  console.error(error);
+main().catch(async (error) => {
+  logger.error("worker startup failed", error);
+  await logger.flush({ timeoutMs: 2_000 });
   process.exit(1);
 });

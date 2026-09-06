@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { assertSafeRemoteUrl, createSafeLookup, createSafeRemoteFetch } from "./remote-mcp.js";
+import {
+  assertSafeRemoteUrl,
+  createSafeLookup,
+  createSafeRemoteFetch,
+  limitRemoteMcpPayload,
+} from "./remote-mcp.js";
 
 const publicResolver = async () => [{ address: "203.0.113.10", family: 4 as const }];
 
@@ -34,6 +39,51 @@ describe("remote MCP URL policy", () => {
     await expect(
       assertSafeRemoteUrl("https://connectors.example.test/mcp", async () => [
         { address: "10.1.2.3", family: 4 as const },
+      ]),
+    ).rejects.toThrow("private address");
+  });
+
+  it("allows Tailscale MagicDNS hosts that resolve to CGNAT addresses", async () => {
+    const magicDns = "https://box.tail12345.ts.net/openapi.json";
+    await expect(
+      assertSafeRemoteUrl(magicDns, async () => [{ address: "100.64.1.2", family: 4 as const }]),
+    ).resolves.toEqual(new URL(magicDns));
+
+    const safeLookup = createSafeLookup(async () => [{ address: "100.119.57.55", family: 4 }]);
+    const result = await new Promise<{ address: string; family?: number }>((resolve, reject) => {
+      safeLookup("box.tail12345.ts.net", { family: 0, all: false }, (error, address, family) => {
+        if (error) reject(error);
+        else resolve({ address: String(address), family });
+      });
+    });
+    expect(result).toEqual({ address: "100.119.57.55", family: 4 });
+  });
+
+  it("still rejects raw Tailscale CGNAT IP literals", async () => {
+    await expect(
+      assertSafeRemoteUrl("https://100.64.1.2/openapi.json", publicResolver),
+    ).rejects.toThrow(/private host/i);
+  });
+
+  it("rejects MagicDNS hosts that resolve outside Tailscale CGNAT", async () => {
+    await expect(
+      assertSafeRemoteUrl("https://box.tail12345.ts.net/openapi.json", async () => [
+        { address: "127.0.0.1", family: 4 as const },
+      ]),
+    ).rejects.toThrow("private address");
+    await expect(
+      assertSafeRemoteUrl("https://box.tail12345.ts.net/openapi.json", async () => [
+        { address: "10.1.2.3", family: 4 as const },
+      ]),
+    ).rejects.toThrow("private address");
+    await expect(
+      assertSafeRemoteUrl("https://box.tail12345.ts.net/openapi.json", async () => [
+        { address: "169.254.169.254", family: 4 as const },
+      ]),
+    ).rejects.toThrow("private address");
+    await expect(
+      assertSafeRemoteUrl("https://box.tail12345.ts.net/openapi.json", async () => [
+        { address: "100.100.100.200", family: 4 as const },
       ]),
     ).rejects.toThrow("private address");
   });
@@ -76,5 +126,16 @@ describe("remote MCP URL policy", () => {
     } finally {
       await safeFetch.close();
     }
+  });
+});
+
+describe("remote MCP result limits", () => {
+  it("applies the result budget in UTF-8 bytes instead of JavaScript characters", () => {
+    const value = { content: "界".repeat(400_000) };
+    const limited = limitRemoteMcpPayload(value) as { truncated: boolean; content: string };
+
+    expect(limited.truncated).toBe(true);
+    expect(Buffer.byteLength(limited.content, "utf8")).toBeLessThanOrEqual(1_000_000);
+    expect(limited.content).not.toContain("\uFFFD");
   });
 });

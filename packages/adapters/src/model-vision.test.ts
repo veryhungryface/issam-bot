@@ -25,6 +25,15 @@ describe("model vision gating for computer tools", () => {
     );
   });
 
+  it("treats an OpenAI deployment default newer than the catalog as vision-capable", () => {
+    expect(modelAcceptsImageInput("openai", "gpt-6-astra")).toBe(false);
+    vi.stubEnv("PI_DEFAULT_PROVIDER", "openai");
+    vi.stubEnv("PI_DEFAULT_MODEL", "gpt-6-astra");
+    expect(modelAcceptsImageInput("openai", "gpt-6-astra")).toBe(true);
+    // Only the configured deployment default gets the benefit of the doubt.
+    expect(modelAcceptsImageInput("openai", "gpt-7-unknown")).toBe(false);
+  });
+
   it("resolves the scripted placeholder like Pi before checking vision", () => {
     expect(resolveModelRefForVisionCheck("scripted", "scripted")).toEqual({
       provider: "openrouter",

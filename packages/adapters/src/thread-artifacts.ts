@@ -31,7 +31,7 @@ export async function attachWorkspaceFileToThread(
     artifacts: ArtifactStore;
   },
   input: {
-    workspaceId: string;
+    spaceId: string;
     userId: string;
     botId: string;
     groupId?: string;
@@ -54,7 +54,7 @@ export async function attachWorkspaceFileToThread(
   const context = {
     operationId: input.operationId,
     traceId: input.operationId,
-    workspaceId: input.workspaceId,
+    spaceId: input.spaceId,
     userId: input.userId,
     botId: input.botId,
     signal: new AbortController().signal,
@@ -64,7 +64,7 @@ export async function attachWorkspaceFileToThread(
   const row = await deps.prisma.artifact
     .create({
       data: {
-        workspaceId: input.workspaceId,
+        spaceId: input.spaceId,
         userId: input.userId,
         botId: input.botId,
         groupId: input.groupId,
@@ -104,6 +104,7 @@ export async function materializeCurrentTurnFiles(
     computer: ComputerRef;
     computerMode: ComputerMode;
     homeKey?: string;
+    markWorkspaceDirty?: () => void;
   },
 ): Promise<MaterializedThreadFile[]> {
   const fileBlocks = blocks?.filter(
@@ -114,7 +115,7 @@ export async function materializeCurrentTurnFiles(
   const rows = await deps.prisma.artifact.findMany({
     where: {
       id: { in: fileBlocks.map((block) => block.artifactId) },
-      workspaceId: input.context.workspaceId,
+      spaceId: input.context.spaceId,
       userId: input.context.userId,
     },
   });
@@ -134,6 +135,7 @@ export async function materializeCurrentTurnFiles(
       input.context.botId,
       relativePath,
     );
+    input.markWorkspaceDirty?.();
     if (input.homeKey) {
       if (!deps.home) throw new Error("AgentHome storage is unavailable for this computer");
       await deps.home.writeBytes(input.homeKey, storedPath, bytes, input.context);

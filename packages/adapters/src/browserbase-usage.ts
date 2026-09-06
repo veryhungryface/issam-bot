@@ -1,5 +1,6 @@
 import type { SandboxProvider } from "@rakazo/adapter-kit";
 import type { PrismaClient } from "@rakazo/db";
+import { getLogger } from "@rakazo/logging";
 import type { BrowserbaseSessionSummary } from "./browserbase-client.js";
 
 interface SessionUsageSource {
@@ -69,7 +70,7 @@ export async function syncBrowserSessionUsage(
   try {
     sessions = await sandbox.listSessionUsage();
   } catch (error) {
-    console.error("browser session usage sync failed", {
+    getLogger().error("browser session usage sync failed", {
       error: error instanceof Error ? error.message : String(error),
     });
     return false;

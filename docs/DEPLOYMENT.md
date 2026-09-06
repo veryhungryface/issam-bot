@@ -101,7 +101,7 @@ store enabled. Keep hostname verification enabled and rotate the pinned CA befor
 
 ## Upgrade and rollback
 
-1. Back up the managed database and app data with `sudo ./scripts/backup.sh`.
+1. Back up the managed database and app data with `sudo ./scripts/prod-backup.sh`.
 2. Update the Git checkout and set `ISSAM_BOT_IMAGE` to the new immutable image digest.
 3. Run `docker compose ... pull` and `docker compose ... up -d`.
 4. Set `EXPECTED_REVISION` and run the health check.
@@ -136,8 +136,8 @@ seven days. Set `BACKUP_S3_URI=s3://bucket/prefix` to copy each verified snapsho
 AWS CLI. Configure the S3/R2 credentials outside the repository.
 
 ```bash
-sudo /opt/issam-bot/app/scripts/backup.sh
-sudo /opt/issam-bot/app/scripts/restore.sh /var/backups/issam-bot/<timestamp> --confirm
+sudo /opt/issam-bot/app/scripts/prod-backup.sh
+sudo /opt/issam-bot/app/scripts/prod-restore.sh /var/backups/issam-bot/<timestamp> --confirm
 ```
 
 Restore is destructive and stops the API and worker first. Test restore into a disposable managed

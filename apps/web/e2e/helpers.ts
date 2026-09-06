@@ -32,19 +32,6 @@ export async function completeOnboarding(page: Page, testInfo?: TestInfo) {
   if ((await chief.isVisible().catch(() => false)) && page.url().includes("/app")) return;
   if (
     await page
-      .getByRole("heading", { name: "Connect a model" })
-      .isVisible()
-      .catch(() => false)
-  ) {
-    if (testInfo) await captureScreenshot(page, testInfo, "02-connect-model");
-    await page.getByRole("button", { name: "Skip for now" }).click();
-    await page
-      .getByRole("heading", { name: "Create your first bot" })
-      .or(chief)
-      .waitFor({ timeout: 20_000 });
-  }
-  if (
-    await page
       .getByRole("heading", { name: "Create your first bot" })
       .isVisible()
       .catch(() => false)
@@ -91,6 +78,41 @@ export async function captureScreenshot(page: Page, testInfo: TestInfo, name: st
 }
 
 export async function openNewBot(page: Page) {
-  await page.getByTitle("Create").click();
-  await page.getByRole("button", { name: "New bot" }).click();
+  await page.getByTestId("create-menu-trigger").click();
+  await page.getByTestId("create-new-bot").click();
+}
+
+export async function openNewGroup(page: Page) {
+  await page.getByTestId("create-menu-trigger").click();
+  await page.getByTestId("create-new-group").click();
+}
+
+export async function openNewSpace(page: Page) {
+  await page.getByTestId("create-menu-trigger").click();
+  await page.getByTestId("create-new-space").click();
+}
+
+/** Instant-create a bot from the + picker and wait for its chat (side panel closed). */
+export async function createBotFromPicker(page: Page) {
+  await openNewBot(page);
+  await page.waitForURL(/\/app\/[^/]+$/);
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
+}
+
+/** Create a named bot via RPC for test setup (skips the + picker). */
+export async function createNamedBot(
+  page: Page,
+  name: string,
+  options: { computerMode?: "team" | "dedicated" } = {},
+) {
+  const bot = await rpc<{ id: string; name: string }>(page, "bots/create", {
+    name,
+    title: "",
+    description: "",
+    notifyOnFinish: true,
+    computerMode: options.computerMode ?? "team",
+  });
+  await page.goto(`/app/${bot.id}`);
+  await expect(page.getByPlaceholder(`Message ${name}`)).toBeVisible();
+  return bot.id;
 }
