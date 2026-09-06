@@ -1,3 +1,6 @@
+import { readBoundedResponseBytes } from "@rakazo/core";
+import { selectedSpaceId, withSpaceHeaders } from "./rpc.js";
+
 export type DictationMode = "hold" | "endpoint";
 
 export type DictationSnapshot = {
@@ -23,6 +26,8 @@ interface SpeechRecognitionLike {
 const IDLE: DictationSnapshot = { status: "idle", transcript: "" };
 const ENDPOINT_TICK_MS = 80;
 const SILENCE_RMS = 0.035;
+export const TRANSCRIPTION_RESPONSE_TIMEOUT_MS = 70_000;
+export const MAX_TRANSCRIPTION_RESPONSE_BYTES = 64 * 1024;
 const ENDPOINT_UNSUPPORTED =
   "이 브라우저에서는 말하기 종료 시점을 자동으로 감지할 수 없습니다. Chrome이나 데스크톱 앱을 사용하거나 메시지 입력창에서 말하는 동안 버튼을 누르고 계세요.";
 
@@ -145,12 +150,13 @@ export class Dictation {
   }): Promise<void> {
     this.stop("replace");
     const mine = this.token;
+    const spaceId = selectedSpaceId();
     this.onFinal = opts.onFinal;
     this.set({ status: "listening", transcript: "" });
     // Prefer the configured voice provider. Chrome Web Speech talks to Google and
     // fails on HTTP origins even when OpenAI/ElevenLabs STT is connected.
     if (opts.transcribe) {
-      await this.listenRecorder(mine, opts.mode, opts.endpointMs ?? 850);
+      await this.listenRecorder(mine, opts.mode, opts.endpointMs ?? 850, spaceId);
       return;
     }
     if (webSpeechAvailable()) {
@@ -217,7 +223,12 @@ export class Dictation {
     rec.start();
   }
 
-  private async listenRecorder(mine: number, mode: DictationMode, endpointMs: number) {
+  private async listenRecorder(
+    mine: number,
+    mode: DictationMode,
+    endpointMs: number,
+    spaceId: string | null,
+  ) {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -251,7 +262,7 @@ export class Dictation {
       for (const track of stream.getTracks()) track.stop();
       if (this.token !== mine) return;
       this.stopVad();
-      void this.transcribeChunks(mine);
+      void this.transcribeChunks(mine, spaceId);
     };
     media.start(mode === "endpoint" ? 250 : undefined);
   }
@@ -310,7 +321,7 @@ export class Dictation {
     if (ctx) void ctx.close().catch(() => undefined);
   }
 
-  private async transcribeChunks(mine: number) {
+  private async transcribeChunks(mine: number, spaceId: string | null) {
     if (this.token !== mine) return;
     const blob = new Blob(this.chunks, { type: this.chunks[0]?.type || "audio/webm" });
     this.chunks = [];
@@ -321,18 +332,28 @@ export class Dictation {
     this.set({ status: "transcribing", transcript: this.snapshot.transcript });
     const abort = new AbortController();
     this.transcribeAbort = abort;
+    const timer = setTimeout(
+      () => abort.abort(new Error("Transcription request timed out.")),
+      TRANSCRIPTION_RESPONSE_TIMEOUT_MS,
+    );
     try {
       const audioBase64 = await blobToBase64(blob);
       if (this.token !== mine) return;
-      const res = await fetch("/api/voice/transcribe", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ audioBase64, mimeType: blob.type }),
-        signal: abort.signal,
-      });
-      if (this.token !== mine) return;
-      const body = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
+      const res = await withAbort(
+        fetch("/api/voice/transcribe", {
+          method: "POST",
+          headers: withSpaceHeaders({ "content-type": "application/json" }, spaceId),
+          credentials: "include",
+          body: JSON.stringify({ audioBase64, mimeType: blob.type }),
+          signal: abort.signal,
+        }),
+        abort.signal,
+      );
+      if (this.token !== mine) {
+        cancelResponse(res);
+        return;
+      }
+      const body = await readTranscriptionBody(res, abort.signal);
       if (this.token !== mine) return;
       if (!res.ok) {
         this.set({ ...IDLE, error: "녹음 내용을 텍스트로 변환하지 못했습니다." });
@@ -340,12 +361,30 @@ export class Dictation {
       }
       this.finish(body.text ?? "", mine);
     } catch (error) {
+      // User cancel bumps token in stop() before aborting, so a matching token
+      // means the deadline timer fired. Browsers may reject fetch as AbortError
+      // instead of signal.reason; surface the timeout either way.
       if (this.token !== mine) return;
-      if (error instanceof Error && error.name === "AbortError") return;
+      const timedOut =
+        (abort.signal.reason instanceof Error &&
+          abort.signal.reason.message === "Transcription request timed out.") ||
+        (error instanceof Error && error.message === "Transcription request timed out.");
+      if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+        this.set({ ...IDLE, error: "Transcription request timed out." });
+        return;
+      }
       this.set({
         ...IDLE,
-        error: "녹음 내용을 텍스트로 변환하지 못했습니다.",
+        // Surface the specific oversized-response error; everything else gets
+        // the generic Korean transcription failure message.
+        error:
+          error instanceof Error && error.message === "Transcription response is too large."
+            ? error.message
+            : "녹음 내용을 텍스트로 변환하지 못했습니다.",
       });
+    } finally {
+      clearTimeout(timer);
+      if (this.transcribeAbort === abort) this.transcribeAbort = null;
     }
   }
 
@@ -372,6 +411,57 @@ async function blobToBase64(blob: Blob): Promise<string> {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
+}
+
+async function readTranscriptionBody(
+  response: Response,
+  signal: AbortSignal,
+): Promise<{ text?: string; error?: string }> {
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (Number.isFinite(declared) && declared > MAX_TRANSCRIPTION_RESPONSE_BYTES) {
+    cancelResponse(response);
+    throw new Error("Transcription response is too large.");
+  }
+  const bytes = await readBoundedResponseBytes(response, {
+    maxBytes: MAX_TRANSCRIPTION_RESPONSE_BYTES,
+    tooLargeMessage: "Transcription response is too large.",
+    read: (operation) => withAbort(operation(), signal),
+  });
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as { text?: string; error?: string })
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function withAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason ?? new Error("Request aborted."));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new Error("Request aborted."));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        // Prefer abort reason over a bare AbortError from fetch/read.
+        reject(signal.aborted ? (signal.reason ?? error) : error);
+      },
+    );
+  });
+}
+
+function cancelResponse(response: Response): void {
+  try {
+    void Promise.resolve(response.body?.cancel()).catch(() => undefined);
+  } catch {
+    // Response cleanup is best-effort.
+  }
 }
 
 export const dictation = new Dictation();

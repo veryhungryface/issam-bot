@@ -779,8 +779,9 @@ function ensureBrowserbaseComputer(computer: ComputerRef): void {
 function browserbaseMetadata(botId: string, context: AdapterContext): Record<string, string> {
   return {
     botId: safeMetadata(botId),
-    workspaceId: safeMetadata(context.workspaceId),
+    workspaceId: safeMetadata(context.spaceId),
     // Attribute the session to a person so usage can be billed per user.
+    // The metadata key stays "workspaceId" for continuity with recorded sessions.
     ...(context.userId ? { userId: safeMetadata(context.userId) } : {}),
     operationId: safeMetadata(context.operationId),
     ...(context.runId ? { runId: safeMetadata(context.runId) } : {}),

@@ -3,14 +3,19 @@ import type {
   AgentRuntime,
   BackgroundJobHandlers,
   JobPublisher,
+  MessagingSurface,
   SandboxProvider,
 } from "@rakazo/adapter-kit";
+import { messagingDeliverJob } from "@rakazo/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import { getLogger } from "@rakazo/logging";
+import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
 import { scheduleComputerSleep, sleepComputerIfIdle } from "./computer-idle.js";
 import type { createRunExecutor } from "./executor.js";
 import { compactHistory } from "./history-compaction.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
+import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { expireTaughtSkillTeaching } from "./teaching-session.js";
 
@@ -26,12 +31,42 @@ export function createBackgroundJobHandlers(deps: {
   secretStore: EncryptedSecretStore;
   memoryProviders: MemoryProviderResolver;
   deploymentModelKey?: string;
-  deploymentModelProvider?: string;
-  deploymentModelId?: string;
+  messaging?: MessagingSurface;
+  cloudAgent?: import("./cloud-agent-factory.js").CloudAgentConnection | null;
 }): BackgroundJobHandlers {
+  const deliverMessaging = async (runId?: string) => {
+    if (!deps.messaging) return;
+    await deliverMessagingOutbound(
+      { prisma: deps.prisma, messaging: deps.messaging, events: deps.events, jobs: deps.jobs },
+      { runId },
+      {
+        operationId: `messaging.deliver:${runId ?? "drain"}`,
+        traceId: `messaging.deliver:${runId ?? "drain"}`,
+        spaceId: "",
+        userId: "",
+        signal: new AbortController().signal,
+      },
+    );
+  };
+
   return {
     "run.continue": async (payload) => {
       await deps.executor.continueRun(payload.runId, deps.workerId);
+      // Automatic messaging mirror: once the run's bot messages are durable,
+      // copy them into the outbox. Never let mirror failures fail the run.
+      if (deps.messaging) {
+        await mirrorMessagingOutbound(
+          { prisma: deps.prisma, messaging: deps.messaging, events: deps.events, jobs: deps.jobs },
+          payload.runId,
+        );
+        await deps.jobs.enqueue(messagingDeliverJob()).catch(async (error) => {
+          getLogger().error("messaging.deliver enqueue error", error);
+          await deliverMessaging();
+        });
+      }
+    },
+    "messaging.deliver": async (payload) => {
+      await deliverMessaging(payload.runId);
     },
     "routine.wakeup": async (payload) => {
       await deps.executor.wakeRoutine(payload.routineId, payload.scheduledFor);
@@ -47,6 +82,17 @@ export function createBackgroundJobHandlers(deps: {
     "skill.teaching-expire": async (payload) => {
       await expireTaughtSkillTeaching(deps, payload.skillId);
     },
+    "cloud_agent.poll": async (payload) => {
+      await pollCloudAgent(
+        {
+          prisma: deps.prisma,
+          jobs: deps.jobs,
+          events: deps.events,
+          cloudAgent: deps.cloudAgent,
+        },
+        payload,
+      );
+    },
     "history.compact": async (payload) => {
       await compactHistory(
         {
@@ -55,8 +101,6 @@ export function createBackgroundJobHandlers(deps: {
           jobs: deps.jobs,
           memoryProviders: deps.memoryProviders,
           deploymentModelKey: deps.deploymentModelKey,
-          deploymentModelProvider: deps.deploymentModelProvider,
-          deploymentModelId: deps.deploymentModelId,
           ...(deps.executor.resolveModel ? { resolveModel: deps.executor.resolveModel } : {}),
         },
         payload.threadId,

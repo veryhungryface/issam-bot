@@ -7,6 +7,7 @@ import { Agent } from "undici";
 import { combineSignals } from "./connector-safety.js";
 import {
   createAddressCheckedLookup,
+  isCloudMetadataAddress,
   isPrivateAddress,
   type ResolvedAddress,
   type ResolveHostname,
@@ -73,7 +74,7 @@ export async function callRemoteMcpTool(
       signal,
       timeout: MCP_TIMEOUT_MS,
     });
-    return limitPayload({
+    return limitRemoteMcpPayload({
       content: result.content,
       structuredContent: result.structuredContent,
       isError: result.isError ?? false,
@@ -128,7 +129,7 @@ export async function assertSafeRemoteUrl(
   if (url.hash) throw new Error("Connector URL must not contain a fragment");
   const hostname = url.hostname.replace(/^\[|\]$/g, "");
   if (isPrivateHostname(hostname)) throw new Error("Connector URL targets a private host");
-  assertPublicAddresses(await resolve(hostname));
+  assertPublicAddresses(await resolve(hostname), hostname);
   return url;
 }
 
@@ -161,8 +162,25 @@ export function createSafeLookup(resolve: ResolveHostname = resolveHostname): Lo
   return createAddressCheckedLookup(resolve, assertPublicAddresses);
 }
 
+/** Tailscale MagicDNS names (*.ts.net) are public DNS names, not private IP literals. */
+function isTailscaleMagicDnsHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  return normalized === "ts.net" || normalized.endsWith(".ts.net");
+}
+
+/** Tailscale assigns CGNAT 100.64.0.0/10; MagicDNS may resolve there. */
+function isTailscaleCgnatAddress(address: string): boolean {
+  const value = address.toLowerCase().replace(/^\[|\]$/g, "");
+  const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
+  const ipv4 = mapped ?? (isIP(value) === 4 ? value : undefined);
+  if (!ipv4) return false;
+  const [a, b] = ipv4.split(".").map(Number);
+  return a === 100 && b != null && b >= 64 && b <= 127;
+}
+
 function isPrivateHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/\.$/, "");
+  if (isTailscaleMagicDnsHostname(normalized)) return false;
   return (
     normalized === "localhost" ||
     normalized.endsWith(".localhost") ||
@@ -173,17 +191,43 @@ function isPrivateHostname(hostname: string): boolean {
   );
 }
 
-function assertPublicAddresses(addresses: ResolvedAddress[]): void {
-  if (addresses.length === 0 || addresses.some((entry) => isPrivateAddress(entry.address))) {
+function assertPublicAddresses(addresses: ResolvedAddress[], hostname?: string): void {
+  if (addresses.length === 0) {
+    throw new Error("Connector URL resolves to a private address");
+  }
+  const magicDns = hostname != null && isTailscaleMagicDnsHostname(hostname);
+  if (
+    addresses.some((entry) => {
+      if (isCloudMetadataAddress(entry.address)) return true;
+      if (!isPrivateAddress(entry.address)) return false;
+      // Allow only Tailscale CGNAT for MagicDNS; keep other private ranges blocked.
+      return !(magicDns && isTailscaleCgnatAddress(entry.address));
+    })
+  ) {
     throw new Error("Connector URL resolves to a private address");
   }
 }
 
-function limitPayload(value: unknown): unknown {
+export function limitRemoteMcpPayload(value: unknown): unknown {
   const serialized = JSON.stringify(value);
-  if (serialized.length <= MAX_RESULT_BYTES) return value;
+  if (serialized === undefined) return value;
+  const bytes = Buffer.from(serialized, "utf8");
+  if (bytes.byteLength <= MAX_RESULT_BYTES) return value;
   return {
     truncated: true,
-    content: serialized.slice(0, MAX_RESULT_BYTES),
+    content: decodeUtf8Prefix(bytes, MAX_RESULT_BYTES),
   };
+}
+
+function decodeUtf8Prefix(bytes: Uint8Array, maxBytes: number): string {
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let end = Math.min(bytes.byteLength, maxBytes);
+  while (end > 0) {
+    try {
+      return decoder.decode(bytes.subarray(0, end));
+    } catch {
+      end -= 1;
+    }
+  }
+  return "";
 }

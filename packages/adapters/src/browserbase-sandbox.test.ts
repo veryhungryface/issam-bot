@@ -524,7 +524,7 @@ function adapterContext(): AdapterContext {
   return {
     operationId: "operation-1",
     traceId: "trace-1",
-    workspaceId: "workspace-1",
+    spaceId: "workspace-1",
     userId: "user-1",
     botId: "bot-1",
     runId: "run-1",
