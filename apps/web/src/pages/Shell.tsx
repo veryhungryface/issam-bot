@@ -5974,9 +5974,6 @@ function embeddableScreenUrl(url: string | null): string | null {
   if (!url) return null;
   try {
     const parsed = new URL(url, window.location.href);
-    // Emulated providers hand back non-web schemes (fake://); an iframe can
-    // never load those, so show the placeholder instead of an aborted request.
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
     const page = new URL(window.location.href);
     const local = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
     const pagePort = page.port || (page.protocol === "https:" ? "443" : "80");
