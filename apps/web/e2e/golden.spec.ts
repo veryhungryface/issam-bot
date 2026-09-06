@@ -77,7 +77,8 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   expect(mainBox).not.toBeNull();
   expect(panelBox).not.toBeNull();
   expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0)).toBeLessThanOrEqual(panelBox?.x ?? 0);
-  await sidePanel.getByRole("button", { name: "Take control" }).click();
+  await sidePanel.getByTestId("computer-preview").hover();
+  await sidePanel.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Skip", exact: true }).last()).toBeVisible();
   await expect(page.getByRole("button", { name: "I’m done", exact: true }).last()).toBeVisible();
@@ -140,10 +141,11 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
     /Gmail[\s\S]*Google Calendar[\s\S]*Google Drive[\s\S]*Slack[\s\S]*Notion/,
   );
   await expect(page.getByText("GitHub", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add Treg", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add MCP server", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add OpenAPI", exact: true })).toBeVisible();
-  await expect(page.getByText("Tool sources", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Treg", exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Add MCP server", exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Add OpenAPI", exact: true })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Add GraphQL", exact: true })).toBeHidden();
+  await expect(page.getByText("Tool sources", { exact: true })).toBeHidden();
   await expect(
     page.getByText("Connect apps or add Treg, MCP, and OpenAPI tool sources.", { exact: true }),
   ).toBeHidden();
@@ -154,13 +156,14 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
     .getByText("Gmail", { exact: true })
     .locator("xpath=ancestor::*[.//button][1]");
   await gmailRow.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(gmailRow.getByRole("button", { name: "Remove Gmail", exact: true })).toBeVisible();
+  await expect(gmailRow.getByRole("button", { name: /^Remove/ })).toBeVisible();
   await captureScreenshot(page, testInfo, "11a-connected-plugins");
 
-  await gmailRow.getByRole("button", { name: "Remove Gmail", exact: true }).click();
+  await gmailRow.getByRole("button", { name: /^Remove/ }).click();
   await expect(gmailRow.getByRole("button", { name: "Add", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "11b-connected-plugins-empty");
 
+  // Linear is not a featured tile; it lives behind Show more apps.
   await page.getByTestId("show-more-apps").click();
   const linearRow = page
     .getByText("Linear", { exact: true })
@@ -169,23 +172,21 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await linearRow.getByRole("button", { name: "Add", exact: true }).click();
   const popup = await connectPopup;
   await popup.close();
-  await expect(linearRow.getByRole("button", { name: "Remove Linear", exact: true })).toBeVisible();
-  await linearRow.getByRole("button", { name: "Remove Linear", exact: true }).click();
+  await expect(linearRow.getByRole("button", { name: /^Remove/ })).toBeVisible();
+  await linearRow.getByRole("button", { name: /^Remove/ }).click();
   await expect(linearRow.getByRole("button", { name: "Add", exact: true })).toBeVisible();
 
-  const custom = page.getByTestId("custom-connectors");
+  const advanced = page.getByTestId("integrations-advanced");
+  await advanced.evaluate((element) => {
+    (element as HTMLDetailsElement).open = true;
+  });
   await expect(page.getByRole("button", { name: "MCP servers", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add MCP server", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add OpenAPI", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add GraphQL", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Treg", exact: true })).toBeVisible();
   await expect(page.getByText("Tool sources", { exact: true })).toBeVisible();
-  // MCP → OpenAPI → Treg order inside the custom connectors section.
-  const advancedActions = custom.locator("button");
-  await expect(advancedActions.nth(0)).toHaveText("MCP servers");
-  await expect(advancedActions.nth(1)).toHaveText("Add MCP server");
-  await expect(advancedActions.nth(2)).toHaveText("Add OpenAPI");
-  await expect(advancedActions.nth(3)).toHaveText("Add Treg");
-
+  // Thin Advanced smoke only. GraphQL install and order screenshots live in graphql-integrations.spec.ts.
   await page.getByRole("button", { name: "Add Treg", exact: true }).click();
   await page.getByPlaceholder("Treg token").fill("fake-treg-browser-credential");
   await page.getByRole("button", { name: "Verify and add", exact: true }).click();
@@ -247,6 +248,8 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     if (message.type() === "error") browserErrors.push(message.text());
   });
   page.on("requestfailed", (request) => {
+    // Client-side aborts are deliberate (effect cleanup on navigation), not failures.
+    if (request.failure()?.errorText === "net::ERR_ABORTED") return;
     failedRequests.push(
       `${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`,
     );

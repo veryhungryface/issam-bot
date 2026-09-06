@@ -24,7 +24,7 @@ test("restricted signup waits for mailbox verification", async ({ page }, testIn
   await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible();
   await captureScreenshot(page, testInfo, "signup-verification-required");
   await page.getByRole("link", { name: "Back to sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Sign in to Rakazo" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in to Issam Bot" })).toBeVisible();
 });
 
 test("logout protects bot deep links and sign-in restores the session", async ({
@@ -60,7 +60,7 @@ test("logout protects bot deep links and sign-in restores the session", async ({
   await expect(page.getByText(/Your team of always-on agents/)).toBeVisible();
   await page.getByRole("button", { name: /Sign up/ }).click();
   await expect(page).toHaveURL(/\/sign-up$/);
-  await expect(page.getByRole("heading", { name: "Create your Rakazo" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your Issam Bot" })).toBeVisible();
   await page.goto("/");
   await captureScreenshot(page, testInfo, "37-logged-out-welcome");
 

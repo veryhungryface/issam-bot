@@ -2350,6 +2350,21 @@ export function ShellPage() {
     });
   }, [inGroup, active?.id, snapshot?.run?.id, snapshot?.run?.status, computer?.state]);
 
+  // An auto-opened panel is full-screen on mobile and would cover the
+  // conversation, so close it when the viewport crosses below the desktop
+  // breakpoint; a panel the user opened or adopted stays.
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 767px)");
+    const onChange = () => {
+      if (media.matches && panelAutoOpened.current) {
+        panelAutoOpened.current = false;
+        setPanel((current) => (current === "computer" ? null : current));
+      }
+    };
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+
   // The composed-text panel opens only from its button; auto-opening stole Tab
   // and focus from people typing into the remote page. Still close it whenever
   // control is lost so it never lingers over a view-only screen.
@@ -2439,16 +2454,14 @@ export function ShellPage() {
     return () => window.clearInterval(timer);
   }, [panel, computerOpen, active?.id, computer?.state]);
 
-  const takeoverBlocked = computerTakeoverBlocked(computer, snapshot?.run?.status);
-
   async function openComputer(options: { takeControl?: boolean } = {}) {
     if (!active) return;
-    // Viewing must not pause the bot: take the control lease only when the user
-    // explicitly asks for it or the bot is waiting for them on the screen.
-    const wantsControl = options.takeControl ?? snapshot?.run?.status === "waiting_takeover";
+    // Viewing a busy bot must not pause it: takeover is blocked while a run is
+    // active, so Open is view-only then and becomes the takeover path once the
+    // bot is idle or waiting on the user.
     const blocked = computerTakeoverBlocked(computer, snapshot?.run?.status);
     const needsTakeover =
-      wantsControl && !blocked && !userHoldsComputerControl(computer, active.id);
+      (options.takeControl ?? true) && !blocked && !userHoldsComputerControl(computer, active.id);
     try {
       await bootComputer({
         takeControl: needsTakeover,
@@ -4092,18 +4105,7 @@ export function ShellPage() {
                   takeoverRequested={Boolean(computer?.takeoverRequested)}
                   onRelease={releaseComputer}
                 />
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={takeoverBlocked}
-                  title={takeoverBlocked ? t`Stop the bot first` : undefined}
-                  onClick={() => void openComputer({ takeControl: true })}
-                >
-                  <Trans>Take control</Trans>
-                </Button>
-              )}
+              ) : null}
               {active && !recordingSkill ? (
                 <TeachComputerOverlayControl
                   key={active.id}
@@ -5571,7 +5573,7 @@ const MessageView = memo(function MessageView({
         <div className="flex w-fit max-w-full justify-start">
           <div
             data-testid="message-bot-bubble"
-            className="min-w-0 max-w-[74%] space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+            className="min-w-0 max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
             dir="auto"
           >
             {visibleNarrationBlocks.map((block, i) => {
@@ -5665,7 +5667,7 @@ const MessageView = memo(function MessageView({
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div
                 data-testid="message-bot-bubble"
-                className="min-w-0 max-w-[74%] rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+                className="min-w-0 max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
                 dir="auto"
               >
                 <ChatMarkdown streaming>{block.text}</ChatMarkdown>
@@ -5679,7 +5681,7 @@ const MessageView = memo(function MessageView({
           return (
             <div key={i} className="flex justify-start">
               <div
-                className="min-w-0 max-w-[74%] space-y-1.5 rounded-[20px] bg-muted px-[18px] py-3"
+                className="min-w-0 max-w-full space-y-1.5 rounded-[20px] bg-muted px-[18px] py-3"
                 dir="ltr"
               >
                 <ToolSteps
@@ -5849,7 +5851,7 @@ const MessageView = memo(function MessageView({
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div
                 data-testid="message-bot-bubble"
-                className="min-w-0 max-w-[74%] rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+                className="min-w-0 max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
                 dir="auto"
               >
                 <ChatMarkdown>{block.text}</ChatMarkdown>
@@ -5972,6 +5974,9 @@ function embeddableScreenUrl(url: string | null): string | null {
   if (!url) return null;
   try {
     const parsed = new URL(url, window.location.href);
+    // Emulated providers hand back non-web schemes (fake://); an iframe can
+    // never load those, so show the placeholder instead of an aborted request.
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
     const page = new URL(window.location.href);
     const local = parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
     const pagePort = page.port || (page.protocol === "https:" ? "443" : "80");
