@@ -886,6 +886,24 @@ describe("sandbox-gone detection", () => {
     Object.assign(new Error("fetch failed"), { code: "ECONNRESET" }),
   ];
 
+  it("reads a Browserbase 404/410 session response as gone, other statuses as live", () => {
+    const gone410 = Object.assign(new Error("Browserbase GET /sessions/x/debug failed: HTTP 410"), {
+      name: "BrowserbaseApiError",
+      status: 410,
+    });
+    const gone404 = Object.assign(new Error("Browserbase GET /sessions/x failed: HTTP 404"), {
+      name: "BrowserbaseApiError",
+      status: 404,
+    });
+    const rateLimited = Object.assign(new Error("Browserbase POST /sessions failed: HTTP 429"), {
+      name: "BrowserbaseApiError",
+      status: 429,
+    });
+    expect(isSandboxGoneError(gone410)).toBe(true);
+    expect(isSandboxGoneError(gone404)).toBe(true);
+    expect(isSandboxGoneError(rateLimited)).toBe(false);
+  });
+
   it("recognises every sandbox-gone wording", () => {
     for (const error of gone) {
       expect(isSandboxGoneError(error), error.message).toBe(true);
