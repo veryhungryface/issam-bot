@@ -506,7 +506,7 @@ export function computerInstructionForSandboxCapabilities(
   capabilities: SandboxCapabilities,
 ): string {
   if (capabilities.graphical && !capabilities.filesystem && !capabilities.shell) {
-    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Deliver results in their native format: Korean documents (학습지, 보고서, 공문서) as .hwpx or .docx, slide decks as .pptx, and spreadsheets as .xlsx via create_document, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Files you create or attach already appear in the chat as download cards — never paste file paths or download links in your reply. When the user attaches hwp, hwpx, pdf, docx, xlsx, or xls files, read them with read_document. Documents over 30 pages come back one 30-page window at a time: answer from the window you read, say which pages it covered, and ask the user (예: 이어서 31-60페이지도 볼까요?) before reading the next range. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it renders as a live sandboxed preview card in the chat. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
+    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Use computer_observe and computer_act for web pages. Click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with open_path and a full http(s) URL; do not type into or click the omnibox. Use the page snapshot labels to find controls, then click them on the screenshot. After focusing a field, type a complete string in one type action. After navigation, wait or re-observe before the next click. Deliver results in their native format: Korean documents (학습지, 보고서, 공문서) as .hwpx or .docx, slide decks as .pptx, and spreadsheets as .xlsx via create_document, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Files you create or attach already appear in the chat as download cards — never paste file paths or download links in your reply. When the user attaches hwp, hwpx, pdf, docx, xlsx, or xls files, read them with read_document. Attached photos stay saved under attachments/; use view_image to look at one again in a later turn instead of saying it is gone. Documents over 30 pages come back one 30-page window at a time: answer from the window you read, say which pages it covered, and ask the user (예: 이어서 31-60페이지도 볼까요?) before reading the next range. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it renders as a live sandboxed preview card in the chat. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
   }
   if (capabilities.graphical) {
     const preciseWork = capabilities.shell
@@ -2083,6 +2083,50 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 path: displayBotWorkspacePath(computerMode, bot.id, requestedPath, entry.path),
               })),
             };
+          }
+          if (name === "view_image") {
+            const filePath = String(args.path ?? "");
+            const extension = filePath.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
+            const mimeType = {
+              png: "image/png",
+              jpg: "image/jpeg",
+              jpeg: "image/jpeg",
+              webp: "image/webp",
+              gif: "image/gif",
+            }[extension];
+            if (!mimeType) {
+              return finish({
+                error: "not a viewable raster image; use read_file for text or open_path for URLs",
+                path: filePath,
+              });
+            }
+            let bytes: Uint8Array;
+            try {
+              bytes = await readAgentWorkspaceFile(
+                workspaceFileDeps(),
+                resolveBotWorkspacePath(computerMode, bot.id, filePath),
+                { maxBytes: ATTACHMENT_MAX_BYTES },
+              );
+            } catch (error) {
+              return finish({
+                error: error instanceof Error ? error.message : "could not read image",
+                path: filePath,
+              });
+            }
+            return finish({
+              kind: "agent_tool_result",
+              content: [
+                { type: "text", text: `image ${filePath} (${bytes.byteLength} bytes)` },
+                {
+                  type: "image" as const,
+                  data: Buffer.from(bytes).toString("base64"),
+                  mimeType,
+                },
+              ],
+              // frameId opts this result into the screenshot pruner, so a re-viewed
+              // image ages out of context like any other screen capture.
+              details: { frameId: `view-image:${filePath}`, path: filePath },
+            });
           }
           if (name === "read_file") {
             const filePath = String(args.path ?? "");

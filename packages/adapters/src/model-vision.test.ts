@@ -25,6 +25,17 @@ describe("model vision gating for computer tools", () => {
     );
   });
 
+  it("strips view_image alongside the screenshot tools for text-only models", () => {
+    const names = filterImageReturningComputerTools(builtinAgentTools, false).map(
+      (tool) => tool.name,
+    );
+    expect(names).not.toContain("view_image");
+    expect(names).not.toContain("computer_observe");
+    expect(
+      filterImageReturningComputerTools(builtinAgentTools, true).map((tool) => tool.name),
+    ).toContain("view_image");
+  });
+
   it("treats an OpenAI deployment default newer than the catalog as vision-capable", () => {
     expect(modelAcceptsImageInput("openai", "gpt-6-astra")).toBe(false);
     vi.stubEnv("PI_DEFAULT_PROVIDER", "openai");

@@ -122,6 +122,16 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "view_image",
+    description:
+      "Look at an image saved in this bot's home (user attachments land in attachments/, charts in charts/). Returns the image so you can read its contents again, e.g. text inside a photo from an earlier turn.",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+    },
+  },
+  {
     name: "write_file",
     description:
       "Write a UTF-8 file into this bot's home. On a Team Computer, relative paths use the bot folder; use shared/... only for work other bots should share.",
