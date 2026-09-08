@@ -94,6 +94,9 @@ test("message hover shows beside-bubble actions; reply links to parent", async (
   await expect(toolbar.getByRole("button", { name: "More" })).toBeVisible();
   const thumbsUp = toolbar.getByRole("button", { name: "Add thumbs-up" });
   await expect(thumbsUp).toBeVisible();
+  // Park the pointer off the toolbar (focus keeps the rail visible) so the
+  // hover:text-foreground state on More cannot skew the color comparison.
+  await page.mouse.move(0, 0);
   // Default reaction matches Reply/More: muted control color, not yellow.
   await expect
     .poll(async () => {
