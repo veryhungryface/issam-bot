@@ -12,6 +12,12 @@ async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
 }
 
 test.describe("marketing homepage", () => {
+  test.beforeEach(async ({ page }) => {
+    // CI runners intermittently stall on Google Fonts, and page.screenshot
+    // waits for document.fonts — abort font requests so fallbacks render.
+    await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
+  });
+
   test("self-host is short CTAs, not an install script", async ({ page }, testInfo) => {
     await page.goto("/");
     await page.waitForLoadState("load");

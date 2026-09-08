@@ -34,6 +34,9 @@ export interface BrowserbaseSandboxOptions {
   projectId: string;
   timeoutSeconds?: number;
   region?: BrowserbaseRegion;
+  /** ISO country code for Browserbase residential proxies (billed per GB). */
+  proxyCountry?: string;
+  solveCaptchas?: boolean;
 }
 
 export interface BrowserbaseBrowserSdk {
@@ -561,6 +564,8 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
       timeoutSeconds: this.options.timeoutSeconds,
       region: this.options.region,
       metadata: browserbaseMetadata(botId, context),
+      proxyCountry: this.options.proxyCountry,
+      solveCaptchas: this.options.solveCaptchas,
     });
     this.sessionCreations.set(contextId, creation);
     try {

@@ -187,6 +187,8 @@ export async function createApp(
     browserbaseProjectId: env.browserbaseProjectId,
     browserbaseTaskTimeoutSeconds: env.browserbaseTaskTimeoutSeconds,
     browserbaseRegion: env.browserbaseRegion,
+    browserbaseProxyCountry: env.browserbaseProxyCountry,
+    browserbaseSolveCaptchas: env.browserbaseSolveCaptchas,
     dataDir: env.dataDir,
     prisma,
   });
