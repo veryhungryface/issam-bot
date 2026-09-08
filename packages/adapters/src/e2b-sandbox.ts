@@ -85,6 +85,15 @@ export function isSandboxGoneError(error: unknown): boolean {
   if (SANDBOX_GONE_MESSAGE.test(message)) return true;
   for (let current: unknown = error; current instanceof Error; current = current.cause) {
     if (current.name === "SandboxNotFoundError") return true;
+    // Browserbase reports an expired/released session as 404/410 on session routes.
+    if (
+      current.name === "BrowserbaseApiError" &&
+      "status" in current &&
+      ((current as { status?: number }).status === 404 ||
+        (current as { status?: number }).status === 410)
+    ) {
+      return true;
+    }
   }
   return false;
 }
