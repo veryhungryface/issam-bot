@@ -225,7 +225,7 @@ export async function sleepComputerIfIdle(
   };
   if (await hasActiveBackgroundWork(deps.sandbox, ref, ctx, computerId)) {
     scheduleComputerSleep(deps.jobs, computerId);
-    await deps.sandbox.keepAlive?.(ref);
+    await deps.sandbox.keepAlive?.(ref).catch(() => undefined);
     return;
   }
 
@@ -268,7 +268,7 @@ export async function sleepComputerIfIdle(
       data: { state: "running" },
     });
     scheduleComputerSleep(deps.jobs, computerId);
-    if (backgroundAfterCheckpoint) await deps.sandbox.keepAlive?.(ref);
+    if (backgroundAfterCheckpoint) await deps.sandbox.keepAlive?.(ref).catch(() => undefined);
     return;
   }
   if (
@@ -363,6 +363,10 @@ async function hasActiveBackgroundWork(
       return true;
     }
   }
+  // A shell-less provider (Browserbase) cannot host background work, and its
+  // execute() stub exits non-1 — which the probe below would misread as "busy",
+  // keeping the session alive (and billed) forever.
+  if (!sandbox.describe().capabilities.shell) return false;
   let exitCode: number | undefined;
   let stdout = "";
   try {

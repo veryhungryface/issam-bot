@@ -103,6 +103,25 @@ describe("sandbox idle", () => {
     expect(harness.jobs.enqueue).toHaveBeenCalledOnce();
   });
 
+  it("suspends a shell-less provider without probing for background work", async () => {
+    // Browserbase's execute() stub exits 126; misreading that as "busy" kept
+    // sessions alive (and billed) forever. No shell means no background work.
+    const harness = idleHarness({ shell: false, backgroundWorkProbeCode: 126 });
+
+    await sleepComputerIfIdle(harness.deps, harness.computer.id);
+
+    expect(harness.sandbox.execute).not.toHaveBeenCalled();
+    expect(harness.sandbox.stop).toHaveBeenCalledOnce();
+  });
+
+  it("still sleeps when keepAlive throws for a computer this worker no longer holds", async () => {
+    const harness = idleHarness({ backgroundWorkProbeCode: 0 });
+    harness.sandbox.keepAlive.mockRejectedValue(new Error("not provisioned in this worker"));
+
+    await expect(sleepComputerIfIdle(harness.deps, harness.computer.id)).resolves.toBeUndefined();
+    expect(harness.jobs.enqueue).toHaveBeenCalledOnce();
+  });
+
   it("does not let an abandoned waiting takeover prevent idle suspension", async () => {
     const harness = idleHarness();
     harness.prisma.run.findFirst.mockImplementation(async ({ where }) =>
@@ -465,6 +484,7 @@ function idleHarness(
     backgroundWorkProbeFailed?: boolean;
     exportError?: Error;
     providerBackgroundWorkStatus?: "active" | "idle" | "unknown";
+    shell?: boolean;
   } = {},
 ) {
   const backgroundWorkProbeCodes = [...(options.backgroundWorkProbeCodes ?? [])];
@@ -501,6 +521,22 @@ function idleHarness(
     },
   };
   const sandbox = {
+    describe: vi.fn(() => ({
+      id: "test",
+      contractVersion: "1",
+      adapterVersion: "0",
+      capabilities: {
+        graphical: true,
+        pty: false,
+        shell: options.shell ?? true,
+        filesystem: true,
+        localFileOpen: true,
+        appLaunch: true,
+        snapshots: false,
+        takeover: true,
+        persistentHome: true,
+      },
+    })),
     execute: vi.fn(async function* () {
       const code = backgroundWorkProbeCodes.shift() ?? options.backgroundWorkProbeCode ?? 1;
       if (code === 1 && !options.backgroundWorkProbeFailed) {
