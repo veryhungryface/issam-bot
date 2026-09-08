@@ -53,7 +53,6 @@ import {
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
-  provisionComputer,
   type RemoteConnectorDependencies,
   recordLastComputerPage,
   releaseComputerExecutionLease,

@@ -93,9 +93,7 @@ export class BrowserbaseClient {
         // instead of a datacenter, which sites like encar block outright.
         ...(input.proxyCountry
           ? {
-              proxies: [
-                { type: "browserbase", geolocation: { country: input.proxyCountry } },
-              ],
+              proxies: [{ type: "browserbase", geolocation: { country: input.proxyCountry } }],
             }
           : {}),
         browserSettings: {
