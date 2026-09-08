@@ -2,12 +2,20 @@ import { expect, type Page, type TestInfo, test } from "@playwright/test";
 
 async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshotPath = testInfo.outputPath(`${name}.png`);
-  await page.screenshot({
-    animations: "disabled",
-    caret: "hide",
-    fullPage: true,
-    path: screenshotPath,
-  });
+  // Screenshots are attachments for humans, not assertions. The homepage runs
+  // JS-driven animation, so a full-page capture can wait on layout stability
+  // forever in CI — bound it and let the test continue without the image.
+  try {
+    await page.screenshot({
+      animations: "disabled",
+      caret: "hide",
+      fullPage: true,
+      path: screenshotPath,
+      timeout: 15_000,
+    });
+  } catch {
+    return;
+  }
   await testInfo.attach(name, { contentType: "image/png", path: screenshotPath });
 }
 
