@@ -95,6 +95,8 @@ async function main() {
       ? Number(process.env.BROWSERBASE_TASK_TIMEOUT_SECONDS)
       : undefined,
     browserbaseRegion: browserbaseRegion(process.env.BROWSERBASE_REGION),
+    browserbaseProxyCountry: process.env.BROWSERBASE_PROXY_COUNTRY?.trim().toUpperCase() || undefined,
+    browserbaseSolveCaptchas: process.env.BROWSERBASE_SOLVE_CAPTCHAS !== "false",
     dataDir,
     prisma,
   });

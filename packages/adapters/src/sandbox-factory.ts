@@ -25,6 +25,8 @@ export interface SandboxProviderOptions {
   browserbaseProjectId?: string;
   browserbaseTaskTimeoutSeconds?: number;
   browserbaseRegion?: BrowserbaseRegion;
+  browserbaseProxyCountry?: string;
+  browserbaseSolveCaptchas?: boolean;
   dataDir?: string;
 }
 
@@ -63,6 +65,8 @@ export function createSandboxProvider(kind: string, opts: SandboxProviderOptions
         projectId: opts.browserbaseProjectId,
         timeoutSeconds: opts.browserbaseTaskTimeoutSeconds,
         region: opts.browserbaseRegion,
+        proxyCountry: opts.browserbaseProxyCountry,
+        solveCaptchas: opts.browserbaseSolveCaptchas,
       });
     case "docker":
       return new DockerSandboxProvider(

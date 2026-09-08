@@ -47,6 +47,8 @@ export interface AppEnv {
   browserbaseProjectId: string | undefined;
   browserbaseTaskTimeoutSeconds: number | undefined;
   browserbaseRegion: BrowserbaseRegion;
+  browserbaseProxyCountry: string | undefined;
+  browserbaseSolveCaptchas: boolean;
   composioApiKey: string | undefined;
   pipedreamClientId: string | undefined;
   pipedreamClientSecret: string | undefined;
@@ -134,6 +136,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     browserbaseProjectId: optional(source.BROWSERBASE_PROJECT_ID),
     browserbaseTaskTimeoutSeconds: optionalInteger(source.BROWSERBASE_TASK_TIMEOUT_SECONDS),
     browserbaseRegion: browserbaseRegion(source.BROWSERBASE_REGION),
+    browserbaseProxyCountry: optional(source.BROWSERBASE_PROXY_COUNTRY)?.toUpperCase(),
+    browserbaseSolveCaptchas: source.BROWSERBASE_SOLVE_CAPTCHAS !== "false",
     composioApiKey: source.COMPOSIO_API_KEY,
     pipedreamClientId: optional(source.PIPEDREAM_CLIENT_ID),
     pipedreamClientSecret: optional(source.PIPEDREAM_CLIENT_SECRET),

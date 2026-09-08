@@ -75,6 +75,8 @@ export class BrowserbaseClient {
     timeoutSeconds?: number;
     region?: BrowserbaseRegion;
     metadata: Record<string, string>;
+    proxyCountry?: string;
+    solveCaptchas?: boolean;
   }): Promise<BrowserbaseSession> {
     const timeout = input.timeoutSeconds ?? 600;
     if (!Number.isInteger(timeout) || timeout < 60 || timeout > 600) {
@@ -87,7 +89,19 @@ export class BrowserbaseClient {
         timeout,
         region: input.region,
         userMetadata: input.metadata,
-        browserSettings: { context: { id: input.contextId, persist: true } },
+        // Residential proxies make the session's traffic look like a local user
+        // instead of a datacenter, which sites like encar block outright.
+        ...(input.proxyCountry
+          ? {
+              proxies: [
+                { type: "browserbase", geolocation: { country: input.proxyCountry } },
+              ],
+            }
+          : {}),
+        browserSettings: {
+          context: { id: input.contextId, persist: true },
+          ...(input.solveCaptchas ? { solveCaptchas: true } : {}),
+        },
       },
     });
   }
