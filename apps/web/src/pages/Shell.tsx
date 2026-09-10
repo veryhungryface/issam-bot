@@ -347,6 +347,44 @@ export function ShellPage() {
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  // Drag the panel's start edge to widen the browser preview (desktop only).
+  const PANEL_DEFAULT_WIDTH = 384;
+  const PANEL_MIN_WIDTH = 320;
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      const stored = Number(localStorage.getItem("rakazo.sidePanelWidth"));
+      return Number.isFinite(stored) && stored >= PANEL_MIN_WIDTH ? stored : PANEL_DEFAULT_WIDTH;
+    } catch {
+      return PANEL_DEFAULT_WIDTH;
+    }
+  });
+  const panelResizing = useRef(false);
+  const [panelDragActive, setPanelDragActive] = useState(false);
+  const startPanelResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panelResizing.current = true;
+    setPanelDragActive(true);
+    const onMove = (move: PointerEvent) => {
+      if (!panelResizing.current) return;
+      const max = Math.max(PANEL_MIN_WIDTH, Math.round(window.innerWidth * 0.75));
+      setPanelWidth(Math.min(max, Math.max(PANEL_MIN_WIDTH, window.innerWidth - move.clientX)));
+    };
+    const onUp = () => {
+      panelResizing.current = false;
+      setPanelDragActive(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setPanelWidth((width) => {
+        try {
+          localStorage.setItem("rakazo.sidePanelWidth", String(width));
+        } catch {}
+        return width;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, []);
   const [peerConversation, setPeerConversation] = useState<{
     peerBotId: string;
     peerBotName: string;
@@ -3350,12 +3388,30 @@ export function ShellPage() {
       <aside
         data-testid="side-panel"
         data-panel={panel ?? "closed"}
-        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-background transition-[width] duration-150 ease-out md:relative ${
+        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-background md:relative ${
+          panelDragActive ? "" : "transition-[width] duration-150 ease-out"
+        } ${
           panel && (active || activeGroup)
-            ? "w-full max-w-[384px] border-s border-sidebar-border md:w-[384px] md:max-w-none"
+            ? "w-full max-w-[384px] border-s border-sidebar-border md:w-(--side-panel-width) md:max-w-none"
             : "pointer-events-none w-0"
         }`}
+        style={{ "--side-panel-width": `${panelWidth}px` } as React.CSSProperties}
       >
+        {panel && (active || activeGroup) ? (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t`Resize panel`}
+            onPointerDown={startPanelResize}
+            onDoubleClick={() => {
+              setPanelWidth(PANEL_DEFAULT_WIDTH);
+              try {
+                localStorage.setItem("rakazo.sidePanelWidth", String(PANEL_DEFAULT_WIDTH));
+              } catch {}
+            }}
+            className="absolute inset-y-0 start-0 z-30 hidden w-1.5 cursor-col-resize hover:bg-accent/60 active:bg-accent md:block"
+          />
+        ) : null}
         {panel && (active || activeGroup) ? (
           <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]">
             {panel !== "routine" &&
