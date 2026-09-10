@@ -118,7 +118,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
@@ -148,7 +147,6 @@ import {
   requestBrowserNotificationPermission,
   shouldNotifyBrowser,
 } from "../lib/browser-notifications";
-import { chartViewport } from "../lib/chart-viewport";
 import { loadComputerScreen } from "../lib/computer-screen";
 import { HIDE_MODEL_PICKER } from "../lib/deployment-flags";
 import { dictation } from "../lib/dictation";
@@ -2376,7 +2374,7 @@ export function ShellPage() {
   useEffect(() => {
     if (inGroup || !active) return;
     const run = snapshot?.run;
-    if (!run || run.status !== "running") return;
+    if (run?.status !== "running") return;
     if (computer?.state !== "booting" && computer?.state !== "running") return;
     if (autoOpenedPanelRun.current === run.id) return;
     autoOpenedPanelRun.current = run.id;
