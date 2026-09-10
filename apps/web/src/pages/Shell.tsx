@@ -3396,18 +3396,35 @@ export function ShellPage() {
         style={{ "--side-panel-width": `${panelWidth}px` } as React.CSSProperties}
       >
         {panel && (active || activeGroup) ? (
+          // biome-ignore lint/a11y/useSemanticElements: a drag handle between panes has no semantic HTML element; ARIA window-splitter is the pattern.
           <div
             role="separator"
             aria-orientation="vertical"
             aria-label={t`Resize panel`}
+            aria-valuenow={panelWidth}
+            aria-valuemin={PANEL_MIN_WIDTH}
+            tabIndex={0}
             onPointerDown={startPanelResize}
+            onKeyDown={(event) => {
+              const step = event.key === "ArrowLeft" ? 32 : event.key === "ArrowRight" ? -32 : 0;
+              if (!step) return;
+              event.preventDefault();
+              setPanelWidth((width) => {
+                const max = Math.max(PANEL_MIN_WIDTH, Math.round(window.innerWidth * 0.75));
+                const next = Math.min(max, Math.max(PANEL_MIN_WIDTH, width + step));
+                try {
+                  localStorage.setItem("rakazo.sidePanelWidth", String(next));
+                } catch {}
+                return next;
+              });
+            }}
             onDoubleClick={() => {
               setPanelWidth(PANEL_DEFAULT_WIDTH);
               try {
                 localStorage.setItem("rakazo.sidePanelWidth", String(PANEL_DEFAULT_WIDTH));
               } catch {}
             }}
-            className="absolute inset-y-0 start-0 z-30 hidden w-1.5 cursor-col-resize hover:bg-accent/60 active:bg-accent md:block"
+            className="absolute inset-y-0 start-0 z-30 hidden w-1.5 cursor-col-resize outline-none hover:bg-accent/60 focus-visible:bg-accent active:bg-accent md:block"
           />
         ) : null}
         {panel && (active || activeGroup) ? (
