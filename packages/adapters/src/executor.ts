@@ -33,7 +33,6 @@ import {
   ATTACHMENT_RASTER_IMAGE_MIME_TYPES,
   BotSecretName,
   BotSecretSubmission,
-  isAttachmentImageMimeType,
 } from "@rakazo/contracts";
 import {
   type ActionApprovalRule,
