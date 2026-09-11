@@ -92,6 +92,7 @@ import {
   Monitor,
   MoreHorizontal,
   PanelLeftClose,
+  PanelLeftOpen,
   Paperclip,
   Phone,
   Plus,
@@ -3220,6 +3221,20 @@ export function ShellPage() {
             >
               <Menu size={19} strokeWidth={1.7} />
             </button>
+            {botsSidebarCollapsed ? (
+              // Minimizing hides the sidebar's own toggle, so the only way back used to be
+              // an invisible edge handle. Keep a real control on screen while collapsed.
+              <button
+                type="button"
+                aria-label={t`Show bots`}
+                title={t`Show bots`}
+                data-testid="restore-bots-sidebar"
+                onClick={() => setBotsSidebarCollapsedPref(false)}
+                className="app-no-drag hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:grid"
+              >
+                <PanelLeftOpen size={18} strokeWidth={1.7} aria-hidden="true" />
+              </button>
+            ) : null}
             <button
               type="button"
               data-testid="bot-settings-trigger"
