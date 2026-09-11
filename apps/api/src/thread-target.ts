@@ -111,6 +111,30 @@ function sendRunClientNonce(
   return botId ? `send:${messageId}:${botId}` : `send:${messageId}`;
 }
 
+/**
+ * A run parked on a takeover request has no live turn, so a steering message would
+ * sit unanswered until the user pressed a button on the card — the bot looks dead.
+ * Treat a follow-up chat message as "continue without the takeover". While the user
+ * actually holds the screen the bot must keep waiting, so only resume when it does not.
+ */
+async function resumeTakeoverForFollowUp(
+  tx: Prisma.TransactionClient,
+  botId: string,
+  run: { id: string; status: string },
+): Promise<boolean> {
+  if (run.status !== "waiting_takeover") return false;
+  const bot = await tx.bot.findFirst({
+    where: { id: botId },
+    select: { computer: { select: { controlHolder: true } } },
+  });
+  if (bot?.computer?.controlHolder === "user") return false;
+  const resumed = await tx.run.updateMany({
+    where: { id: run.id, status: "waiting_takeover" },
+    data: { status: "queued", checkpoint: "takeover-skipped" },
+  });
+  return resumed.count === 1;
+}
+
 async function enqueueRunsNeedingContinue(
   jobs: JobPublisher,
   runs: Array<{ id: string; status: string }>,
@@ -592,6 +616,8 @@ export async function sendThreadMessage(
             },
           });
           await tx.message.update({ where: { id: message.id }, data: { runId: active.id } });
+          const resumedFromTakeover = await resumeTakeoverForFollowUp(tx, target.botId, active);
+          const steeredRun = resumedFromTakeover ? { ...active, status: "queued" } : active;
           const event = await appendEventInTransaction(tx, {
             spaceId: actor.spaceId,
             threadId: target.threadId,
@@ -605,7 +631,7 @@ export async function sendThreadMessage(
               replyToMessageId: input.replyToMessageId,
             },
           });
-          return { message, runs: [active], eventSeq: event.seq };
+          return { message, runs: [steeredRun], eventSeq: event.seq };
         }
         const task = await tx.task.create({
           data: {
@@ -697,7 +723,8 @@ export async function sendThreadMessage(
           await tx.steeringMessage.create({
             data: { messageId: message.id, botId, userId: actor.userId, runId: active.id },
           });
-          runs.push(active);
+          const resumedFromTakeover = await resumeTakeoverForFollowUp(tx, botId, active);
+          runs.push(resumedFromTakeover ? { ...active, status: "queued" } : active);
           continue;
         }
         const task = await tx.task.create({

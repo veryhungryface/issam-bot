@@ -527,6 +527,33 @@ describeJourneys("required product journeys", () => {
     ).toBe(releaseEvents);
   });
 
+  it("4c: a follow-up chat message resumes a run parked on a takeover request", async () => {
+    const cookie = await signup(app, `takeover-followup-j-${stamp}@rakazo.test`, "Followup");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    await rpc(app, cookie, "threads/send", {
+      botId: bot.id,
+      text: "install the gsc cli and sign in",
+    });
+    await waitFor(app, cookie, bot.id, (snap) => snap.run?.status === "waiting_takeover");
+
+    // The user types instead of pressing a card button: the bot must not stay parked.
+    await rpc(app, cookie, "threads/send", { botId: bot.id, text: "why is it not signed in?" });
+
+    const done = await waitFor(
+      app,
+      cookie,
+      bot.id,
+      (snap) => !snap.run || ["completed", "failed", "cancelled"].includes(snap.run.status),
+    );
+    expect(done.run?.status ?? "completed").not.toBe("waiting_takeover");
+  });
+
   it("4d: skipping takeover resumes without treating login as done", async () => {
     const cookie = await signup(app, `takeover-skip-j-${stamp}@rakazo.test`, "Skip Takeover");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
