@@ -123,6 +123,7 @@ import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph, CollaborationMarker } from "../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../components/CloudAgentCard";
+import { ComputerBootProgress } from "../components/ComputerBootProgress";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
 import {
   ComputersUnavailableHint,
@@ -4095,14 +4096,11 @@ export function ShellPage() {
       </Suspense>
 
       {booting ? (
-        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-[22px] bg-background/95">
-          <div className="text-[19px] font-medium text-foreground">
-            <Trans>Booting up {active?.name}’s computer</Trans>
-          </div>
-          <div className="h-[5px] w-[min(420px,70%)] overflow-hidden rounded-full bg-accent">
-            <div className="h-full w-2/3 rounded-full bg-primary" />
-          </div>
-        </div>
+        <ComputerBootProgress
+          botName={active?.name ?? ""}
+          botColor={active?.color}
+          botId={active?.id}
+        />
       ) : computerOpen && active ? (
         <div className="absolute inset-0 z-30 flex flex-col bg-background">
           <div

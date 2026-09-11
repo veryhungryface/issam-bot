@@ -70,3 +70,61 @@ html.rakazo-desktop .app-no-drag {
     opacity: 0.3;
   }
 }
+
+/* Boot overlay: an indeterminate sweep plus breathing rings. Both are decorative,
+   so they stop entirely when the viewer asks for reduced motion. */
+@keyframes rkBootSweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+
+@keyframes rkBootRing {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.72);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes rkBootStage {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rk-boot-sweep {
+  animation: rkBootSweep 1.5s cubic-bezier(0.45, 0, 0.35, 1) infinite;
+}
+
+.rk-boot-ring {
+  animation: rkBootRing 2.2s ease-out infinite;
+}
+
+.rk-boot-stage {
+  animation: rkBootStage 0.35s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rk-boot-sweep {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+
+  .rk-boot-ring,
+  .rk-boot-stage {
+    animation: none;
+  }
+}

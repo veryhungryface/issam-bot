@@ -1046,13 +1046,24 @@ async function finalizeRunOnce(
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
     if (input.outcome === "completed") {
-      await tx.steeringMessage.deleteMany({
-        where: { runId: input.runId, claimedAt: { not: null } },
+      const finishing = await tx.run.findUniqueOrThrow({
+        where: { id: input.runId },
+        select: { trigger: true },
       });
-      await tx.steeringMessage.updateMany({
-        where: { runId: input.runId },
-        data: { runId: null },
-      });
+      if (finishing.trigger === "follow_up") {
+        // A continuation exists precisely to deliver its steering batch. Orphaning
+        // those rows again would spawn another continuation for the same messages,
+        // forever, whenever a runtime answers without claiming them.
+        await tx.steeringMessage.deleteMany({ where: { runId: input.runId } });
+      } else {
+        await tx.steeringMessage.deleteMany({
+          where: { runId: input.runId, claimedAt: { not: null } },
+        });
+        await tx.steeringMessage.updateMany({
+          where: { runId: input.runId },
+          data: { runId: null },
+        });
+      }
     } else {
       const { sourceMessage } = await tx.run.findUniqueOrThrow({
         where: { id: input.runId },
