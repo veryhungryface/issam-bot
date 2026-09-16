@@ -312,6 +312,41 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "request_browser_login",
+    description:
+      "Ask the user to sign in to the page you have open: they type the credentials into a masked sheet and the server fills them into that page, so you never see the values. Give the exact HTTPS origin of the open page and one field per input (id, label, masked, and a CSS selector when you can see one). A credential the user chose to keep is filled without prompting. Prefer this over request_takeover for ordinary username/password forms; use request_takeover for CAPTCHA, MFA devices, or passkeys.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Sheet heading, e.g. the site name." },
+        origin: { type: "string", description: "HTTPS origin of the page you have open." },
+        fields: {
+          type: "array",
+          maxItems: 4,
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              label: { type: "string" },
+              masked: { type: "boolean" },
+              selector: { type: "string" },
+              autocomplete: {
+                type: "string",
+                enum: ["username", "current-password", "one-time-code", "email"],
+              },
+            },
+            required: ["id", "label"],
+          },
+        },
+        submit: {
+          type: "boolean",
+          description: "Press Enter after the last field so the form submits itself.",
+        },
+      },
+      required: ["title", "origin", "fields"],
+    },
+  },
+  {
     name: "list_secrets",
     description:
       "List saved credential names and destinations available to this bot and user. Values are never returned.",

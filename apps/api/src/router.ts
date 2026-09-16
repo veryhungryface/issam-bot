@@ -19,6 +19,7 @@ import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
   archiveBot,
+  browserLoginSecretName,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
   type ComposioProvider,
@@ -37,11 +38,13 @@ import {
   type EncryptedSecretStore,
   enqueueTakeoverContinuation,
   expireComputerControl,
+  forgetBotSecret,
   hasActiveComputerControl,
   isAutoReviewCheckerConfigured,
   isComputerScreenUnavailable,
   isSandboxGoneError,
   isScratchpadStatus,
+  listBotSecrets,
   listPiCatalog,
   listScratchpadItems,
   McpOAuthBroker,
@@ -65,7 +68,9 @@ import {
   scheduleComputerSleep,
   screenLeaseIdForRun,
   scriptedCatalogEntry,
+  serializeBrowserLogin,
   serializeModelSecret,
+  storeBotSecret,
   syncBrowserSessionUsage,
   takeoverLeaseMs,
   toComputerRef,
@@ -79,6 +84,7 @@ import {
   type ComputerStatus,
   type McpServer,
   type Me,
+  MessageBlock as MessageBlockSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   type SpaceNavigation,
 } from "@rakazo/contracts";
@@ -364,6 +370,51 @@ export interface RouterDeps {
     updaterUrl?: string;
     updaterToken?: string;
     imageTag?: string;
+  };
+}
+
+/**
+ * Load the sign-in sheet a submission refers to, straight from the stored message, so the
+ * origin and field list the server fills are the ones the user actually saw — never values
+ * a client sends alongside them.
+ */
+async function loadPendingBrowserLogin(
+  prisma: PrismaClient,
+  input: { threadId: string; runId: string; messageId: string },
+): Promise<{
+  origin: string;
+  submit: boolean;
+  fields: Array<{
+    id: string;
+    label: string;
+    selector?: string;
+    autocomplete?: "username" | "current-password" | "one-time-code" | "email";
+  }>;
+} | null> {
+  const message = await prisma.message.findFirst({
+    where: {
+      id: input.messageId,
+      threadId: input.threadId,
+      runId: input.runId,
+      role: "bot",
+    },
+    select: { blocks: true },
+  });
+  const parsed = MessageBlockSchema.array().safeParse(message?.blocks);
+  if (!parsed.success) return null;
+  const block = parsed.data.find(
+    (entry) => entry.kind === "browser_login" && entry.status !== "filled",
+  );
+  if (block?.kind !== "browser_login") return null;
+  return {
+    origin: block.origin,
+    submit: true,
+    fields: block.fields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      selector: field.selector,
+      autocomplete: field.autocomplete,
+    })),
   };
 }
 
@@ -1724,6 +1775,145 @@ export function createRouter(deps: RouterDeps) {
           data: { updatedAt: new Date() },
         });
         scheduleComputerSleep(deps.jobs, computer.id);
+        return { ok: true as const };
+      }),
+      fillLogin: authed.computer.fillLogin.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        const computer = bot.computer;
+        if (!computer?.providerRef || !deps.sandbox.fillSecureFields) {
+          throw new ORPCError("CONFLICT", { message: "This bot has no browser to sign in to" });
+        }
+        const thread = await repos.getBotThread(context.actor, bot.id);
+        const pending = await loadPendingBrowserLogin(deps.prisma, {
+          threadId: thread.thread!.id,
+          runId: input.runId,
+          messageId: input.messageId,
+        });
+        if (!pending) {
+          throw new ORPCError("CONFLICT", { message: "This sign-in is no longer awaiting input" });
+        }
+        const fields = pending.fields.filter((field) => {
+          const value = input.values[field.id];
+          return typeof value === "string" && value.length > 0;
+        });
+        if (fields.length === 0) {
+          throw new ORPCError("BAD_REQUEST", { message: "Enter at least one field" });
+        }
+        let result: Awaited<ReturnType<NonNullable<SandboxProvider["fillSecureFields"]>>>;
+        try {
+          result = await deps.sandbox.fillSecureFields(
+            toComputerRef(computer),
+            {
+              origin: pending.origin,
+              submit: pending.submit,
+              fields: fields.map((field) => ({
+                id: field.id,
+                value: input.values[field.id]!,
+                selector: field.selector,
+                autocomplete: field.autocomplete,
+                label: field.label,
+              })),
+            },
+            computerContext(context.actor, bot.id, "fill-login"),
+          );
+        } catch (error) {
+          // The values must never reach a log line; the class of failure is enough.
+          getLogger().error("browser login fill failed", {
+            botId: bot.id,
+            computerId: computer.id,
+            origin: pending.origin,
+          });
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              error instanceof Error && /no longer on the site/.test(error.message)
+                ? "The browser left this site; reopen the sign-in page and try again."
+                : "Could not fill the sign-in form. Take control to sign in manually.",
+          });
+        }
+        let saved = false;
+        if (input.save && result.filled.length > 0) {
+          const values: Record<string, string> = {};
+          for (const field of fields) values[field.id] = input.values[field.id]!;
+          await deps.prisma.$transaction(async (tx) => {
+            await storeBotSecret({
+              tx,
+              secretStore: deps.secrets,
+              scope: {
+                userId: context.actor.userId,
+                spaceId: context.actor.spaceId,
+                botId: bot.id,
+              },
+              destination: {
+                name: browserLoginSecretName(pending.origin),
+                origin: pending.origin,
+                auth: { type: "browser_login" },
+              },
+              plaintext: serializeBrowserLogin(values),
+            });
+          });
+          saved = true;
+        }
+        const resolved = await deps.events.resolveBrowserLogin({
+          spaceId: context.actor.spaceId,
+          threadId: thread.thread!.id,
+          runId: input.runId,
+          messageId: input.messageId,
+          answeredByUserId: context.actor.userId,
+          filled: result.filled,
+          saved,
+        });
+        if (!resolved) {
+          throw new ORPCError("CONFLICT", { message: "This sign-in is no longer awaiting input" });
+        }
+        await deps.jobs.enqueue(runContinueJob(input.runId)).catch((error) => {
+          getLogger().error("browser login continue enqueue", error);
+        });
+        scheduleComputerSleep(deps.jobs, computer.id);
+        return { ok: true as const, filled: result.filled, missing: result.missing, saved };
+      }),
+      cancelLogin: authed.computer.cancelLogin.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        const thread = await repos.getBotThread(context.actor, bot.id);
+        const resolved = await deps.events.resolveBrowserLogin({
+          spaceId: context.actor.spaceId,
+          threadId: thread.thread!.id,
+          runId: input.runId,
+          messageId: input.messageId,
+          answeredByUserId: context.actor.userId,
+          filled: [],
+          saved: false,
+          cancelled: true,
+        });
+        if (!resolved) {
+          throw new ORPCError("CONFLICT", { message: "This sign-in is no longer awaiting input" });
+        }
+        await deps.jobs.enqueue(runContinueJob(input.runId)).catch((error) => {
+          getLogger().error("browser login cancel enqueue", error);
+        });
+        return { ok: true as const };
+      }),
+      savedLogins: authed.computer.savedLogins.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        const rows = await listBotSecrets(deps.prisma, {
+          userId: context.actor.userId,
+          spaceId: context.actor.spaceId,
+          botId: bot.id,
+        });
+        return rows
+          .filter((row) => (row.auth as { type?: string } | null)?.type === "browser_login")
+          .map((row) => ({
+            name: row.name,
+            origin: row.origin,
+            updatedAt: row.updatedAt.toISOString(),
+          }));
+      }),
+      forgetLogin: authed.computer.forgetLogin.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        await forgetBotSecret(
+          deps.prisma,
+          { userId: context.actor.userId, spaceId: context.actor.spaceId, botId: bot.id },
+          input.name,
+        );
         return { ok: true as const };
       }),
       files: authed.computer.files.handler(async ({ context, input }) => {

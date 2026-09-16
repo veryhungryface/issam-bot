@@ -101,6 +101,31 @@ export type ComputerInput =
     }
   | { kind: "clipboard"; text: string };
 
+/** One sign-in input to fill, addressed by the bot's selector hint or its autocomplete role. */
+export interface SecureFieldFill {
+  /** Stable id from the request block, used only for reporting which inputs were filled. */
+  id: string;
+  value: string;
+  selector?: string;
+  autocomplete?: "username" | "current-password" | "one-time-code" | "email";
+  label?: string;
+}
+
+export interface SecureFieldFillRequest {
+  /** The values may only be typed while the page is still on this HTTPS origin. */
+  origin: string;
+  fields: SecureFieldFill[];
+  /** Press Enter on the last filled input so the page submits itself. */
+  submit?: boolean;
+}
+
+export interface SecureFieldFillResult {
+  /** Ids that were located and filled; the caller reports these without any values. */
+  filled: string[];
+  /** Ids no locator matched, so the bot can fall back to takeover. */
+  missing: string[];
+}
+
 export type ComputerAction =
   | ComputerInput
   | { kind: "scroll"; direction: "up" | "down"; amount?: number }

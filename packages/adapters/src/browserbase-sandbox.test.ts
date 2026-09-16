@@ -21,6 +21,76 @@ describe("BrowserbaseSandboxProvider", () => {
     });
   });
 
+  it("fills sign-in fields only while the page is still on the requested origin", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.goTo("https://auth.example.com/login");
+
+    const result = await provider.fillSecureFields(
+      computer,
+      {
+        origin: "https://auth.example.com",
+        submit: true,
+        fields: [
+          { id: "username", value: "teacher", autocomplete: "username", label: "ID" },
+          {
+            id: "password",
+            value: "hunter2",
+            selector: "#missing-field",
+            label: "Password",
+          },
+        ],
+      },
+      adapterContext(),
+    );
+
+    expect(result.filled).toEqual(["username"]);
+    expect(result.missing).toEqual(["password"]);
+    expect(fixture.fillField).toHaveBeenCalledWith("teacher", expect.anything());
+    // Values are write-only: nothing about them comes back to the caller.
+    expect(JSON.stringify(result)).not.toContain("hunter2");
+    expect(fixture.pressField).toHaveBeenCalledWith("Enter", expect.anything());
+  });
+
+  it("refuses to fill after the page navigates away from the requested origin", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    // The user saw auth.example.com, but the page moved on before they submitted.
+    fixture.goTo("https://evil.example.net/collect");
+
+    await expect(
+      provider.fillSecureFields(
+        computer,
+        {
+          origin: "https://auth.example.com",
+          fields: [{ id: "password", value: "hunter2", autocomplete: "current-password" }],
+        },
+        adapterContext(),
+      ),
+    ).rejects.toThrow(/no longer on the site/);
+    expect(fixture.fillField).not.toHaveBeenCalled();
+  });
+
   it("creates a persistent context, connects through CDP, and exposes DOM and screenshots", async () => {
     const fixture = browserFixture();
     const api = apiFixture();
@@ -585,6 +655,8 @@ function browserFixture() {
   const keyboardPress = vi.fn(async () => undefined);
   const keyboardInsertText = vi.fn(async () => undefined);
   const evaluate = vi.fn(async (): Promise<unknown> => true);
+  const fillField = vi.fn(async () => undefined);
+  const pressField = vi.fn(async () => undefined);
   const screenshot = vi.fn(async () => Buffer.from([1, 2, 3]));
   const page = {
     isClosed: vi.fn(() => false),
@@ -596,8 +668,20 @@ function browserFixture() {
     goto,
     waitForTimeout: vi.fn(async () => undefined),
     evaluate,
-    locator: vi.fn(() => ({
+    locator: vi.fn((selector?: string) => ({
       ariaSnapshot: vi.fn(async () => '- heading "Example"'),
+      first: vi.fn(() => ({
+        isVisible: vi.fn(async () => !String(selector ?? "").includes("missing")),
+        fill: fillField,
+        press: pressField,
+      })),
+    })),
+    getByLabel: vi.fn(() => ({
+      first: vi.fn(() => ({
+        isVisible: vi.fn(async () => false),
+        fill: fillField,
+        press: pressField,
+      })),
     })),
     mouse: {
       move: vi.fn(async () => undefined),
@@ -622,6 +706,11 @@ function browserFixture() {
   } as unknown as Browser;
   const connectOverCDP = vi.fn(async () => browser);
   return {
+    fillField,
+    pressField,
+    goTo: (url: string) => {
+      currentUrl = url;
+    },
     sdk: { connectOverCDP } satisfies BrowserbaseBrowserSdk,
     connectOverCDP,
     goto,

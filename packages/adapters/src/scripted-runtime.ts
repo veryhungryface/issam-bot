@@ -253,6 +253,31 @@ export function inferScript(
       },
     ];
   }
+  if (lower.includes("sign in to the portal") || lower.includes("sign in again")) {
+    return [
+      {
+        assistant: "i need the portal credentials to fill in here.",
+        toolCalls: [
+          {
+            name: "request_browser_login",
+            args: {
+              title: "Portal sign-in",
+              origin: "https://auth.example.test",
+              fields: [
+                { id: "username", label: "ID", masked: false, autocomplete: "username" },
+                {
+                  id: "password",
+                  label: "Password",
+                  masked: true,
+                  autocomplete: "current-password",
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+  }
   if (lower.includes("take over") || lower.includes("sign in") || lower.includes("login")) {
     return [
       { assistant: "i need you on the screen for a one-time sign-in. handing you the computer." },

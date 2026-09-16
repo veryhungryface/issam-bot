@@ -24,7 +24,29 @@ export const BotSecretAuth = z.discriminatedUnion("type", [
       .max(200)
       .regex(/^[^:\r\n]+$/),
   }),
+  // A sign-in form the bot fills in its own browser. These credentials are never
+  // attached to outbound HTTP requests, so secret_request must refuse them.
+  z.object({ type: z.literal("browser_login") }),
 ]);
+
+/** One input on a sign-in form the bot asks the user to fill. */
+export const BrowserLoginField = z.object({
+  id: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z][a-z0-9_]*$/),
+  label: z.string().min(1).max(120),
+  /** Masked in the sheet and never echoed back to the bot. */
+  masked: z.boolean().default(false),
+  /** Optional CSS selector the bot observed; the server still verifies the origin. */
+  selector: z.string().max(200).optional(),
+  autocomplete: z.enum(["username", "current-password", "one-time-code", "email"]).optional(),
+});
+export type BrowserLoginField = z.infer<typeof BrowserLoginField>;
+
+export const BROWSER_LOGIN_MAX_FIELDS = 4;
+export const BROWSER_LOGIN_MAX_VALUE_LENGTH = 512;
 
 export const BotSecretDestination = z.object({
   name: BotSecretName,

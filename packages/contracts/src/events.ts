@@ -1,5 +1,9 @@
 import * as z from "zod";
-import { BotSecretDestination } from "./bot-secrets.js";
+import {
+  BotSecretDestination,
+  BROWSER_LOGIN_MAX_FIELDS,
+  BrowserLoginField,
+} from "./bot-secrets.js";
 import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
 
@@ -112,6 +116,18 @@ export const MessageBlock = z.discriminatedUnion("kind", [
         }),
       )
       .optional(),
+  }),
+  z.object({
+    /** A sign-in sheet: the user types credentials that go straight to the server,
+        which fills them into the bot's live page. Values never reach the model. */
+    kind: z.literal("browser_login"),
+    title: z.string().min(1).max(200),
+    /** HTTPS origin the values may be filled into, shown to the user verbatim. */
+    origin: z.string().max(2048),
+    fields: z.array(BrowserLoginField).min(1).max(BROWSER_LOGIN_MAX_FIELDS),
+    status: z.enum(["pending", "filled", "cancelled"]).optional(),
+    /** Set when the user chose to keep the credential for next time. */
+    saved: z.boolean().optional(),
   }),
   z.object({
     kind: z.literal("choice"),
