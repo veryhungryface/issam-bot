@@ -92,7 +92,10 @@ describeIntegration("browser sign-in fills the page without the model seeing val
       expect(["completed", "failed", "cancelled", undefined]).toContain(snapshot.run?.status);
     });
     sandbox.filledLogins.length = 0;
-    await rpc(handles.app, cookie, "threads/send", { botId: bot.id, text: "sign in again" });
+    await rpc(handles.app, cookie, "threads/send", {
+      botId: bot.id,
+      text: "sign in to the portal once more",
+    });
     await waitFor(async () => {
       expect(sandbox.filledLogins.at(-1)?.values.password).toBe(PASSWORD);
     });

@@ -253,7 +253,7 @@ export function inferScript(
       },
     ];
   }
-  if (lower.includes("sign in to the portal") || lower.includes("sign in again")) {
+  if (lower.includes("sign in to the portal")) {
     return [
       {
         assistant: "i need the portal credentials to fill in here.",
