@@ -123,6 +123,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph, CollaborationMarker } from "../components/ai/CollaborationMarker";
+import { BrowserLoginCard } from "../components/BrowserLoginCard";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerBootProgress } from "../components/ComputerBootProgress";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
@@ -5976,6 +5977,22 @@ const MessageView = memo(function MessageView({
               block={block}
               canAnswer={canAnswer}
               onAnswer={(text) => onAnswer(message, text)}
+            />
+          );
+        }
+        if (block.kind === "browser_login") {
+          const loginBotId = "botId" in artifactTarget ? artifactTarget.botId : message.botId;
+          if (!loginBotId) return null;
+          return (
+            <BrowserLoginCard
+              key={i}
+              block={block}
+              botId={loginBotId}
+              botName={speakerName ?? memberName?.(message.botId) ?? t`this bot`}
+              runId={message.runId ?? undefined}
+              messageId={message.id}
+              canAnswer={canAnswer}
+              onResolved={onRefresh}
             />
           );
         }

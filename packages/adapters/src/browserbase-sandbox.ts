@@ -12,9 +12,11 @@ import type {
   SandboxProvider,
   ScreenRequest,
   ScreenSession,
+  SecureFieldFillRequest,
+  SecureFieldFillResult,
   SnapshotRef,
 } from "@rakazo/adapter-kit";
-import type { Browser, BrowserContext, Page } from "playwright-core";
+import type { Browser, BrowserContext, Locator, Page } from "playwright-core";
 import { chromium } from "playwright-core";
 import {
   assertAllowedBrowserUrl,
@@ -402,6 +404,39 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     const box = this.requiredBox(computer);
     if (!box.browser?.isConnected()) throw new Error("Browserbase session is not connected");
     await requiredPage(box).evaluate(() => "alive");
+  }
+
+  /**
+   * Type sign-in values the user submitted into the page the bot has open. Nothing here is
+   * logged or returned: the caller only learns which field ids matched a locator.
+   */
+  async fillSecureFields(
+    computer: ComputerRef,
+    request: SecureFieldFillRequest,
+    _context: AdapterContext,
+  ): Promise<SecureFieldFillResult> {
+    const box = this.requiredBox(computer);
+    const page = requiredPage(box);
+    // Re-check at fill time: the page may have navigated between the user seeing the
+    // sheet's origin and submitting it, and the values belong only to that origin.
+    if (safeOrigin(page.url()) !== request.origin) {
+      throw new Error("The browser is no longer on the site this sign-in was requested for");
+    }
+    const filled: string[] = [];
+    const missing: string[] = [];
+    let last: Locator | undefined;
+    for (const field of request.fields) {
+      const locator = await firstVisibleLocator(page, field);
+      if (!locator) {
+        missing.push(field.id);
+        continue;
+      }
+      await locator.fill(field.value, { timeout: 5_000 });
+      filled.push(field.id);
+      last = locator;
+    }
+    if (request.submit && last) await last.press("Enter", { timeout: 5_000 });
+    return { filled, missing };
   }
 
   async releaseScreen(computer: ComputerRef, context: AdapterContext): Promise<void> {
@@ -805,6 +840,40 @@ function requiredPage(box: BrowserbaseBox): Page {
 function throwIfAborted(context: AdapterContext): void {
   if (context.signal.aborted)
     throw context.signal.reason ?? new Error("Browserbase operation aborted");
+}
+
+/**
+ * Resolve one sign-in input. The bot's selector hint is tried first, then the standard
+ * autocomplete roles, then the visible label — so a page that renamed its inputs still
+ * fills without the bot ever seeing the value.
+ */
+async function firstVisibleLocator(
+  page: Page,
+  field: { selector?: string; autocomplete?: string; label?: string },
+): Promise<Locator | undefined> {
+  const candidates: Locator[] = [];
+  if (field.selector) candidates.push(page.locator(field.selector));
+  if (field.autocomplete) {
+    candidates.push(page.locator(`input[autocomplete="${field.autocomplete}"]`));
+    if (field.autocomplete === "current-password") {
+      candidates.push(page.locator('input[type="password"]'));
+    }
+    if (field.autocomplete === "username" || field.autocomplete === "email") {
+      candidates.push(
+        page.locator('input[type="email"], input[name*="id" i], input[name*="user" i]'),
+      );
+    }
+  }
+  if (field.label) candidates.push(page.getByLabel(field.label, { exact: false }));
+  for (const candidate of candidates) {
+    const first = candidate.first();
+    try {
+      if (await first.isVisible({ timeout: 1_000 })) return first;
+    } catch {
+      // A malformed selector or detached node just means this candidate does not apply.
+    }
+  }
+  return undefined;
 }
 
 function safeOrigin(rawUrl: string): string | undefined {

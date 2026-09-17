@@ -28,6 +28,7 @@ import {
 } from "@rakazo/ui-web";
 import { X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useState } from "react";
+import { SavedLoginsSection } from "../../components/SavedLoginsSection";
 import { HIDE_MODEL_PICKER } from "../../lib/deployment-flags";
 import { rpc } from "../../lib/rpc";
 
@@ -381,6 +382,7 @@ export function BotSettings({
             <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
           ) : null}
         </Suspense>
+        <SavedLoginsSection botId={bot.id} />
         {HIDE_MODEL_PICKER ? null : (
           <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
             <Trans>Model</Trans>

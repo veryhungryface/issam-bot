@@ -1,6 +1,7 @@
 import { eventIterator, oc } from "@orpc/contract";
 import * as z from "zod";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
+import { BROWSER_LOGIN_MAX_VALUE_LENGTH } from "./bot-secrets.js";
 import {
   ActionApprovalRuleSchema,
   ActionAutoReviewSettingsSchema,
@@ -318,6 +319,39 @@ export const appContract = {
           payload: z.record(z.string(), z.unknown()),
         }),
       )
+      .output(z.object({ ok: z.literal(true) })),
+    /** Submit a sign-in sheet: values go straight into the bot's page, never to the model. */
+    fillLogin: oc
+      .input(
+        z.object({
+          botId: Id,
+          runId: Id,
+          messageId: Id,
+          values: z.record(
+            z.string().max(64),
+            z.string().min(1).max(BROWSER_LOGIN_MAX_VALUE_LENGTH),
+          ),
+          /** Keep the credential encrypted so the next sign-in needs no prompt. */
+          save: z.boolean().default(false),
+        }),
+      )
+      .output(
+        z.object({
+          ok: z.literal(true),
+          filled: z.array(z.string()),
+          missing: z.array(z.string()),
+          saved: z.boolean(),
+        }),
+      ),
+    cancelLogin: oc
+      .input(z.object({ botId: Id, runId: Id, messageId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
+    /** Saved sign-ins for this bot, names and sites only — never values. */
+    savedLogins: oc
+      .input(botId)
+      .output(z.array(z.object({ name: z.string(), origin: z.string(), updatedAt: z.string() }))),
+    forgetLogin: oc
+      .input(z.object({ botId: Id, name: z.string().max(64) }))
       .output(z.object({ ok: z.literal(true) })),
     files: oc.input(z.object({ botId: Id, path: z.string().default("/") })).output(
       z.array(

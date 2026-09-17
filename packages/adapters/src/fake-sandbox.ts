@@ -11,6 +11,8 @@ import type {
   SandboxProvider,
   ScreenRequest,
   ScreenSession,
+  SecureFieldFillRequest,
+  SecureFieldFillResult,
 } from "@rakazo/adapter-kit";
 import { canReleaseScreenLease, canTakeScreenLease } from "@rakazo/core";
 import { ComputerScreenUnavailableError, screenSessionKey } from "./computer-screens.js";
@@ -31,6 +33,10 @@ export interface FakeBox {
 
 export class FakeSandboxProvider implements SandboxProvider {
   readonly boxes = new Map<string, FakeBox>();
+  /** Origin the emulated page is "on"; tests move it to exercise the origin guard. */
+  pageOrigin = "https://auth.example.test";
+  /** What the last sign-in fill received, so tests can assert values arrived off-model. */
+  readonly filledLogins: Array<{ origin: string; values: Record<string, string> }> = [];
 
   describe() {
     return {
@@ -140,6 +146,31 @@ export class FakeSandboxProvider implements SandboxProvider {
         input,
       );
     }
+  }
+
+  async fillSecureFields(
+    computer: ComputerRef,
+    request: SecureFieldFillRequest,
+    _context: AdapterContext,
+  ): Promise<SecureFieldFillResult> {
+    this.requiredBox(computer);
+    if (request.origin !== this.pageOrigin) {
+      throw new Error("The browser is no longer on the site this sign-in was requested for");
+    }
+    const values: Record<string, string> = {};
+    const filled: string[] = [];
+    const missing: string[] = [];
+    for (const field of request.fields) {
+      // A field whose selector says it is absent lets tests cover partial fills.
+      if (field.selector?.includes("missing")) {
+        missing.push(field.id);
+        continue;
+      }
+      values[field.id] = field.value;
+      filled.push(field.id);
+    }
+    this.filledLogins.push({ origin: request.origin, values });
+    return { filled, missing };
   }
 
   async observe(computer: ComputerRef, context: AdapterContext) {

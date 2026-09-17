@@ -53,6 +53,8 @@ import type {
   ScreenRequest,
   ScreenSession,
   SecretRecord,
+  SecureFieldFillRequest,
+  SecureFieldFillResult,
   SemanticMemoryCapabilities,
   SemanticMemoryPurgeHistoryRequest,
   SemanticMemoryRecallRequest,
@@ -148,6 +150,17 @@ export interface SandboxProvider {
   ): Promise<void>;
   snapshot(computer: ComputerRef, context: AdapterContext): Promise<SnapshotRef>;
   keepAlive?(computer: ComputerRef): Promise<void>;
+  /**
+   * Fill sign-in inputs on the page the bot already has open. The provider must refuse
+   * unless the live page is still on `origin`, so a navigation between the user seeing the
+   * sheet and submitting it cannot leak the values to another site. Values are write-only:
+   * they are never returned, logged, or surfaced to the model.
+   */
+  fillSecureFields?(
+    computer: ComputerRef,
+    request: SecureFieldFillRequest,
+    context: AdapterContext,
+  ): Promise<SecureFieldFillResult>;
   /** Drop a single-screen graphical claim for this bot so another Team bot can use the display. */
   releaseScreen?(computer: ComputerRef, context: AdapterContext): Promise<void>;
   stop(computer: ComputerRef, context: AdapterContext): Promise<void>;

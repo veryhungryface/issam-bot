@@ -33,6 +33,8 @@ import {
   ATTACHMENT_RASTER_IMAGE_MIME_TYPES,
   BotSecretName,
   BotSecretSubmission,
+  BROWSER_LOGIN_MAX_FIELDS,
+  BrowserLoginField,
 } from "@rakazo/contracts";
 import {
   type ActionApprovalRule,
@@ -141,9 +143,11 @@ import {
 import { loadBotMessageContext, messageBot, returnBotMessageOutcome } from "./bot-messages.js";
 import {
   findBotSecret,
+  findBrowserLogin,
   forgetBotSecret,
   listBotSecrets,
   normalizeSecretDestination,
+  parseBrowserLogin,
   requestWithBotSecret,
   sameSecretDestination,
 } from "./bot-secrets.js";
@@ -1481,6 +1485,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let approvalPausePending = false;
         let handedOff = false;
         let progressRedactor = createStreamingRedactor(runSecrets);
+        /** Redact freshly revealed secret values from everything this run still streams. */
+        const registerRunSecrets = (values: string[]) => {
+          const additions = values.filter((value) => value && !runSecrets.includes(value));
+          if (additions.length === 0) return;
+          pendingProgress += progressRedactor.finish();
+          runSecrets.push(...additions);
+          progressRedactor = createStreamingRedactor(runSecrets);
+        };
         const scripted = deps.runtime.describe().capabilities.scripted;
         const script = scripted ? inferScript(task.prompt, takeoverResume?.checkpoint) : undefined;
         const flushProgress = async () => {
@@ -3152,6 +3164,103 @@ export function createRunExecutor(deps: ExecutorDeps) {
               threadId: thread.id,
             });
             return pauseForSecret();
+          }
+          if (name === "request_browser_login") {
+            const origin = (() => {
+              try {
+                const url = new URL(String(args.origin ?? ""));
+                return url.protocol === "https:" ? url.origin : null;
+              } catch {
+                return null;
+              }
+            })();
+            if (!origin) {
+              return finish({ error: "Provide the HTTPS origin of the page you have open." });
+            }
+            const fields = BrowserLoginField.array()
+              .min(1)
+              .max(BROWSER_LOGIN_MAX_FIELDS)
+              .safeParse(args.fields);
+            if (!fields.success) {
+              return finish({
+                error: "Each field needs an id and a label; at most four fields.",
+              });
+            }
+            if (!deps.sandbox.fillSecureFields) {
+              return finish({
+                error: "This computer cannot fill sign-in forms; use request_takeover.",
+              });
+            }
+            const submit = args.submit === true;
+            // A credential the user chose to keep signs in without interrupting them again.
+            const saved = await findBrowserLogin(deps.prisma, run, origin);
+            if (saved) {
+              const values = parseBrowserLogin(deps.secretStore.load(saved.ciphertext, saved.id));
+              if (values) {
+                const present = fields.data.filter((field) => values[field.id] !== undefined);
+                if (present.length > 0) {
+                  registerRunSecrets(present.map((field) => values[field.id]!));
+                  const result = await withRecoveredComputer((active) =>
+                    deps.sandbox.fillSecureFields!(
+                      active,
+                      {
+                        origin,
+                        submit,
+                        fields: present.map((field) => ({
+                          id: field.id,
+                          value: values[field.id]!,
+                          selector: field.selector,
+                          autocomplete: field.autocomplete,
+                          label: field.label,
+                        })),
+                      },
+                      context,
+                    ),
+                  ).catch((error) => ({ error }) as const);
+                  if ("error" in result) {
+                    return finish({
+                      error: "Could not fill the saved sign-in; ask the user to sign in again.",
+                    });
+                  }
+                  if (result.filled.length > 0) {
+                    return finish({ filled: result.filled, missing: result.missing, saved: true });
+                  }
+                }
+              }
+            }
+            if (!(await renewRunLease(deps, runId, workerId, fence))) {
+              return secretPausedToolResult();
+            }
+            await workspaceCheckpoint.flush();
+            const paused = await deps.events.pauseRunForInput({
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              runId,
+              attemptId: attempt.id,
+              leaseOwner: workerId,
+              leaseFence: fence,
+              blocks: [
+                {
+                  kind: "browser_login",
+                  title: String(args.title ?? "Sign in"),
+                  origin,
+                  fields: fields.data,
+                  status: "pending",
+                },
+              ],
+            });
+            if (!paused) {
+              throw new Error("Could not pause this run for sign-in; try sending again.");
+            }
+            await notifyRun(deps, run, {
+              kind: "help",
+              title: `${bot.name} needs a sign-in`,
+              body: String(args.title ?? origin),
+              botId: bot.id,
+              threadId: thread.id,
+            });
+            return secretPausedToolResult();
           }
           if (name === "request_takeover") return { ok: true };
           if (name === "run_subagent") {

@@ -11,9 +11,14 @@ function scopeFields({ userId, spaceId, botId }: BotSecretScope): BotSecretScope
   return { userId, spaceId, botId };
 }
 
-const metadata = { name: true, origin: true, auth: true } as const;
+const metadata = { name: true, origin: true, auth: true, updatedAt: true } as const;
 
 function credentialHeader(destination: BotSecretDestination, plaintext: string) {
+  if (destination.auth.type === "browser_login") {
+    // A sign-in form credential is only ever typed into the bot's own page. Refusing here
+    // keeps it out of secret_request, which would otherwise ship it to the site as a header.
+    throw new Error("Browser sign-in credentials cannot be sent as an HTTP header");
+  }
   const name = destination.auth.type === "header" ? destination.auth.name : "Authorization";
   const value =
     destination.auth.type === "bearer"
@@ -64,7 +69,8 @@ export async function storeBotSecret(input: {
   const { tx, secretStore, scope, plaintext } = input;
   if (!plaintext || plaintext.length > 16_384) throw new Error("Invalid credential length");
   const destination = normalizeSecretDestination(input.destination);
-  credentialHeader(destination, plaintext);
+  // Header round-trip validation only applies to credentials that become HTTP auth.
+  if (destination.auth.type !== "browser_login") credentialHeader(destination, plaintext);
   // Serialize credential updates and deletions for a bot, including concurrent first saves.
   await tx.$queryRaw`SELECT id FROM bots WHERE id = ${scope.botId} FOR UPDATE`;
   const existing = await tx.botSecret.findFirst({
@@ -95,6 +101,60 @@ export async function storeBotSecret(input: {
       data: { id, ...scopeFields(scope), ...destination, ciphertext: encrypted.ciphertext },
     });
   }
+}
+
+/** Field values for one saved sign-in form, encrypted as a single record. */
+export const BROWSER_LOGIN_SECRET_VERSION = 1;
+
+export function serializeBrowserLogin(values: Record<string, string>): string {
+  return JSON.stringify({ v: BROWSER_LOGIN_SECRET_VERSION, values });
+}
+
+export function parseBrowserLogin(plaintext: string): Record<string, string> | null {
+  try {
+    const parsed = JSON.parse(plaintext) as { v?: number; values?: Record<string, unknown> };
+    if (parsed?.v !== BROWSER_LOGIN_SECRET_VERSION || !parsed.values) return null;
+    const values: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed.values)) {
+      if (typeof value !== "string") return null;
+      values[key] = value;
+    }
+    return values;
+  } catch {
+    return null;
+  }
+}
+
+/** Deterministic credential name so one origin reuses one saved sign-in per bot. */
+export function browserLoginSecretName(origin: string): string {
+  const host = (() => {
+    try {
+      return new URL(origin).hostname;
+    } catch {
+      return origin;
+    }
+  })();
+  const slug = host
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return `login_${slug}`.slice(0, 64);
+}
+
+/** Find a saved sign-in for this origin, if the user kept one for this bot. */
+export async function findBrowserLogin(
+  prisma: PrismaClient,
+  scope: BotSecretScope,
+  origin: string,
+): Promise<{ id: string; ciphertext: string } | null> {
+  const row = await prisma.botSecret.findFirst({
+    where: { ...scopeFields(scope), name: browserLoginSecretName(origin), origin },
+    select: { id: true, ciphertext: true, auth: true },
+  });
+  if (!row) return null;
+  const auth = row.auth as { type?: string } | null;
+  if (auth?.type !== "browser_login") return null;
+  return { id: row.id, ciphertext: row.ciphertext };
 }
 
 export function listBotSecrets(prisma: PrismaClient, scope: BotSecretScope) {

@@ -38,6 +38,7 @@ export interface AppendEventInput {
 
 export interface ThreadEvents {
   answerRunInput(input: AnswerRunInput): Promise<boolean>;
+  resolveBrowserLogin(input: ResolveBrowserLoginInput): Promise<boolean>;
   append(input: AppendEventInput): Promise<ProductEvent>;
   claimSteering(input: ClaimSteeringInput): Promise<ClaimedSteeringMessage[]>;
   clearThread(input: ClearThreadInput): Promise<ClearThreadResult>;
@@ -187,6 +188,18 @@ export interface AnswerRunInput {
   answer: string;
 }
 
+export interface ResolveBrowserLoginInput {
+  spaceId: string;
+  threadId: string;
+  runId: string;
+  messageId: string;
+  answeredByUserId: string;
+  /** Ids the server actually filled into the page; no values ever reach this layer's log. */
+  filled: string[];
+  saved: boolean;
+  cancelled?: boolean;
+}
+
 export interface SendUserMessageInput {
   spaceId: string;
   threadId: string;
@@ -225,6 +238,7 @@ export function createThreadEvents(
 ): ThreadEvents {
   return {
     answerRunInput: (input) => answerRunInput(prisma, input, realtime, options.runSecretWriter),
+    resolveBrowserLogin: (input) => resolveBrowserLogin(prisma, input, realtime),
     append: (input) => appendEvent(prisma, input, realtime),
     claimSteering: (input) => claimSteering(prisma, input),
     clearThread: (input) => clearThread(prisma, input, realtime),
@@ -646,6 +660,86 @@ export async function answerRunInput(
             ...block,
             status: "answered" as const,
             answer: secretAsk ? "" : input.answer,
+          }
+        : block,
+    );
+    await tx.message.update({ where: { id: message.id }, data: { blocks } });
+    const updated = await appendEventInTransaction(tx, {
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      botId: run.botId,
+      type: "thread.message.updated",
+      runId: input.runId,
+      payload: { messageId: message.id, role: "bot", blocks },
+    });
+    return { threadId: updated.threadId, seq: updated.seq };
+  });
+
+  if (!committed) return false;
+  await notifyRealtime(realtime, committed.threadId, committed.seq);
+  return true;
+}
+
+/**
+ * Close out a sign-in sheet: mark the block resolved and queue the run again. The caller has
+ * already filled the values into the page, so nothing secret passes through here.
+ */
+export async function resolveBrowserLogin(
+  prisma: PrismaClient,
+  input: ResolveBrowserLoginInput,
+  realtime?: RealtimeFanout,
+): Promise<boolean> {
+  const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    const run = await tx.run.findFirst({
+      where: {
+        id: input.runId,
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        status: "waiting_input",
+      },
+      select: { botId: true, userId: true },
+    });
+    if (!run) return null;
+    // Only the person the run belongs to may answer a credential prompt.
+    if (run.userId !== input.answeredByUserId) return null;
+    const message = await tx.message.findFirst({
+      where: { id: input.messageId, threadId: input.threadId, runId: input.runId, role: "bot" },
+    });
+    const parsed = MessageBlockSchema.array().safeParse(message?.blocks);
+    if (!message || !parsed.success) return null;
+    const pending = parsed.data.find(
+      (block) => block.kind === "browser_login" && block.status !== "filled",
+    );
+    if (pending?.kind !== "browser_login") return null;
+
+    const queued = await tx.run.updateMany({
+      where: {
+        id: input.runId,
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        status: "waiting_input",
+      },
+      data: { status: "queued" },
+    });
+    if (queued.count !== 1) return null;
+
+    const task = await tx.task.updateMany({
+      where: { runs: { some: { id: input.runId } } },
+      data: {
+        prompt: input.cancelled
+          ? "The user declined to sign in. Continue without it or ask for takeover."
+          : `Signed in: filled ${input.filled.join(", ") || "no"} field(s) on ${pending.origin}.`,
+      },
+    });
+    if (task.count !== 1) throw new Error("Run task was not available to resolve");
+
+    const blocks = parsed.data.map((block) =>
+      block === pending
+        ? {
+            ...block,
+            status: input.cancelled ? ("cancelled" as const) : ("filled" as const),
+            saved: input.saved,
           }
         : block,
     );
