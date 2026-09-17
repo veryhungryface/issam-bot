@@ -56,6 +56,7 @@ import {
   prepareApiInstall,
   prepareGraphqlInstall,
   probeOpenAiCompatibleModels,
+  providerRefWithoutSession,
   type RemoteConnectorDependencies,
   recordLastComputerPage,
   releaseComputerExecutionLease,
@@ -76,7 +77,6 @@ import {
   toComputerRef,
   touchRunningComputer,
   verifyMcpInstall,
-  providerRefWithoutSession,
 } from "@rakazo/adapters";
 import type { Auth } from "@rakazo/auth";
 import {
