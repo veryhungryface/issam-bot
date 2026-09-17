@@ -531,13 +531,21 @@ describe("computer screen url", () => {
     controlRunId: null,
   };
 
-  const callScreenUrl = async (connectScreen: () => Promise<unknown>, updateMany = vi.fn()) => {
+  const callScreenUrl = async (
+    connectScreen: () => Promise<unknown>,
+    providerRef = computerRow.providerRef,
+    updateMany = vi.fn(),
+  ) => {
     const prisma = {
       bot: {
         findFirst: vi.fn().mockResolvedValue({
           id: "bot-1",
           thread: { id: "thread-1" },
-          computer: computerRow,
+          computer: {
+            ...computerRow,
+            providerRef,
+            kind: providerRef.startsWith("browserbase") ? "browserbase" : computerRow.kind,
+          },
         }),
       },
       computer: { updateMany },
@@ -567,6 +575,27 @@ describe("computer screen url", () => {
     );
     return { response, updateMany };
   };
+
+  it("keeps the Browserbase profile when only the session is gone", async () => {
+    const contextRef = `browserbase:v1:${Buffer.from(
+      JSON.stringify({ contextId: "context-1", sessionId: "session-1" }),
+    ).toString("base64url")}`;
+    const { response, updateMany } = await callScreenUrl(
+      () =>
+        Promise.reject(
+          Object.assign(new Error("Sandbox is probably not running anymore"), {
+            name: "SandboxNotFoundError",
+          }),
+        ),
+      contextRef,
+    );
+    expect(response.status).toBe(200);
+    // Clearing the reference outright would discard the saved logins with the session.
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "computer-1", providerRef: contextRef },
+      data: { state: "stopped", providerRef: "browserbase-context:context-1" },
+    });
+  });
 
   it("clears the row instead of 500ing when the provider says the sandbox is gone", async () => {
     const { response, updateMany } = await callScreenUrl(() =>
