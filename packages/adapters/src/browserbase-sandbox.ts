@@ -777,6 +777,22 @@ function playwrightKeyName(key: string): string {
   return aliases[key] ?? key;
 }
 
+/**
+ * A dead session does not invalidate the Browserbase Context, which is where the browser's
+ * cookies and logins live. Downgrade the reference to context-only so the next boot attaches
+ * a fresh session to the same profile; clearing it outright would silently sign the user out
+ * of every site. Non-Browserbase references have no profile to keep, so they clear.
+ */
+export function providerRefWithoutSession(providerRef: string | null): string | null {
+  if (!providerRef) return null;
+  try {
+    const { contextId } = decodeProviderRef(providerRef);
+    return contextId ? `${LEGACY_CONTEXT_REF_PREFIX}${contextId}` : null;
+  } catch {
+    return null;
+  }
+}
+
 function encodeProviderRef(contextId: string, sessionId: string): string {
   assertProviderId(contextId, "context");
   assertProviderId(sessionId, "session");

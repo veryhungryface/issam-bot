@@ -2,7 +2,11 @@ import type { AdapterContext, ProcessEvent } from "@rakazo/adapter-kit";
 import type { Browser, BrowserContext, Page } from "playwright-core";
 import { describe, expect, it, vi } from "vitest";
 import type { BrowserbaseClient, BrowserbaseSession } from "./browserbase-client.js";
-import { type BrowserbaseBrowserSdk, BrowserbaseSandboxProvider } from "./browserbase-sandbox.js";
+import {
+  type BrowserbaseBrowserSdk,
+  BrowserbaseSandboxProvider,
+  providerRefWithoutSession,
+} from "./browserbase-sandbox.js";
 
 describe("BrowserbaseSandboxProvider", () => {
   it("declares browser-only capabilities without shell or provider files", () => {
@@ -19,6 +23,20 @@ describe("BrowserbaseSandboxProvider", () => {
       localFileOpen: false,
       appLaunch: false,
     });
+  });
+
+  it("keeps the browser profile when only the session is gone", async () => {
+    const withSession = `browserbase:v1:${Buffer.from(
+      JSON.stringify({ contextId: "context-1", sessionId: "session-1" }),
+    ).toString("base64url")}`;
+
+    // A dead session must leave the Context, and with it every saved login, intact.
+    expect(providerRefWithoutSession(withSession)).toBe("browserbase-context:context-1");
+    expect(providerRefWithoutSession("browserbase-context:context-1")).toBe(
+      "browserbase-context:context-1",
+    );
+    expect(providerRefWithoutSession(null)).toBeNull();
+    expect(providerRefWithoutSession("e2b-sandbox-id!!")).toBeNull();
   });
 
   it("fills sign-in fields only while the page is still on the requested origin", async () => {

@@ -76,6 +76,7 @@ import {
   toComputerRef,
   touchRunningComputer,
   verifyMcpInstall,
+  providerRefWithoutSession,
 } from "@rakazo/adapters";
 import type { Auth } from "@rakazo/auth";
 import {
@@ -2009,7 +2010,9 @@ export function createRouter(deps: RouterDeps) {
             }
             if (!isSandboxGoneError(error)) throw error;
             // The provider killed this sandbox (idle timeout) while the row still says
-            // running. Clear the dead ref so the UI offers a boot instead of 500ing.
+            // running. Drop the dead session so the UI offers a boot instead of 500ing, but
+            // keep the Browserbase Context: it holds the browser profile, so clearing it
+            // would sign the user out of every site they had logged into.
             // Leave any active control lease alone — expireComputerControl owns that
             // release (provider screen-control, events, takeover continuation).
             getLogger().error(
@@ -2018,7 +2021,10 @@ export function createRouter(deps: RouterDeps) {
             );
             await deps.prisma.computer.updateMany({
               where: { id: computer.id, providerRef: computer.providerRef },
-              data: { state: "stopped", providerRef: null },
+              data: {
+                state: "stopped",
+                providerRef: providerRefWithoutSession(computer.providerRef),
+              },
             });
             return null;
           });
