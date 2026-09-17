@@ -785,6 +785,15 @@ function playwrightKeyName(key: string): string {
  */
 export function providerRefWithoutSession(providerRef: string | null): string | null {
   if (!providerRef) return null;
+  // Only an explicitly Browserbase-shaped reference names a Context. decodeProviderRef
+  // accepts a bare id as a legacy context for compatibility, so matching on the prefixes
+  // keeps another provider's sandbox id from being rewritten as a browser profile.
+  if (
+    !providerRef.startsWith(PROVIDER_REF_PREFIX) &&
+    !providerRef.startsWith(LEGACY_CONTEXT_REF_PREFIX)
+  ) {
+    return null;
+  }
   try {
     const { contextId } = decodeProviderRef(providerRef);
     return contextId ? `${LEGACY_CONTEXT_REF_PREFIX}${contextId}` : null;

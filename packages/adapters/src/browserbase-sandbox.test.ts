@@ -36,6 +36,8 @@ describe("BrowserbaseSandboxProvider", () => {
       "browserbase-context:context-1",
     );
     expect(providerRefWithoutSession(null)).toBeNull();
+    // Another provider's sandbox id names no browser profile, so it still clears.
+    expect(providerRefWithoutSession("sandbox-ref-1")).toBeNull();
     expect(providerRefWithoutSession("e2b-sandbox-id!!")).toBeNull();
   });
 
