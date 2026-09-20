@@ -554,6 +554,54 @@ describeJourneys("required product journeys", () => {
     expect(done.run?.status ?? "completed").not.toBe("waiting_takeover");
   });
 
+  it("4f: the bot answers chat while the user holds the screen", async () => {
+    const cookie = await signup(app, `takeover-held-j-${stamp}@rakazo.test`, "Held");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    await rpc(app, cookie, "threads/send", {
+      botId: bot.id,
+      text: "install the gsc cli and sign in",
+    });
+    await waitFor(app, cookie, bot.id, (snap) => snap.run?.status === "waiting_takeover");
+    await rpc(app, cookie, "computer/boot", { botId: bot.id });
+    await rpc(app, cookie, "computer/takeover", { botId: bot.id });
+    const held = await waitFor(
+      app,
+      cookie,
+      bot.id,
+      (snap) => snap.computer?.controlHolder === "user",
+    );
+    const before = held.messages.filter((message) => message.role === "bot").length;
+
+    // The user is on the screen and asks a question in chat: the bot must answer
+    // without taking the screen back.
+    await rpc(app, cookie, "threads/send", { botId: bot.id, text: "뭐가 문제였는지 알려줘" });
+    const answered = await waitFor(
+      app,
+      cookie,
+      bot.id,
+      (snap) =>
+        snap.messages.filter((message) => message.role === "bot").length > before &&
+        snap.computer?.controlHolder === "user",
+    );
+    expect(answered.computer?.controlHolder).toBe("user");
+
+    // Releasing hands the screen back and the run finishes with its tools restored.
+    await rpc(app, cookie, "computer/release", { botId: bot.id });
+    const done = await waitFor(
+      app,
+      cookie,
+      bot.id,
+      (snap) => !snap.run || ["completed", "failed", "cancelled"].includes(snap.run.status),
+    );
+    expect(done.run?.status ?? "completed").not.toBe("waiting_takeover");
+  });
+
   it("4e: a typed reply answers the bot's question instead of parking the run", async () => {
     const cookie = await signup(app, `ask-freetext-j-${stamp}@rakazo.test`, "Free text");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
