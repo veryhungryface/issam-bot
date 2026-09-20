@@ -107,11 +107,13 @@ describe("guarded CONNECT proxy", () => {
 });
 
 describe("fetchImpersonatedWebText", () => {
-  it("returns the page body through the proxy-backed client", async () => {
+  it("returns the page body through the proxy-backed client, with no added headers", async () => {
     const seen: string[] = [];
+    let sawInit: unknown = "unset";
     const createClient: ImpersonatedClientFactory = async ({ profile }) => ({
-      fetch: async (url) => {
+      fetch: async (url, init) => {
         seen.push(`${profile} ${url}`);
+        sawInit = init;
         return response({ body: "<h1>hello</h1>", headers: { "content-type": "text/html" } });
       },
     });
@@ -122,6 +124,9 @@ describe("fetchImpersonatedWebText", () => {
     expect(result.body).toBe("<h1>hello</h1>");
     expect(result.contentType).toBe("text/html");
     expect(seen).toEqual(["chrome https://example.com/page"]);
+    // Any header we add is a fingerprint mismatch: a single Accept-Language turns
+    // coupang.com's 200 back into a 403 from the same machine.
+    expect(sawInit).toBeUndefined();
   });
 
   it("tries the next profile only when the first is walled", async () => {
