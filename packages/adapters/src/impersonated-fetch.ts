@@ -33,7 +33,6 @@ export type ImpersonatedFetchOptions = {
   resolveHostname?: ResolveHostname;
   timeoutMs?: number;
   maxBytes?: number;
-  acceptLanguage?: string;
   profiles?: ImpersonationProfile[];
   signal?: AbortSignal;
   /** Test seam: the impit-shaped client factory. Defaults to a lazy `impit` import. */
@@ -108,7 +107,6 @@ export async function fetchImpersonatedWebText(
           client,
           resolve,
           maxBytes,
-          acceptLanguage: options.acceptLanguage,
           signal,
           redirectsRemaining: MAX_REDIRECTS,
         });
@@ -131,15 +129,16 @@ async function follow(
     client: ImpersonatedClient;
     resolve: ResolveHostname;
     maxBytes: number;
-    acceptLanguage?: string;
     signal: AbortSignal;
     redirectsRemaining: number;
   },
 ): Promise<{ url: string; body: string; contentType: string | null }> {
   const validated = await assertSafeWebUrl(rawUrl, state.resolve, state.signal);
-  const headers: Record<string, string> = {};
-  if (state.acceptLanguage) headers["accept-language"] = state.acceptLanguage;
-  const response = await withAbort(state.client.fetch(validated.href, { headers }), state.signal);
+  // No extra headers, on purpose. The impersonation profile's header set is part of the
+  // fingerprint: measured from the Seoul VPS, adding a single Accept-Language - by request
+  // or at construction - turns coupang.com's 200 back into a 403. The site serves Korean
+  // from a Korean IP anyway.
+  const response = await withAbort(state.client.fetch(validated.href), state.signal);
 
   if (response.status >= 300 && response.status < 400) {
     if (state.redirectsRemaining <= 0) throw new Error("Too many redirects");

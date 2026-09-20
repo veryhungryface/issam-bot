@@ -48,8 +48,6 @@ export type KeylessHttpWebOptions = {
    * deployment factory wires in the real one.
    */
   impersonatedFetch?: ImpersonatedFetch;
-  /** Accept-Language for the impersonated attempt. Defaults to the deployment locale. */
-  acceptLanguage?: string;
 };
 
 export type ImpersonatedFetch = (
@@ -78,7 +76,6 @@ export class KeylessHttpWebProvider implements WebProvider {
   private readonly maxBufferBytes: number;
   private readonly userAgent: string;
   private readonly impersonatedFetch: ImpersonatedFetch | null;
-  private readonly acceptLanguage: string;
 
   constructor(options: KeylessHttpWebOptions = {}) {
     this.fetchImpl = options.fetch ?? globalThis.fetch;
@@ -90,9 +87,6 @@ export class KeylessHttpWebProvider implements WebProvider {
     this.userAgent =
       options.userAgent ?? "Rakazo/0.1 (+https://github.com/elie222/rakazo; web tools)";
     this.impersonatedFetch = options.impersonatedFetch ?? null;
-    // This deployment serves Korean users; sites that vary by language should answer
-    // in the language the user will be shown.
-    this.acceptLanguage = options.acceptLanguage ?? "ko-KR,ko;q=0.9,en;q=0.8";
   }
 
   describe() {
@@ -185,7 +179,6 @@ export class KeylessHttpWebProvider implements WebProvider {
         resolveHostname: this.resolveHostname,
         timeoutMs: this.fetchTimeoutMs,
         maxBytes: this.maxBufferBytes,
-        acceptLanguage: this.acceptLanguage,
         signal,
       });
       return looksLikeChallengePage(result.body) ? null : result;
