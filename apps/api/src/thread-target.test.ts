@@ -781,6 +781,10 @@ describe("sendThreadMessage", () => {
           startedAt: new Date(),
         }),
       },
+      // The user is on the screen, so the run stays parked and is continued as held.
+      bot: {
+        findFirst: vi.fn().mockResolvedValue({ computer: { controlHolder: "user" } }),
+      },
       steeringMessage: { create: vi.fn() },
       event: { create: vi.fn().mockResolvedValue({ seq: 2 }) },
       task: { create: vi.fn() },
