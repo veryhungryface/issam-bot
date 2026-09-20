@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { type JobPublisher, runContinueJob } from "@rakazo/adapter-kit";
 import { cancelComputerRunWork, screenLeaseIdForRun, toComputerRef } from "@rakazo/adapters";
 import {
@@ -56,7 +57,9 @@ export type ThreadTarget =
     };
 
 const THREAD_MESSAGE_PAGE_SIZE = 100;
-const RUNS_NEEDING_CONTINUE = new Set(["queued"]);
+const RUNS_NEEDING_CONTINUE = new Set(["queued", "waiting_takeover"]);
+
+const STEERABLE_RUN_STATUSES = new Set(["queued", "leased", "running", "waiting_takeover"]);
 
 type MentionTargetInput = string | { kind: "bot" | "group" | "routine" | "connector"; id: string };
 
@@ -113,10 +116,12 @@ function sendRunClientNonce(
 }
 
 /**
- * A run parked on a takeover request has no live turn, so a steering message would
- * sit unanswered until the user pressed a button on the card — the bot looks dead.
- * Treat a follow-up chat message as "continue without the takeover". While the user
- * actually holds the screen the bot must keep waiting, so only resume when it does not.
+ * Treat a follow-up chat message as "continue without the takeover".
+ *
+ * A run parked on a takeover request has no live turn, so a steering message alone would sit
+ * unanswered until someone pressed a button on the card. While the user actually holds the
+ * screen the run instead stays parked and is continued as held: the executor gates the screen
+ * tools so the bot can answer in chat without taking the screen back from them.
  */
 async function resumeTakeoverForFollowUp(
   tx: Prisma.TransactionClient,
@@ -646,6 +651,11 @@ export async function sendThreadMessage(
           );
           // An answer travels on the run's own task, so it must not also steer mid-turn.
           if (!answeredAsk) {
+            if (!STEERABLE_RUN_STATUSES.has(active.status)) {
+              // An approval or credential card is all that is left here: say so instead of
+              // parking the message on a run that will never claim it.
+              throw new ORPCError("CONFLICT", { message: "Answer the pending ask first." });
+            }
             await tx.steeringMessage.create({
               data: {
                 messageId: message.id,
@@ -772,6 +782,9 @@ export async function sendThreadMessage(
             active,
           );
           if (!answeredAsk) {
+            if (!STEERABLE_RUN_STATUSES.has(active.status)) {
+              throw new ORPCError("CONFLICT", { message: "Answer the pending ask first." });
+            }
             await tx.steeringMessage.create({
               data: { messageId: message.id, botId, userId: actor.userId, runId: active.id },
             });
