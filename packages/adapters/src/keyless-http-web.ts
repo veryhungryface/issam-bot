@@ -8,6 +8,11 @@ import type {
   WebSearchRequest,
 } from "@rakazo/adapter-kit";
 import { JSDOM } from "jsdom";
+import {
+  type ImpersonatedFetchOptions,
+  isBotWallFailure,
+  looksLikeChallengePage,
+} from "./impersonated-fetch.js";
 import { clampMaxChars, clampMaxResults } from "./web-limits.js";
 import { fetchSafeWebText, type ResolveHostname } from "./web-ssrf.js";
 
@@ -37,7 +42,20 @@ export type KeylessHttpWebOptions = {
   fetchTimeoutMs?: number;
   maxBufferBytes?: number;
   userAgent?: string;
+  /**
+   * Second attempt with a real browser's TLS fingerprint when the ordinary fetch is
+   * turned away by a bot wall. Off unless supplied, so tests stay offline; the
+   * deployment factory wires in the real one.
+   */
+  impersonatedFetch?: ImpersonatedFetch;
+  /** Accept-Language for the impersonated attempt. Defaults to the deployment locale. */
+  acceptLanguage?: string;
 };
+
+export type ImpersonatedFetch = (
+  url: string,
+  options: ImpersonatedFetchOptions,
+) => Promise<{ url: string; body: string; contentType: string | null }>;
 
 /** HTML search backend using DuckDuckGo’s public HTML form. One keyless option, not the interface. */
 export const duckDuckGoHtmlSearchBackend: KeylessHtmlSearchBackend = {
@@ -59,6 +77,8 @@ export class KeylessHttpWebProvider implements WebProvider {
   private readonly fetchTimeoutMs: number;
   private readonly maxBufferBytes: number;
   private readonly userAgent: string;
+  private readonly impersonatedFetch: ImpersonatedFetch | null;
+  private readonly acceptLanguage: string;
 
   constructor(options: KeylessHttpWebOptions = {}) {
     this.fetchImpl = options.fetch ?? globalThis.fetch;
@@ -69,6 +89,10 @@ export class KeylessHttpWebProvider implements WebProvider {
     this.maxBufferBytes = options.maxBufferBytes ?? 5 * 1024 * 1024;
     this.userAgent =
       options.userAgent ?? "Rakazo/0.1 (+https://github.com/elie222/rakazo; web tools)";
+    this.impersonatedFetch = options.impersonatedFetch ?? null;
+    // This deployment serves Korean users; sites that vary by language should answer
+    // in the language the user will be shown.
+    this.acceptLanguage = options.acceptLanguage ?? "ko-KR,ko;q=0.9,en;q=0.8";
   }
 
   describe() {
@@ -105,14 +129,8 @@ export class KeylessHttpWebProvider implements WebProvider {
 
   async fetch(request: WebFetchRequest, context: AdapterContext): Promise<WebFetchResult> {
     const maxChars = clampMaxChars(request.maxChars);
-    const { url, body } = await fetchSafeWebText(request.url, {
-      fetch: this.fetchImpl,
-      resolveHostname: this.resolveHostname,
-      timeoutMs: this.fetchTimeoutMs,
-      maxBytes: this.maxBufferBytes,
-      userAgent: this.userAgent,
-      signal: request.signal ?? context.signal,
-    });
+    const signal = request.signal ?? context.signal;
+    const { url, body } = await this.fetchPage(request.url, signal);
     if (!body.trim()) throw new Error(`Failed to fetch content from ${url}`);
     const extracted = extractReadableText(body, url);
     const truncated = extracted.text.length > maxChars;
@@ -124,6 +142,58 @@ export class KeylessHttpWebProvider implements WebProvider {
         : extracted.text,
       truncated,
     };
+  }
+
+  /**
+   * Plain fetch first, and only where it is refused, a second attempt with a real
+   * browser's TLS fingerprint. Bot walls answer the ordinary client with 403 (or with
+   * a 200 carrying a challenge page), and the escalation reaches several sites our
+   * Browserbase Chrome cannot — at a fraction of a browser session's cost. If it also
+   * fails, the caller sees the original refusal, which is the honest one.
+   */
+  private async fetchPage(
+    requestUrl: string,
+    signal?: AbortSignal,
+  ): Promise<{ url: string; body: string }> {
+    try {
+      const plain = await fetchSafeWebText(requestUrl, {
+        fetch: this.fetchImpl,
+        resolveHostname: this.resolveHostname,
+        timeoutMs: this.fetchTimeoutMs,
+        maxBytes: this.maxBufferBytes,
+        userAgent: this.userAgent,
+        signal,
+      });
+      if (!looksLikeChallengePage(plain.body)) return plain;
+      const escalated = await this.fetchImpersonated(requestUrl, signal);
+      return escalated ?? plain;
+    } catch (error) {
+      if (!isBotWallFailure(error)) throw error;
+      const escalated = await this.fetchImpersonated(requestUrl, signal);
+      if (!escalated) throw error;
+      return escalated;
+    }
+  }
+
+  private async fetchImpersonated(
+    requestUrl: string,
+    signal?: AbortSignal,
+  ): Promise<{ url: string; body: string } | null> {
+    if (!this.impersonatedFetch) return null;
+    try {
+      const result = await this.impersonatedFetch(requestUrl, {
+        resolveHostname: this.resolveHostname,
+        timeoutMs: this.fetchTimeoutMs,
+        maxBytes: this.maxBufferBytes,
+        acceptLanguage: this.acceptLanguage,
+        signal,
+      });
+      return looksLikeChallengePage(result.body) ? null : result;
+    } catch (error) {
+      // A cancelled run is not a failed escalation: let the caller see the abort.
+      if (signal?.aborted) throw error;
+      return null;
+    }
   }
 }
 
