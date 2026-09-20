@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { type JobPublisher, runContinueJob } from "@rakazo/adapter-kit";
 import { cancelComputerRunWork, screenLeaseIdForRun, toComputerRef } from "@rakazo/adapters";
 import {
@@ -15,6 +16,7 @@ import {
   runFailureError,
 } from "@rakazo/core";
 import {
+  type AnswerWithTextResult,
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
   createGroupRepos,
@@ -56,7 +58,7 @@ export type ThreadTarget =
     };
 
 const THREAD_MESSAGE_PAGE_SIZE = 100;
-const RUNS_NEEDING_CONTINUE = new Set(["queued"]);
+const RUNS_NEEDING_CONTINUE = new Set(["queued", "waiting_takeover"]);
 
 type MentionTargetInput = string | { kind: "bot" | "group" | "routine" | "connector"; id: string };
 
@@ -113,10 +115,12 @@ function sendRunClientNonce(
 }
 
 /**
- * A run parked on a takeover request has no live turn, so a steering message would
- * sit unanswered until the user pressed a button on the card — the bot looks dead.
- * Treat a follow-up chat message as "continue without the takeover". While the user
- * actually holds the screen the bot must keep waiting, so only resume when it does not.
+ * Treat a follow-up chat message as "continue without the takeover".
+ *
+ * A run parked on a takeover request has no live turn, so a steering message alone would sit
+ * unanswered until someone pressed a button on the card. While the user actually holds the
+ * screen the run instead stays parked and is continued as held: the executor gates the screen
+ * tools so the bot can answer in chat without taking the screen back from them.
  */
 async function resumeTakeoverForFollowUp(
   tx: Prisma.TransactionClient,
@@ -148,18 +152,17 @@ async function answerPendingAskWithSend(
   tx: Prisma.TransactionClient,
   input: { spaceId: string; threadId: string; userId: string; text: string | undefined },
   run: { id: string; status: string },
-): Promise<boolean> {
-  if (run.status !== "waiting_input") return false;
+): Promise<AnswerWithTextResult> {
+  if (run.status !== "waiting_input") return { outcome: "unanswerable" };
   const answer = input.text?.trim();
-  if (!answer) return false;
-  const answered = await answerWaitingRunWithTextInTransaction(tx, {
+  if (!answer) return { outcome: "unanswerable" };
+  return answerWaitingRunWithTextInTransaction(tx, {
     spaceId: input.spaceId,
     threadId: input.threadId,
     runId: run.id,
     answeredByUserId: input.userId,
     answer,
   });
-  return Boolean(answered);
 }
 
 async function enqueueRunsNeedingContinue(
@@ -634,7 +637,7 @@ export async function sendThreadMessage(
           select: { id: true, taskId: true, status: true },
         });
         if (active) {
-          const answeredAsk = await answerPendingAskWithSend(
+          const asked = await answerPendingAskWithSend(
             tx,
             {
               spaceId: actor.spaceId,
@@ -644,8 +647,14 @@ export async function sendThreadMessage(
             },
             active,
           );
+          const answeredAsk = asked.outcome === "answered";
           // An answer travels on the run's own task, so it must not also steer mid-turn.
           if (!answeredAsk) {
+            if (asked.outcome === "needs_card") {
+              // Only the approval or credential card can answer this one: say so instead of
+              // parking the message on a run that will never claim it.
+              throw new ORPCError("CONFLICT", { message: "Answer the pending ask first." });
+            }
             await tx.steeringMessage.create({
               data: {
                 messageId: message.id,
@@ -761,7 +770,7 @@ export async function sendThreadMessage(
       for (const botId of targetBotIds) {
         const active = activeByBotId.get(botId);
         if (active) {
-          const answeredAsk = await answerPendingAskWithSend(
+          const asked = await answerPendingAskWithSend(
             tx,
             {
               spaceId: actor.spaceId,
@@ -771,7 +780,11 @@ export async function sendThreadMessage(
             },
             active,
           );
+          const answeredAsk = asked.outcome === "answered";
           if (!answeredAsk) {
+            if (asked.outcome === "needs_card") {
+              throw new ORPCError("CONFLICT", { message: "Answer the pending ask first." });
+            }
             await tx.steeringMessage.create({
               data: { messageId: message.id, botId, userId: actor.userId, runId: active.id },
             });
