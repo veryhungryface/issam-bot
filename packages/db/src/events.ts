@@ -772,6 +772,14 @@ export async function resolveBrowserLogin(
  * credential, must come from the sheet that says what is being granted - never from a line of
  * chat that happens to read "yes". The caller falls back to steering when this returns null.
  */
+export type AnswerWithTextResult =
+  /** The ask is resolved and the run is queued again. */
+  | { outcome: "answered"; threadId: string; seq: number }
+  /** Only the card can answer this one (approval, credential): say so, do not park it. */
+  | { outcome: "needs_card" }
+  /** Nothing to answer here - no pending ask, no text, or another writer won the race. */
+  | { outcome: "unanswerable" };
+
 export async function answerWaitingRunWithTextInTransaction(
   tx: Prisma.TransactionClient,
   input: {
@@ -781,9 +789,9 @@ export async function answerWaitingRunWithTextInTransaction(
     answeredByUserId: string;
     answer: string;
   },
-): Promise<{ threadId: string; seq: number } | null> {
+): Promise<AnswerWithTextResult> {
   const answer = input.answer.trim();
-  if (!answer) return null;
+  if (!answer) return { outcome: "unanswerable" };
   const run = await tx.run.findFirst({
     where: {
       id: input.runId,
@@ -793,7 +801,7 @@ export async function answerWaitingRunWithTextInTransaction(
     },
     select: { botId: true, checkpoint: true },
   });
-  if (!run) return null;
+  if (!run) return { outcome: "unanswerable" };
 
   // The ask is normally the run's last bot message, but a progress update can follow it.
   const candidates = await tx.message.findMany({
@@ -813,9 +821,11 @@ export async function answerWaitingRunWithTextInTransaction(
       break;
     }
   }
-  if (!found || found.pendingAsk.kind !== "ask") return null;
+  if (!found || found.pendingAsk.kind !== "ask") return { outcome: "unanswerable" };
   const pendingAsk = found.pendingAsk;
-  if (isApprovalAskBlock(pendingAsk) || isSecretAskBlock(pendingAsk)) return null;
+  if (isApprovalAskBlock(pendingAsk) || isSecretAskBlock(pendingAsk)) {
+    return { outcome: "needs_card" };
+  }
 
   // A reply that names one of the offered choices means that choice; anything else is a
   // custom answer, which is the whole point of typing instead of tapping.
@@ -830,7 +840,7 @@ export async function answerWaitingRunWithTextInTransaction(
     // Matches the tapped-choice path: the checkpoint only carried the offered labels.
     data: { status: "queued", ...(selectedChoice ? { checkpoint: null } : {}) },
   });
-  if (queued.count !== 1) return null;
+  if (queued.count !== 1) return { outcome: "unanswerable" };
   const task = await tx.task.updateMany({
     where: { runs: { some: { id: input.runId } } },
     data: {
@@ -853,7 +863,7 @@ export async function answerWaitingRunWithTextInTransaction(
     runId: input.runId,
     payload: { messageId: found.messageId, role: "bot", blocks },
   });
-  return { threadId: updated.threadId, seq: updated.seq };
+  return { outcome: "answered", threadId: updated.threadId, seq: updated.seq };
 }
 
 export async function pauseRunForInput(

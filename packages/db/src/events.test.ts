@@ -1973,7 +1973,10 @@ describe("answerWaitingRunWithTextInTransaction", () => {
   it("answers an open question with what the user typed", async () => {
     const tx = transaction({ blocks: [{ kind: "ask", text: "Which city?", status: "pending" }] });
 
-    await expect(answer(tx, "  Busan  ")).resolves.toMatchObject({ threadId: "thread-1" });
+    await expect(answer(tx, "  Busan  ")).resolves.toMatchObject({
+      outcome: "answered",
+      threadId: "thread-1",
+    });
     expect(tx.task.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { prompt: "Busan" } }),
     );
@@ -2002,7 +2005,7 @@ describe("answerWaitingRunWithTextInTransaction", () => {
       ],
     });
 
-    await expect(answer(tx, "paris")).resolves.toMatchObject({ threadId: "thread-1" });
+    await expect(answer(tx, "paris")).resolves.toMatchObject({ outcome: "answered" });
     expect(tx.task.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { prompt: "Selected choice choice-2: Paris" } }),
     );
@@ -2023,7 +2026,7 @@ describe("answerWaitingRunWithTextInTransaction", () => {
       ],
     });
 
-    await expect(answer(tx, "Jeju, please")).resolves.toMatchObject({ threadId: "thread-1" });
+    await expect(answer(tx, "Jeju, please")).resolves.toMatchObject({ outcome: "answered" });
     expect(tx.task.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { prompt: "Jeju, please" } }),
     );
@@ -2044,7 +2047,7 @@ describe("answerWaitingRunWithTextInTransaction", () => {
         },
       ],
     });
-    await expect(answer(approval, "allow")).resolves.toBeNull();
+    await expect(answer(approval, "allow")).resolves.toEqual({ outcome: "needs_card" });
     expect(approval.run.updateMany).not.toHaveBeenCalled();
 
     const secret = transaction({
@@ -2053,12 +2056,20 @@ describe("answerWaitingRunWithTextInTransaction", () => {
           kind: "ask",
           text: "Paste the API key",
           status: "pending",
-          secret: true,
-          credential: { name: "example_api", origin: "https://api.example.test" },
+          // A secret ask is marked by input, not by a "secret" flag: with the wrong key
+          // this fixture was a plain ask and proved nothing.
+          input: "secret",
+          credential: {
+            name: "example_api",
+            origin: "https://api.example.test",
+            auth: { type: "bearer" },
+          },
         },
       ],
     });
-    await expect(answer(secret, "sk-live-not-a-real-key")).resolves.toBeNull();
+    await expect(answer(secret, "sk-live-not-a-real-key")).resolves.toEqual({
+      outcome: "needs_card",
+    });
     expect(secret.run.updateMany).not.toHaveBeenCalled();
     expect(secret.task.updateMany).not.toHaveBeenCalled();
   });
@@ -2067,19 +2078,19 @@ describe("answerWaitingRunWithTextInTransaction", () => {
     const answered = transaction({
       blocks: [{ kind: "ask", text: "Which city?", status: "answered", answer: "Paris" }],
     });
-    await expect(answer(answered, "Busan")).resolves.toBeNull();
+    await expect(answer(answered, "Busan")).resolves.toEqual({ outcome: "unanswerable" });
     expect(answered.run.updateMany).not.toHaveBeenCalled();
 
     const blank = transaction({
       blocks: [{ kind: "ask", text: "Which city?", status: "pending" }],
     });
-    await expect(answer(blank, "   ")).resolves.toBeNull();
+    await expect(answer(blank, "   ")).resolves.toEqual({ outcome: "unanswerable" });
 
     const raced = transaction({
       blocks: [{ kind: "ask", text: "Which city?", status: "pending" }],
       queued: 0,
     });
-    await expect(answer(raced, "Busan")).resolves.toBeNull();
+    await expect(answer(raced, "Busan")).resolves.toEqual({ outcome: "unanswerable" });
     expect(raced.task.updateMany).not.toHaveBeenCalled();
   });
 });

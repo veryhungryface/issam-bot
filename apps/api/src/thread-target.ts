@@ -16,6 +16,7 @@ import {
   runFailureError,
 } from "@rakazo/core";
 import {
+  type AnswerWithTextResult,
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
   createGroupRepos,
@@ -58,8 +59,6 @@ export type ThreadTarget =
 
 const THREAD_MESSAGE_PAGE_SIZE = 100;
 const RUNS_NEEDING_CONTINUE = new Set(["queued", "waiting_takeover"]);
-
-const STEERABLE_RUN_STATUSES = new Set(["queued", "leased", "running", "waiting_takeover"]);
 
 type MentionTargetInput = string | { kind: "bot" | "group" | "routine" | "connector"; id: string };
 
@@ -153,18 +152,17 @@ async function answerPendingAskWithSend(
   tx: Prisma.TransactionClient,
   input: { spaceId: string; threadId: string; userId: string; text: string | undefined },
   run: { id: string; status: string },
-): Promise<boolean> {
-  if (run.status !== "waiting_input") return false;
+): Promise<AnswerWithTextResult> {
+  if (run.status !== "waiting_input") return { outcome: "unanswerable" };
   const answer = input.text?.trim();
-  if (!answer) return false;
-  const answered = await answerWaitingRunWithTextInTransaction(tx, {
+  if (!answer) return { outcome: "unanswerable" };
+  return answerWaitingRunWithTextInTransaction(tx, {
     spaceId: input.spaceId,
     threadId: input.threadId,
     runId: run.id,
     answeredByUserId: input.userId,
     answer,
   });
-  return Boolean(answered);
 }
 
 async function enqueueRunsNeedingContinue(
@@ -639,7 +637,7 @@ export async function sendThreadMessage(
           select: { id: true, taskId: true, status: true },
         });
         if (active) {
-          const answeredAsk = await answerPendingAskWithSend(
+          const asked = await answerPendingAskWithSend(
             tx,
             {
               spaceId: actor.spaceId,
@@ -649,10 +647,11 @@ export async function sendThreadMessage(
             },
             active,
           );
+          const answeredAsk = asked.outcome === "answered";
           // An answer travels on the run's own task, so it must not also steer mid-turn.
           if (!answeredAsk) {
-            if (!STEERABLE_RUN_STATUSES.has(active.status)) {
-              // An approval or credential card is all that is left here: say so instead of
+            if (asked.outcome === "needs_card") {
+              // Only the approval or credential card can answer this one: say so instead of
               // parking the message on a run that will never claim it.
               throw new ORPCError("CONFLICT", { message: "Answer the pending ask first." });
             }
@@ -771,7 +770,7 @@ export async function sendThreadMessage(
       for (const botId of targetBotIds) {
         const active = activeByBotId.get(botId);
         if (active) {
-          const answeredAsk = await answerPendingAskWithSend(
+          const asked = await answerPendingAskWithSend(
             tx,
             {
               spaceId: actor.spaceId,
@@ -781,8 +780,9 @@ export async function sendThreadMessage(
             },
             active,
           );
+          const answeredAsk = asked.outcome === "answered";
           if (!answeredAsk) {
-            if (!STEERABLE_RUN_STATUSES.has(active.status)) {
+            if (asked.outcome === "needs_card") {
               throw new ORPCError("CONFLICT", { message: "Answer the pending ask first." });
             }
             await tx.steeringMessage.create({
