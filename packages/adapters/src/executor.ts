@@ -81,6 +81,7 @@ import {
   findDefaultModelCredential,
   findModelCredential,
   InvalidSpaceNameError,
+  isTooManyDatabaseConnections,
   loadRunHistoryMessages,
   type McpServer,
   type Prisma,
@@ -4184,11 +4185,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
       } catch (setupError) {
         const computerBusy = setupError instanceof ComputerBusyError;
+        // A database at capacity is contention, not a broken run: it clears on its own,
+        // so wait and retry like a busy computer instead of burning a setup failure.
+        const databaseBusy = isTooManyDatabaseConnections(setupError);
         const technicalMessage = redactSecrets(
           setupError instanceof Error ? setupError.message : String(setupError),
           runSecrets,
         );
-        if (!computerBusy) {
+        if (!computerBusy && !databaseBusy) {
           // undici collapses every network failure to "fetch failed"; the cause names the
           // host and errno, which is the only part worth paging over.
           const causeMessage =
@@ -4261,7 +4265,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             where: { id: attempt.id },
             data: {
               status: "setup_failed",
-              error: "Computer is busy; retrying",
+              error: computerBusy ? "Computer is busy; retrying" : "Database is busy; retrying",
               finishedAt: new Date(),
             },
           });
