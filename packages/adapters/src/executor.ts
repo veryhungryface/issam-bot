@@ -81,6 +81,7 @@ import {
   findDefaultModelCredential,
   findModelCredential,
   InvalidSpaceNameError,
+  isTooManyDatabaseConnections,
   loadRunHistoryMessages,
   type McpServer,
   type Prisma,
@@ -599,6 +600,8 @@ export interface ExecutorDeps {
   secretHttp?: RemoteTransportDependencies;
   /** Remote cloud coding agents. Null/omit means tools stay uninjected. */
   cloudAgent?: CloudAgentConnection | null;
+  /** Aborted when createApp stop() begins so in-flight continueRun boot waits exit promptly. */
+  shutdownSignal?: AbortSignal;
 }
 
 export async function deferFutureRoutine(
@@ -997,6 +1000,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let retainComputerLease = false;
       let screenRelease: { computer: ComputerRef; context: AdapterContext } | undefined;
       let runAbortController: AbortController | null = null;
+      let detachShutdown: (() => void) | undefined;
       const heartbeat = setInterval(() => {
         void Promise.all([
           renewRunLease(deps, runId, workerId, fence),
@@ -1080,6 +1084,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : null;
         runAbortController = new AbortController();
         if (!leaseValid) runAbortController.abort();
+        if (deps.shutdownSignal?.aborted) runAbortController.abort(deps.shutdownSignal.reason);
+        const onShutdown = () => runAbortController?.abort(deps.shutdownSignal?.reason);
+        deps.shutdownSignal?.addEventListener("abort", onShutdown);
+        detachShutdown = () => deps.shutdownSignal?.removeEventListener("abort", onShutdown);
         const composioRows = storedConnections.filter(
           (connection) => connection.connectorId === "composio",
         );
@@ -4252,11 +4260,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
       } catch (setupError) {
         const computerBusy = setupError instanceof ComputerBusyError;
+        // A database at capacity is contention, not a broken run: it clears on its own,
+        // so wait and retry like a busy computer instead of burning a setup failure.
+        const databaseBusy = isTooManyDatabaseConnections(setupError);
         const technicalMessage = redactSecrets(
           setupError instanceof Error ? setupError.message : String(setupError),
           runSecrets,
         );
-        if (!computerBusy) {
+        if (!computerBusy && !databaseBusy) {
           // undici collapses every network failure to "fetch failed"; the cause names the
           // host and errno, which is the only part worth paging over.
           const causeMessage =
@@ -4334,7 +4345,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             where: { id: attempt.id },
             data: {
               status: "setup_failed",
-              error: "Computer is busy; retrying",
+              error: computerBusy ? "Computer is busy; retrying" : "Database is busy; retrying",
               finishedAt: new Date(),
             },
           });
@@ -4345,6 +4356,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return;
         }
       } finally {
+        detachShutdown?.();
         clearInterval(heartbeat);
         if (!retainComputerLease) {
           if (screenRelease) {
