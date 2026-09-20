@@ -73,7 +73,11 @@ import {
   truncatedPlainText,
   userTurnBlocksForRun,
 } from "@rakazo/core";
-import { approvalEffectKey } from "@rakazo/core/node/approval-effect-key";
+import {
+  approvalEffectKey,
+  stableJsonValue,
+  toolEffectIdempotencyKey,
+} from "@rakazo/core/node/approval-effect-key";
 import {
   appendEventInTransaction,
   createSpaceForMember,
@@ -1792,11 +1796,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             needsApprovalEarly ||
             requiresApprovalByDefault
               ? approvalEffectKey(runId, replayEffectToolName, args)
-              : executionId;
+              : toolEffectIdempotencyKey(runId, replayEffectToolName, executionId, args);
           // Connector read-only hints must not bypass approval, review, or replay decisions.
           const applied = READ_ONLY_AGENT_TOOLS.has(name)
             ? undefined
-            : await recordEffect(deps, run, replayEffectToolName, effectKey, effectRequest);
+            : await recordEffect(
+                deps,
+                run,
+                replayEffectToolName,
+                effectKey,
+                effectRequest,
+                executionId,
+              );
 
           const runAutoReview = async () => {
             if (!checker) return;
@@ -4619,11 +4630,12 @@ async function recordEffect(
   deps: ExecutorDeps,
   run: { id: string; spaceId: string; threadId: string; botId: string },
   kind: string,
-  executionId: string,
+  idempotencyKey: string,
   request: unknown,
+  legacyIdempotencyKey?: string,
 ) {
   const existing = await deps.prisma.externalEffect.findUnique({
-    where: { idempotencyKey: executionId },
+    where: { idempotencyKey },
   });
   if (existing) {
     await deps.events.append({
@@ -4632,16 +4644,41 @@ async function recordEffect(
       botId: run.botId,
       type: "effect.reconciled",
       runId: run.id,
-      payload: { executionId, kind },
+      payload: { executionId: idempotencyKey, kind },
     });
     return { duplicate: true, effect: existing };
   }
+
+  // Pre-fix rows used bare provider tool-call ids. Only reuse them for the same
+  // run, tool, and request so a reused provider id cannot attach to a different mutation.
+  if (legacyIdempotencyKey && legacyIdempotencyKey !== idempotencyKey) {
+    const legacy = await deps.prisma.externalEffect.findUnique({
+      where: { idempotencyKey: legacyIdempotencyKey },
+    });
+    if (
+      legacy &&
+      legacy.runId === run.id &&
+      legacy.kind === kind &&
+      stableJsonValue(legacy.request) === stableJsonValue(request)
+    ) {
+      await deps.events.append({
+        spaceId: run.spaceId,
+        threadId: run.threadId,
+        botId: run.botId,
+        type: "effect.reconciled",
+        runId: run.id,
+        payload: { executionId: legacyIdempotencyKey, kind, legacy: true },
+      });
+      return { duplicate: true, effect: legacy };
+    }
+  }
+
   const effect = await deps.prisma.externalEffect.create({
     data: {
       spaceId: run.spaceId,
       runId: run.id,
       kind,
-      idempotencyKey: executionId,
+      idempotencyKey,
       status: "intended",
       request: request as never,
     },
