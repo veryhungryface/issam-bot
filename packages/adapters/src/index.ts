@@ -56,6 +56,7 @@ export * from "./graphql-connectors.js";
 export * from "./group-handoff.js";
 export * from "./home.js";
 export * from "./host-aware-sandbox.js";
+export * from "./impersonated-fetch.js";
 export * from "./installed-connectors.js";
 export * from "./job-reconciler.js";
 export * from "./keyless-http-web.js";

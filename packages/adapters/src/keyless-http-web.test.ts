@@ -70,6 +70,68 @@ describe("keyless HTTP web provider", () => {
     expect(result.text.length).toBeLessThanOrEqual(120 + "\n\n[Content truncated]".length);
   });
 
+  it("retries a walled page with an impersonated fetch", async () => {
+    const asked: string[] = [];
+    const provider = new KeylessHttpWebProvider({
+      fetch: async () => new Response("denied", { status: 403 }),
+      resolveHostname: publicResolver,
+      impersonatedFetch: async (url) => {
+        asked.push(url);
+        return {
+          url,
+          body: "<html><title>Store</title><body><article><p>19,900원</p></article></body></html>",
+          contentType: "text/html",
+        };
+      },
+    });
+    const result = await provider.fetch({ url: "https://shop.test/item" }, ctx);
+    expect(asked).toEqual(["https://shop.test/item"]);
+    expect(result.text).toContain("19,900원");
+  });
+
+  it("retries a 200 that carries a bot wall's challenge page", async () => {
+    const provider = new KeylessHttpWebProvider({
+      fetch: async () =>
+        new Response('<html><body><div id="sec-if-cpt-container"></div></body></html>', {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+      resolveHostname: publicResolver,
+      impersonatedFetch: async (url) => ({
+        url,
+        body: "<html><title>Store</title><body><article><p>real content</p></article></body></html>",
+        contentType: "text/html",
+      }),
+    });
+    const result = await provider.fetch({ url: "https://shop.test/item" }, ctx);
+    expect(result.text).toContain("real content");
+  });
+
+  it("does not escalate an ordinary failure and keeps the first error when it cannot help", async () => {
+    let escalations = 0;
+    const escalate = async (url: string) => {
+      escalations += 1;
+      return { url, body: "<title>Access Denied</title>", contentType: "text/html" };
+    };
+    const notFound = new KeylessHttpWebProvider({
+      fetch: async () => new Response("missing", { status: 404 }),
+      resolveHostname: publicResolver,
+      impersonatedFetch: escalate,
+    });
+    await expect(notFound.fetch({ url: "https://shop.test/gone" }, ctx)).rejects.toThrow(
+      "HTTP 404",
+    );
+    expect(escalations).toBe(0);
+
+    const walled = new KeylessHttpWebProvider({
+      fetch: async () => new Response("denied", { status: 403 }),
+      resolveHostname: publicResolver,
+      impersonatedFetch: escalate,
+    });
+    await expect(walled.fetch({ url: "https://shop.test/item" }, ctx)).rejects.toThrow("HTTP 403");
+    expect(escalations).toBe(1);
+  });
+
   it("falls back to HTML strip when Readability finds nothing", () => {
     const extracted = extractReadableText(
       "<html><title>Plain</title><body><div>just text here</div></body></html>",
