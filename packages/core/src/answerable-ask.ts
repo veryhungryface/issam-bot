@@ -29,5 +29,23 @@ export function selectedAskActionLabel(
   answer: string,
   actions?: readonly { id: string; label: string }[],
 ): string {
-  return actions?.find((action) => action.id === answer)?.label ?? answer;
+  return resolveAskChoice(answer, actions)?.label ?? answer;
+}
+
+/**
+ * Match an answer to one of the offered choices, by id or by the label the user was shown.
+ * Someone who types "네" instead of tapping the "네" button means that choice; anything
+ * else is a custom reply, which the caller passes through as free text.
+ */
+export function resolveAskChoice(
+  answer: string,
+  actions?: readonly { id: string; label: string }[],
+): { id: string; label: string } | undefined {
+  if (!actions?.length) return undefined;
+  const trimmed = answer.trim();
+  if (!trimmed) return undefined;
+  const byId = actions.find((action) => action.id === trimmed);
+  if (byId) return byId;
+  const lower = trimmed.toLowerCase();
+  return actions.find((action) => action.label.trim().toLowerCase() === lower);
 }
