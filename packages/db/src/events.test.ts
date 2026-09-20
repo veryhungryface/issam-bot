@@ -1,8 +1,9 @@
 import type { RealtimeFanout } from "@rakazo/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
-import type { PrismaClient } from "./client.js";
+import type { Prisma, PrismaClient } from "./client.js";
 import {
   answerRunInput,
+  answerWaitingRunWithTextInTransaction,
   appendEvent,
   claimSteering,
   clearThread,
@@ -1855,5 +1856,163 @@ describe("appendEvent", () => {
     // Postgres rejects unpaired surrogates in json; the sanitized form must not contain any.
     expect(persisted.delta).not.toMatch(/[\uD800-\uDFFF]/);
     expect(() => JSON.stringify(persisted)).not.toThrow();
+  });
+});
+
+describe("answerWaitingRunWithTextInTransaction", () => {
+  function transaction(options: {
+    blocks: unknown[];
+    checkpoint?: string | null;
+    queued?: number;
+  }) {
+    return {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      run: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ botId: "bot-1", checkpoint: options.checkpoint ?? null }),
+        updateMany: vi.fn().mockResolvedValue({ count: options.queued ?? 1 }),
+        findUnique: vi.fn().mockResolvedValue({
+          status: "queued",
+          createdAt: new Date("2026-08-16T12:00:00.000Z"),
+          threadId: "thread-1",
+        }),
+      },
+      message: {
+        findMany: vi.fn().mockResolvedValue([{ id: "message-1", blocks: options.blocks }]),
+        update: vi.fn().mockResolvedValue({ id: "message-1" }),
+      },
+      task: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 10 }) },
+      event: {
+        create: vi.fn(async ({ data }: { data: { seq: number; type: string } }) => ({
+          ...event(data.seq),
+          type: data.type,
+        })),
+        findFirst: vi.fn().mockResolvedValue(null),
+      },
+    };
+  }
+
+  const answer = (tx: ReturnType<typeof transaction>, text: string) =>
+    answerWaitingRunWithTextInTransaction(tx as unknown as Prisma.TransactionClient, {
+      spaceId: "workspace-1",
+      threadId: "thread-1",
+      runId: "run-1",
+      answeredByUserId: "user-1",
+      answer: text,
+    });
+
+  it("answers an open question with what the user typed", async () => {
+    const tx = transaction({ blocks: [{ kind: "ask", text: "Which city?", status: "pending" }] });
+
+    await expect(answer(tx, "  Busan  ")).resolves.toMatchObject({ threadId: "thread-1" });
+    expect(tx.task.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { prompt: "Busan" } }),
+    );
+    // A plain ask keeps its checkpoint; only a resolved choice clears it.
+    expect(tx.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "queued" } }),
+    );
+    expect(tx.message.update).toHaveBeenCalledWith({
+      where: { id: "message-1" },
+      data: { blocks: [{ kind: "ask", text: "Which city?", status: "answered", answer: "Busan" }] },
+    });
+  });
+
+  it("reads a reply that names an offered choice as that choice", async () => {
+    const tx = transaction({
+      blocks: [
+        {
+          kind: "ask",
+          text: "Which city?",
+          status: "pending",
+          actions: [
+            { id: "choice-1", label: "Berlin" },
+            { id: "choice-2", label: "Paris" },
+          ],
+        },
+      ],
+    });
+
+    await expect(answer(tx, "paris")).resolves.toMatchObject({ threadId: "thread-1" });
+    expect(tx.task.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { prompt: "Selected choice choice-2: Paris" } }),
+    );
+    expect(tx.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "queued", checkpoint: null } }),
+    );
+  });
+
+  it("passes a reply none of the choices match through as a custom answer", async () => {
+    const tx = transaction({
+      blocks: [
+        {
+          kind: "ask",
+          text: "Which city?",
+          status: "pending",
+          actions: [{ id: "choice-1", label: "Berlin" }],
+        },
+      ],
+    });
+
+    await expect(answer(tx, "Jeju, please")).resolves.toMatchObject({ threadId: "thread-1" });
+    expect(tx.task.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { prompt: "Jeju, please" } }),
+    );
+  });
+
+  it("never lets chat stand in for an approval or a credential", async () => {
+    const approval = transaction({
+      blocks: [
+        {
+          kind: "ask",
+          text: "Send the email?",
+          status: "pending",
+          approvalEffectId: "effect-1",
+          actions: [
+            { id: "allow", label: "Allow" },
+            { id: "deny", label: "Deny" },
+          ],
+        },
+      ],
+    });
+    await expect(answer(approval, "allow")).resolves.toBeNull();
+    expect(approval.run.updateMany).not.toHaveBeenCalled();
+
+    const secret = transaction({
+      blocks: [
+        {
+          kind: "ask",
+          text: "Paste the API key",
+          status: "pending",
+          secret: true,
+          credential: { name: "example_api", origin: "https://api.example.test" },
+        },
+      ],
+    });
+    await expect(answer(secret, "sk-live-not-a-real-key")).resolves.toBeNull();
+    expect(secret.run.updateMany).not.toHaveBeenCalled();
+    expect(secret.task.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("returns null with nothing to answer, or when the run moved on", async () => {
+    const answered = transaction({
+      blocks: [{ kind: "ask", text: "Which city?", status: "answered", answer: "Paris" }],
+    });
+    await expect(answer(answered, "Busan")).resolves.toBeNull();
+    expect(answered.run.updateMany).not.toHaveBeenCalled();
+
+    const blank = transaction({
+      blocks: [{ kind: "ask", text: "Which city?", status: "pending" }],
+    });
+    await expect(answer(blank, "   ")).resolves.toBeNull();
+
+    const raced = transaction({
+      blocks: [{ kind: "ask", text: "Which city?", status: "pending" }],
+      queued: 0,
+    });
+    await expect(answer(raced, "Busan")).resolves.toBeNull();
+    expect(raced.task.updateMany).not.toHaveBeenCalled();
   });
 });

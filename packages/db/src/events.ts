@@ -10,6 +10,7 @@ import {
   isApprovalAskBlock,
   isSecretAskBlock,
   messagingChannelId,
+  resolveAskChoice,
   sanitizeJsonValue,
 } from "@rakazo/core";
 import { getLogger } from "@rakazo/logging";
@@ -758,6 +759,101 @@ export async function resolveBrowserLogin(
   if (!committed) return false;
   await notifyRealtime(realtime, committed.threadId, committed.seq);
   return true;
+}
+
+/**
+ * Answer a run's pending question with an ordinary chat message.
+ *
+ * Typing the answer is how people answer a question, but a send while the run waits became a
+ * steering row on a run with no live turn: the reply sat there and the bot looked dead, the
+ * same dead end takeover parking had. A send now resolves the ask and queues the run.
+ *
+ * Approval and secret asks are excluded and keep their card. Consent to an action, and a
+ * credential, must come from the sheet that says what is being granted - never from a line of
+ * chat that happens to read "yes". The caller falls back to steering when this returns null.
+ */
+export async function answerWaitingRunWithTextInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    spaceId: string;
+    threadId: string;
+    runId: string;
+    answeredByUserId: string;
+    answer: string;
+  },
+): Promise<{ threadId: string; seq: number } | null> {
+  const answer = input.answer.trim();
+  if (!answer) return null;
+  const run = await tx.run.findFirst({
+    where: {
+      id: input.runId,
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      status: "waiting_input",
+    },
+    select: { botId: true, checkpoint: true },
+  });
+  if (!run) return null;
+
+  // The ask is normally the run's last bot message, but a progress update can follow it.
+  const candidates = await tx.message.findMany({
+    where: { threadId: input.threadId, runId: input.runId, role: "bot" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 10,
+  });
+  let found: { messageId: string; blocks: MessageBlock[]; pendingAsk: MessageBlock } | undefined;
+  for (const message of candidates) {
+    const parsed = MessageBlockSchema.array().safeParse(message.blocks);
+    if (!parsed.success) continue;
+    const pendingAsk = parsed.data.find(
+      (block) => block.kind === "ask" && block.status !== "answered",
+    );
+    if (pendingAsk) {
+      found = { messageId: message.id, blocks: parsed.data, pendingAsk };
+      break;
+    }
+  }
+  if (!found || found.pendingAsk.kind !== "ask") return null;
+  const pendingAsk = found.pendingAsk;
+  if (isApprovalAskBlock(pendingAsk) || isSecretAskBlock(pendingAsk)) return null;
+
+  // A reply that names one of the offered choices means that choice; anything else is a
+  // custom answer, which is the whole point of typing instead of tapping.
+  const selectedChoice = resolveAskChoice(answer, pendingAsk.actions);
+  const queued = await tx.run.updateMany({
+    where: {
+      id: input.runId,
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      status: "waiting_input",
+    },
+    // Matches the tapped-choice path: the checkpoint only carried the offered labels.
+    data: { status: "queued", ...(selectedChoice ? { checkpoint: null } : {}) },
+  });
+  if (queued.count !== 1) return null;
+  const task = await tx.task.updateMany({
+    where: { runs: { some: { id: input.runId } } },
+    data: {
+      prompt: selectedChoice
+        ? `Selected choice ${selectedChoice.id}: ${resumeChoiceLabel(selectedChoice, run.checkpoint)}`
+        : answer,
+    },
+  });
+  if (task.count !== 1) throw new Error("Run task was not available to answer");
+
+  const blocks = found.blocks.map((block) =>
+    block === pendingAsk ? { ...block, status: "answered" as const, answer } : block,
+  );
+  await tx.message.update({ where: { id: found.messageId }, data: { blocks } });
+  const updated = await appendEventInTransaction(tx, {
+    spaceId: input.spaceId,
+    threadId: input.threadId,
+    botId: run.botId,
+    type: "thread.message.updated",
+    runId: input.runId,
+    payload: { messageId: found.messageId, role: "bot", blocks },
+  });
+  return { threadId: updated.threadId, seq: updated.seq };
 }
 
 export async function pauseRunForInput(

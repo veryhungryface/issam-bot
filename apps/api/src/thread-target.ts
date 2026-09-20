@@ -15,6 +15,7 @@ import {
   runFailureError,
 } from "@rakazo/core";
 import {
+  answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
   createGroupRepos,
   createRepos,
@@ -133,6 +134,32 @@ async function resumeTakeoverForFollowUp(
     data: { status: "queued", checkpoint: "takeover-skipped" },
   });
   return resumed.count === 1;
+}
+
+/**
+ * A message sent while the run waits on a question is that question's answer.
+ *
+ * Without this the send became a steering row on a run with no live turn: the reply sat
+ * unclaimed and the bot went quiet, the same dead end takeover parking had. Approval and
+ * secret asks refuse this path inside the transaction and keep their card, so consent and
+ * credentials still come from the sheet that says what is being granted.
+ */
+async function answerPendingAskWithSend(
+  tx: Prisma.TransactionClient,
+  input: { spaceId: string; threadId: string; userId: string; text: string | undefined },
+  run: { id: string; status: string },
+): Promise<boolean> {
+  if (run.status !== "waiting_input") return false;
+  const answer = input.text?.trim();
+  if (!answer) return false;
+  const answered = await answerWaitingRunWithTextInTransaction(tx, {
+    spaceId: input.spaceId,
+    threadId: input.threadId,
+    runId: run.id,
+    answeredByUserId: input.userId,
+    answer,
+  });
+  return Boolean(answered);
 }
 
 async function enqueueRunsNeedingContinue(
@@ -607,17 +634,31 @@ export async function sendThreadMessage(
           select: { id: true, taskId: true, status: true },
         });
         if (active) {
-          await tx.steeringMessage.create({
-            data: {
-              messageId: message.id,
-              botId: target.botId,
+          const answeredAsk = await answerPendingAskWithSend(
+            tx,
+            {
+              spaceId: actor.spaceId,
+              threadId: target.threadId,
               userId: actor.userId,
-              runId: active.id,
+              text: input.text,
             },
-          });
+            active,
+          );
+          // An answer travels on the run's own task, so it must not also steer mid-turn.
+          if (!answeredAsk) {
+            await tx.steeringMessage.create({
+              data: {
+                messageId: message.id,
+                botId: target.botId,
+                userId: actor.userId,
+                runId: active.id,
+              },
+            });
+          }
           await tx.message.update({ where: { id: message.id }, data: { runId: active.id } });
-          const resumedFromTakeover = await resumeTakeoverForFollowUp(tx, target.botId, active);
-          const steeredRun = resumedFromTakeover ? { ...active, status: "queued" } : active;
+          const resumed =
+            answeredAsk || (await resumeTakeoverForFollowUp(tx, target.botId, active));
+          const steeredRun = resumed ? { ...active, status: "queued" } : active;
           const event = await appendEventInTransaction(tx, {
             spaceId: actor.spaceId,
             threadId: target.threadId,
@@ -720,11 +761,23 @@ export async function sendThreadMessage(
       for (const botId of targetBotIds) {
         const active = activeByBotId.get(botId);
         if (active) {
-          await tx.steeringMessage.create({
-            data: { messageId: message.id, botId, userId: actor.userId, runId: active.id },
-          });
-          const resumedFromTakeover = await resumeTakeoverForFollowUp(tx, botId, active);
-          runs.push(resumedFromTakeover ? { ...active, status: "queued" } : active);
+          const answeredAsk = await answerPendingAskWithSend(
+            tx,
+            {
+              spaceId: actor.spaceId,
+              threadId: target.threadId,
+              userId: actor.userId,
+              text: input.text,
+            },
+            active,
+          );
+          if (!answeredAsk) {
+            await tx.steeringMessage.create({
+              data: { messageId: message.id, botId, userId: actor.userId, runId: active.id },
+            });
+          }
+          const resumed = answeredAsk || (await resumeTakeoverForFollowUp(tx, botId, active));
+          runs.push(resumed ? { ...active, status: "queued" } : active);
           continue;
         }
         const task = await tx.task.create({

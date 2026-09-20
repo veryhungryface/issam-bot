@@ -554,6 +554,43 @@ describeJourneys("required product journeys", () => {
     expect(done.run?.status ?? "completed").not.toBe("waiting_takeover");
   });
 
+  it("4e: a typed reply answers the bot's question instead of parking the run", async () => {
+    const cookie = await signup(app, `ask-freetext-j-${stamp}@rakazo.test`, "Free text");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    await rpc(app, cookie, "threads/send", { botId: bot.id, text: "ask me which city to use" });
+    const waiting = await waitFor(
+      app,
+      cookie,
+      bot.id,
+      (snap) => snap.run?.status === "waiting_input",
+    );
+    const askMessage = waiting.messages.find((message) =>
+      message.blocks.some((block) => block.kind === "ask"),
+    );
+    expect(askMessage).toBeTruthy();
+
+    // The user types the answer rather than tapping the card.
+    await rpc(app, cookie, "threads/send", { botId: bot.id, text: "Busan" });
+
+    const done = await waitFor(
+      app,
+      cookie,
+      bot.id,
+      (snap) => !snap.run || ["completed", "failed", "cancelled"].includes(snap.run.status),
+    );
+    expect(done.run?.status ?? "completed").not.toBe("waiting_input");
+    const resolved = done.messages.find((message) => message.id === askMessage!.id);
+    expect(
+      resolved?.blocks.some((block) => block.kind === "ask" && block.status === "answered"),
+    ).toBe(true);
+  });
+
   it("4d: skipping takeover resumes without treating login as done", async () => {
     const cookie = await signup(app, `takeover-skip-j-${stamp}@rakazo.test`, "Skip Takeover");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
