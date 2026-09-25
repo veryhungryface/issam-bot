@@ -1,5 +1,6 @@
 import type {
   AdapterContext,
+  BrowserSnapshotNode,
   CommandRequest,
   ComputerAction,
   ComputerActionRequest,
@@ -7,6 +8,8 @@ import type {
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
+  PageBrowserCommand,
+  PageBrowserResult,
   PortableFile,
   ProcessEvent,
   SandboxProvider,
@@ -26,6 +29,13 @@ import {
 } from "./browserbase-client.js";
 import { ComputerSessionUnavailableError } from "./computer-lifecycle.js";
 import { boundedComputerActions, computerObservation } from "./computer-support.js";
+import {
+  formatElementLabel,
+  PAGE_ELEMENT_COLLECTOR,
+  type PageElement,
+  prepareElements,
+  refSelector,
+} from "./page-elements.js";
 
 const PROVIDER_REF_PREFIX = "browserbase:v1:";
 const LEGACY_CONTEXT_REF_PREFIX = "browserbase-context:";
@@ -352,6 +362,99 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     return {
       completed,
       ...(request.observe === false ? {} : { observation: await observeBox(box, context) }),
+    };
+  }
+
+  /**
+   * DOM-first page control on the same session observe/act use.
+   *
+   * A screenshot of this remote browser costs about 3.9s and ~1,300 vision tokens; the same
+   * decision is made from a table of visible elements collected in one round trip (~0.2s, no
+   * image). Anything this path cannot do - canvas, cross-origin frames, uploads - returns
+   * `fallback: "computer_act"` so the caller drops back to the screen it already has.
+   */
+  async pageBrowser(
+    computer: ComputerRef,
+    request: PageBrowserCommand,
+    context: AdapterContext,
+  ): Promise<PageBrowserResult> {
+    const box = await this.readyBox(computer, context);
+    if (box.userControlling) {
+      return { ok: false, fallback: "computer_act", error: "The user is holding the screen" };
+    }
+    const page = requiredPage(box);
+    throwIfAborted(context);
+    try {
+      if (request.command === "navigate") {
+        assertAllowedBrowserUrl(request.url);
+        await page.goto(request.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+        const snapshot = await this.collectPage(box, context);
+        return { ok: true, ...snapshot };
+      }
+      if (request.command === "snapshot") {
+        return { ok: true, ...(await this.collectPage(box, context)) };
+      }
+
+      let completed = 0;
+      for (const action of request.actions) {
+        const locator = page.locator(refSelector(action.ref));
+        throwIfAborted(context);
+        if (action.kind === "click") {
+          await locator.click({ timeout: 8_000 });
+        } else if (action.kind === "fill") {
+          await locator.fill(action.text, { timeout: 8_000 });
+        } else {
+          // `type` is the agent's "put these characters in": Korean composes correctly when
+          // the text is inserted rather than replayed key by key.
+          await locator.click({ timeout: 8_000 });
+          await page.keyboard.insertText(action.text);
+        }
+        completed += 1;
+      }
+      // Anything may have navigated the page; settle before reading it back.
+      await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => undefined);
+      const snapshot = await this.collectPage(box, context);
+      return { ok: true, completed, ...snapshot };
+    } catch (error) {
+      if (isUnavailableBrowserRuntime(box, error)) return this.invalidateRuntime(box, error);
+      throwIfAborted(context);
+      return {
+        ok: false,
+        completed: 0,
+        // A click may have landed before its response was lost; the caller must look before retrying.
+        uncertain: request.command === "act",
+        fallback: "computer_act",
+        error: errorMessage(error),
+      };
+    }
+  }
+
+  /** One evaluate: the elements a person could act on, already tagged for acting. */
+  private async collectPage(
+    box: BrowserbaseBox,
+    context: AdapterContext,
+  ): Promise<{ url: string; title: string; tree: string; elements: BrowserSnapshotNode[] }> {
+    const page = requiredPage(box);
+    const raw = (await page.evaluate(PAGE_ELEMENT_COLLECTOR)) as {
+      url: string;
+      title: string;
+      elements: PageElement[];
+    };
+    throwIfAborted(context);
+    const elements = prepareElements(raw.elements);
+    return {
+      url: raw.url,
+      title: raw.title,
+      tree:
+        elements.length > 0
+          ? elements.map((element) => `${element.ref}: ${formatElementLabel(element)}`).join("\n")
+          : "(no interactive elements in view)",
+      elements: elements.map((element) => ({
+        ref: element.ref,
+        role: element.role,
+        name: element.name,
+        ...(element.placeholder ? { value: element.placeholder } : {}),
+      })),
     };
   }
 
