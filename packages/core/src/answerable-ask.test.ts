@@ -21,6 +21,35 @@ describe("latestAnswerableAskMessageId", () => {
     ).toBe("ask-1");
   });
 
+  it("enables the sign-in sheet, which is not an ask block", () => {
+    // Shipped disabled: the card rendered, said "action needed", and accepted nothing.
+    expect(
+      latestAnswerableAskMessageId({
+        run: { id: "run-1", status: "waiting_input" },
+        messages: [
+          {
+            id: "login-1",
+            runId: "run-1",
+            blocks: [{ kind: "browser_login", status: "pending" }],
+          },
+        ],
+      }),
+    ).toBe("login-1");
+  });
+
+  it("leaves a resolved sign-in sheet alone", () => {
+    for (const status of ["filled", "cancelled"]) {
+      expect(
+        latestAnswerableAskMessageId({
+          run: { id: "run-1", status: "waiting_input" },
+          messages: [
+            { id: "login-1", runId: "run-1", blocks: [{ kind: "browser_login", status }] },
+          ],
+        }),
+      ).toBeNull();
+    }
+  });
+
   it("ignores answered prompts and prompts from non-waiting runs", () => {
     expect(
       latestAnswerableAskMessageId({

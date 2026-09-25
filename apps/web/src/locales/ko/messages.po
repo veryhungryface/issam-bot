@@ -3147,7 +3147,7 @@ msgstr "생각 깊이"
 
 #: src/pages/Shell.tsx:5991
 msgid "this bot"
-msgstr ""
+msgstr "이 봇"
 
 #: src/pages/Shell.tsx:3510
 msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."

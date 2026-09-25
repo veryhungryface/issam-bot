@@ -3327,6 +3327,7 @@ export function ShellPage() {
             setPeerConversation(peer);
           }}
           memberName={resolveTranscriptMemberName}
+          botName={active?.name}
           peerBot={resolveTranscriptBot}
           onRefresh={refreshActiveThread}
           onBotChanged={refreshBots}
@@ -4367,6 +4368,7 @@ const Transcript = memo(function Transcript({
   onJumpToMessage,
   onOpenPeerMessages,
   memberName,
+  botName,
   peerBot,
   onRefresh,
   onBotChanged,
@@ -4394,6 +4396,8 @@ const Transcript = memo(function Transcript({
   onJumpToMessage: (messageId: string) => void;
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   memberName?: (botId: string | undefined) => string | undefined;
+  /** The bot this thread belongs to, for cards a one-to-one chat cannot name otherwise. */
+  botName?: string;
   peerBot: (botId: string) => { color: string; status?: string } | undefined;
   onRefresh: () => Promise<void>;
   onBotChanged: () => Promise<void>;
@@ -4589,6 +4593,7 @@ const Transcript = memo(function Transcript({
                           : undefined
                     }
                     memberName={memberName}
+                    botName={botName}
                     peerBot={peerBot}
                     replyPreview={
                       message.replyToMessageId
@@ -5583,6 +5588,7 @@ const MessageView = memo(function MessageView({
   onOpenPeerMessages,
   speakerName,
   memberName,
+  botName,
   peerBot,
   replyPreview,
   replyToMessageId,
@@ -5605,6 +5611,8 @@ const MessageView = memo(function MessageView({
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   speakerName?: string;
   memberName?: (botId: string | undefined) => string | undefined;
+  /** The bot this thread belongs to; a one-to-one chat has no member list to look it up in. */
+  botName?: string;
   peerBot: (botId: string) => { color: string; status?: string } | undefined;
   replyPreview?: ThreadMessage;
   replyToMessageId?: string;
@@ -5988,7 +5996,7 @@ const MessageView = memo(function MessageView({
               key={i}
               block={block}
               botId={loginBotId}
-              botName={speakerName ?? memberName?.(message.botId) ?? t`this bot`}
+              botName={speakerName ?? memberName?.(message.botId) ?? botName ?? t`this bot`}
               runId={message.runId ?? undefined}
               messageId={message.id}
               canAnswer={canAnswer}
