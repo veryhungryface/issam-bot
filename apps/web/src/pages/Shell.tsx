@@ -1614,6 +1614,12 @@ export function ShellPage() {
     ["running", "queued", "leased"].includes(run.status),
   );
   const transcriptRunning = workingRuns.length > 0;
+  // A browser boot plus a first model call is half a minute of silence; say which one it is.
+  const workingPhase = !transcriptRunning
+    ? undefined
+    : computer?.state === "booting"
+      ? t`Opening the browser…`
+      : t`Thinking…`;
   const composerRunning = currentRuns.some((run) => isActive(run.status));
   const runError = threadRunError(activeSnapshot, dismissedRunErrorIds);
   const displayedRunError = !sendError && !dictationError ? runError : null;
@@ -3316,6 +3322,7 @@ export function ShellPage() {
           loadingOlder={loadingOlder}
           answerableAskMessageId={answerableAskMessageId}
           running={transcriptRunning}
+          workingPhase={workingPhase}
           workingBots={workingBots}
           onLoadOlder={loadOlder}
           onOpenBot={openBot}
@@ -4359,6 +4366,7 @@ const Transcript = memo(function Transcript({
   loadingOlder,
   answerableAskMessageId,
   running,
+  workingPhase,
   workingBots,
   onLoadOlder,
   onOpenBot,
@@ -4387,6 +4395,7 @@ const Transcript = memo(function Transcript({
   loadingOlder: boolean;
   answerableAskMessageId: string | null;
   running: boolean;
+  workingPhase?: string;
   workingBots: GroupAvatarMember[];
   onLoadOlder: () => void | Promise<void>;
   onOpenBot: (botId: string) => void;
@@ -4638,7 +4647,7 @@ const Transcript = memo(function Transcript({
                 block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
             ),
         ) ? (
-          <ActiveBotGlyph bots={workingBots} label={workingLabel} />
+          <ActiveBotGlyph bots={workingBots} label={workingLabel} detail={workingPhase} />
         ) : null}
       </div>
       <button

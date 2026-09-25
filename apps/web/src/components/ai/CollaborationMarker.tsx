@@ -33,10 +33,33 @@ export function CollaborationMarker({
   );
 }
 
-export function ActiveBotGlyph({ bots, label }: { bots: GroupAvatarMember[]; label: string }) {
+/**
+ * Shown while a turn is running and nothing has been said yet. `detail` names the phase the
+ * run is actually in: a bot that boots a browser and thinks for half a minute before its
+ * first word looks stuck without it.
+ */
+export function ActiveBotGlyph({
+  bots,
+  label,
+  detail,
+}: {
+  bots: GroupAvatarMember[];
+  label: string;
+  detail?: string;
+}) {
   return (
-    <div className="flex min-h-10 items-center px-1">
+    <div className="flex min-h-10 items-center gap-2.5 px-1">
       <LoadingState indicator={<GroupAvatar members={bots} size={28} />} label={label} />
+      {detail ? (
+        <span
+          data-testid="working-phase"
+          dir="auto"
+          className="text-[14px] text-muted-foreground"
+          style={{ animation: "rkPulse 1.8s ease-in-out infinite" }}
+        >
+          {detail}
+        </span>
+      ) : null}
     </div>
   );
 }
