@@ -56,7 +56,7 @@ export const NO_ELEMENT_CHOICE = "none";
  */
 export const PAGE_ELEMENT_COLLECTOR = `(() => {
   const SELECTOR = 'a[href], button, input, select, textarea, [role=button], [role=link], [role=tab], [role=checkbox], [role=combobox], [role=textbox], [contenteditable="true"]';
-  const clean = (value) => (value || "").replace(/\\s+/g, " ").replace(/[\\u0000-\\u001f]/g, "").trim();
+  const clean = (value) => (value || "").replace(/\\s+/g, " ").replace(/\\p{Cc}/gu, "").trim();
   const viewportHeight = window.innerHeight;
   const viewportWidth = window.innerWidth;
   const collected = [];
@@ -185,7 +185,7 @@ export function formatElementTable(snapshot: PageElementSnapshot): string {
 function truncate(value: string, max: number): string {
   const collapsed = value
     .replace(/\s+/g, " ")
-    .replace(/[\u0000-\u001f]/g, "")
+    .replace(/\p{Cc}/gu, "")
     .trim();
   if (collapsed.length <= max) return collapsed;
   return `${collapsed.slice(0, max - 1)}…`;

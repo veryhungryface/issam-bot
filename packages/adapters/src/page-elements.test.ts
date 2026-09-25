@@ -46,7 +46,7 @@ describe("prepareElements", () => {
       },
     ]);
     expect(element?.name.startsWith("구매 1천+ 동국제약 덴트릭스")).toBe(true);
-    expect(element?.name).not.toMatch(/[\u0000-\u001f]/);
+    expect(element?.name).not.toMatch(/\p{Cc}/u);
     expect(element?.name.length).toBeLessThanOrEqual(60);
   });
 
