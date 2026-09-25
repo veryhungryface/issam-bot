@@ -110,6 +110,39 @@ describeIntegration("browser sign-in fills the page without the model seeing val
     expect(saved.map((row) => row.origin)).toContain(ORIGIN);
   });
 
+  it("does not park the thread when the user types instead of using the sheet", async () => {
+    const sandbox = handles.sandbox as unknown as FakeSandboxProvider;
+    sandbox.pageOrigin = ORIGIN;
+    sandbox.filledLogins.length = 0;
+    const cookie = await signup(handles.app, `browser-login-typed-${stamp}@rakazo.test`, "Typed");
+    const bot = await rpc<{ id: string }>(handles.app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    await rpc(handles.app, cookie, "threads/send", {
+      botId: bot.id,
+      text: "sign in to the portal",
+    });
+    await waitForLoginSheet(handles.app, cookie, bot.id);
+
+    // The user ignores the sheet and types. The run must move, not sit in waiting_input.
+    await rpc(handles.app, cookie, "threads/send", { botId: bot.id, text: "skip the sign-in" });
+    await waitFor(async () => {
+      const snapshot = await rpc<{ run?: { status: string } | null }>(
+        handles.app,
+        cookie,
+        "threads/get",
+        { botId: bot.id },
+      );
+      expect(snapshot.run?.status).not.toBe("waiting_input");
+    });
+    // Nothing was typed into the page: the sheet is the only path for credentials.
+    expect(sandbox.filledLogins).toHaveLength(0);
+  });
+
   it("refuses to fill once the page has left the origin the user was shown", async () => {
     const sandbox = handles.sandbox as unknown as FakeSandboxProvider;
     sandbox.pageOrigin = ORIGIN;

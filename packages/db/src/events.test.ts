@@ -2032,6 +2032,54 @@ describe("answerWaitingRunWithTextInTransaction", () => {
     );
   });
 
+  it("closes an open sign-in sheet when the user types instead of using it", async () => {
+    // Reported as "요청이 멈춰있어": two identical retries sat unclaimed behind a pending sheet.
+    const tx = transaction({
+      blocks: [
+        {
+          kind: "browser_login",
+          title: "issamGPT 통합회원 로그인",
+          origin: "https://oauth2.i-screammedia.com",
+          status: "pending",
+          fields: [
+            { id: "username", label: "아이디", masked: false },
+            { id: "password", label: "비밀번호", masked: true },
+          ],
+        },
+      ],
+    });
+
+    await expect(answer(tx, "그냥 로그인 없이 공개 페이지만 봐줘")).resolves.toMatchObject({
+      outcome: "answered",
+    });
+    expect(tx.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "queued" } }),
+    );
+    expect(tx.task.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { prompt: "그냥 로그인 없이 공개 페이지만 봐줘" } }),
+    );
+    const written = tx.message.update.mock.calls.at(-1)?.[0]?.data?.blocks?.[0];
+    expect(written).toMatchObject({ kind: "browser_login", status: "cancelled" });
+    // The sheet is the only way credentials reach the page; typing never fills it.
+    expect(written).not.toHaveProperty("values");
+  });
+
+  it("leaves a resolved sign-in sheet out of it", async () => {
+    const tx = transaction({
+      blocks: [
+        {
+          kind: "browser_login",
+          title: "x",
+          origin: "https://x.test",
+          status: "filled",
+          fields: [],
+        },
+      ],
+    });
+    await expect(answer(tx, "계속해줘")).resolves.toEqual({ outcome: "unanswerable" });
+    expect(tx.run.updateMany).not.toHaveBeenCalled();
+  });
+
   it("never lets chat stand in for an approval or a credential", async () => {
     const approval = transaction({
       blocks: [

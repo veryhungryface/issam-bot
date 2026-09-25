@@ -814,14 +814,60 @@ export async function answerWaitingRunWithTextInTransaction(
     const parsed = MessageBlockSchema.array().safeParse(message.blocks);
     if (!parsed.success) continue;
     const pendingAsk = parsed.data.find(
-      (block) => block.kind === "ask" && block.status !== "answered",
+      (block) =>
+        (block.kind === "ask" && block.status !== "answered") ||
+        (block.kind === "browser_login" &&
+          block.status !== "filled" &&
+          block.status !== "cancelled"),
     );
     if (pendingAsk) {
       found = { messageId: message.id, blocks: parsed.data, pendingAsk };
       break;
     }
   }
-  if (!found || found.pendingAsk.kind !== "ask") return { outcome: "unanswerable" };
+  if (!found) return { outcome: "unanswerable" };
+
+  /**
+   * Typing while a sign-in sheet is open means the user is not using it. Close the sheet the
+   * way Skip does and carry on with what they said: before this the message became a steering
+   * row on a run with no live turn, and the thread simply stopped - the exact report was
+   * "요청이 멈춰있어" with two identical retries sitting unclaimed behind a pending sheet.
+   *
+   * The typed text never fills the page. Credentials only ever travel through the sheet.
+   */
+  if (found.pendingAsk.kind === "browser_login") {
+    const sheet = found.pendingAsk;
+    const queuedRun = await tx.run.updateMany({
+      where: {
+        id: input.runId,
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        status: "waiting_input",
+      },
+      data: { status: "queued" },
+    });
+    if (queuedRun.count !== 1) return { outcome: "unanswerable" };
+    const cancelledTask = await tx.task.updateMany({
+      where: { runs: { some: { id: input.runId } } },
+      data: { prompt: answer },
+    });
+    if (cancelledTask.count !== 1) throw new Error("Run task was not available to answer");
+    const nextBlocks = found.blocks.map((block) =>
+      block === sheet ? { ...block, status: "cancelled" as const } : block,
+    );
+    await tx.message.update({ where: { id: found.messageId }, data: { blocks: nextBlocks } });
+    const closed = await appendEventInTransaction(tx, {
+      spaceId: input.spaceId,
+      threadId: input.threadId,
+      botId: run.botId,
+      type: "thread.message.updated",
+      runId: input.runId,
+      payload: { messageId: found.messageId, role: "bot", blocks: nextBlocks },
+    });
+    return { outcome: "answered", threadId: closed.threadId, seq: closed.seq };
+  }
+
+  if (found.pendingAsk.kind !== "ask") return { outcome: "unanswerable" };
   const pendingAsk = found.pendingAsk;
   if (isApprovalAskBlock(pendingAsk) || isSecretAskBlock(pendingAsk)) {
     return { outcome: "needs_card" };
