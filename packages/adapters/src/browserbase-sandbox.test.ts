@@ -196,6 +196,98 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(api.getSession).not.toHaveBeenCalled();
   });
 
+  it("drives pages by element ref instead of by pixel, in one round trip", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1", timeoutSeconds: 300, region: "ap-southeast-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.evaluate.mockResolvedValue({
+      url: "https://example.com/login",
+      title: "로그인",
+      elements: [
+        { ref: "r1", role: "textbox", name: "아이디", placeholder: "아이디", x: 0, y: 200 },
+        { ref: "r2", role: "password", name: "비밀번호", placeholder: "", x: 0, y: 260 },
+        { ref: "r3", role: "button", name: "로그인", placeholder: "", x: 0, y: 320 },
+        { ref: "r4", role: "link", name: "", placeholder: "", x: 0, y: 380 },
+      ],
+    });
+
+    const opened = await provider.pageBrowser!(
+      computer,
+      { command: "navigate", url: "https://example.com/login" },
+      adapterContext(),
+    );
+    expect(fixture.goto).toHaveBeenCalledWith(
+      "https://example.com/login",
+      expect.objectContaining({ waitUntil: "domcontentloaded" }),
+    );
+    expect(opened).toMatchObject({ ok: true, url: "https://example.com/login", title: "로그인" });
+    // The nameless link is dropped: three options that all read `link ""` are not a choice.
+    expect(opened.elements?.map((element) => element.ref)).toEqual(["r1", "r2", "r3"]);
+    expect(opened.tree).toContain('r3: #3 button "로그인"');
+    // No screenshot was taken to reach that answer.
+    expect(fixture.screenshot).not.toHaveBeenCalled();
+
+    const acted = await provider.pageBrowser!(
+      computer,
+      {
+        command: "act",
+        actions: [
+          { kind: "fill", ref: "r1", text: "teacher" },
+          { kind: "type", ref: "r2", text: "한글 비밀번호" },
+          { kind: "click", ref: "r3" },
+        ],
+      },
+      adapterContext(),
+    );
+    expect(acted).toMatchObject({ ok: true, completed: 3 });
+    expect(fixture.locatorFor).toHaveBeenCalledWith('[data-rk="1"]');
+    expect(fixture.locatorFor).toHaveBeenCalledWith('[data-rk="3"]');
+    expect(fixture.fillRef).toHaveBeenCalledWith("teacher", expect.anything());
+    // Korean composes correctly when the text is inserted, not replayed key by key.
+    expect(fixture.keyboardInsertText).toHaveBeenCalledWith("한글 비밀번호");
+  });
+
+  it("hands the screen back rather than acting under the user, and refuses private targets", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1", timeoutSeconds: 300, region: "ap-southeast-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.evaluate.mockResolvedValue({ url: "https://example.com/", title: "x", elements: [] });
+
+    await expect(
+      provider.pageBrowser!(
+        computer,
+        { command: "navigate", url: "http://169.254.169.254/latest/meta-data/" },
+        adapterContext(),
+      ),
+    ).resolves.toMatchObject({ ok: false, fallback: "computer_act" });
+    expect(fixture.goto).not.toHaveBeenCalledWith(
+      "http://169.254.169.254/latest/meta-data/",
+      expect.anything(),
+    );
+
+    await provider.setScreenControl(computer, true, adapterContext(), "control-token");
+    const held = await provider.pageBrowser!(computer, { command: "snapshot" }, adapterContext());
+    expect(held).toMatchObject({ ok: false, fallback: "computer_act" });
+  });
+
   it("still types clipboard text when the clipboard write is denied", async () => {
     const fixture = browserFixture();
     const api = apiFixture();
@@ -677,6 +769,9 @@ function browserFixture() {
   const evaluate = vi.fn(async (): Promise<unknown> => true);
   const fillField = vi.fn(async () => undefined);
   const pressField = vi.fn(async () => undefined);
+  const clickRef = vi.fn(async () => undefined);
+  const fillRef = vi.fn(async () => undefined);
+  const locatorFor = vi.fn();
   const screenshot = vi.fn(async () => Buffer.from([1, 2, 3]));
   const page = {
     isClosed: vi.fn(() => false),
@@ -687,15 +782,21 @@ function browserFixture() {
     url: vi.fn(() => currentUrl),
     goto,
     waitForTimeout: vi.fn(async () => undefined),
+    waitForLoadState: vi.fn(async () => undefined),
     evaluate,
-    locator: vi.fn((selector?: string) => ({
-      ariaSnapshot: vi.fn(async () => '- heading "Example"'),
-      first: vi.fn(() => ({
-        isVisible: vi.fn(async () => !String(selector ?? "").includes("missing")),
-        fill: fillField,
-        press: pressField,
-      })),
-    })),
+    locator: vi.fn((selector?: string) => {
+      locatorFor(selector);
+      return {
+        ariaSnapshot: vi.fn(async () => '- heading "Example"'),
+        click: clickRef,
+        fill: fillRef,
+        first: vi.fn(() => ({
+          isVisible: vi.fn(async () => !String(selector ?? "").includes("missing")),
+          fill: fillField,
+          press: pressField,
+        })),
+      };
+    }),
     getByLabel: vi.fn(() => ({
       first: vi.fn(() => ({
         isVisible: vi.fn(async () => false),
@@ -726,6 +827,9 @@ function browserFixture() {
   } as unknown as Browser;
   const connectOverCDP = vi.fn(async () => browser);
   return {
+    clickRef,
+    fillRef,
+    locatorFor,
     fillField,
     pressField,
     goTo: (url: string) => {
