@@ -908,6 +908,60 @@ describe("computer provisioning", () => {
     }
   });
 
+  it("does not reopen the last page for a task that is only starting", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-no-restore-"));
+    const ref = {
+      id: "provider-1",
+      botId: "bot-1",
+      kind: "browserbase" as const,
+      providerRef: "browserbase:v1:ctx",
+      fresh: true,
+    };
+    const act = vi.fn().mockResolvedValue({ completed: 1 });
+    const prisma = {
+      computer: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          id: "computer-1",
+          homeKey: "bot-1",
+          providerRef: null,
+          kind: "browserbase",
+          scope: "dedicated",
+          state: "stopped",
+          controlLeaseId: null,
+          lastPageUrl: "https://example.com/dashboard",
+          updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    } as unknown as PrismaClient;
+    const sandbox = {
+      provision: vi.fn().mockResolvedValue(ref),
+      prepare: vi.fn().mockResolvedValue(undefined),
+      importWorkspace: vi.fn().mockResolvedValue(undefined),
+      act,
+    } as unknown as SandboxProvider;
+    const home = { exportHome: vi.fn(async function* () {}) } as unknown as AgentHomeStore;
+
+    try {
+      await provisionComputer(
+        {
+          prisma,
+          sandbox,
+          home,
+          jobs: {} as JobPublisher,
+          events: {} as ThreadEvents,
+          dataDir,
+        },
+        "computer-1",
+        context,
+      );
+      // On a heavy page this load cost about as much as the rest of the boot.
+      expect(act).not.toHaveBeenCalled();
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("reopens the last recorded page when a fresh Browserbase session boots", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-last-page-"));
     const ref = {
@@ -956,6 +1010,8 @@ describe("computer provisioning", () => {
         },
         "computer-1",
         context,
+        "none",
+        { restoreLastPage: true },
       );
       expect(act).toHaveBeenCalledWith(
         ref,

@@ -198,6 +198,10 @@ export async function provisionComputer(
   computerId: string,
   context: AdapterContext,
   controlHolder: "bot" | "none" = "none",
+  options?: {
+    /** Reopen the page the bot was last on. Worth it when resuming, wasted on a new task. */
+    restoreLastPage?: boolean;
+  },
 ): Promise<ComputerRef> {
   let existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
   if (existing.controlLeaseId && !hasActiveComputerControl(existing)) {
@@ -300,6 +304,11 @@ export async function provisionComputer(
   });
   if (claimed.count !== 1) throw new ComputerBusyError();
   let provisioned: ComputerRef | undefined;
+  const bootStartedAt = Date.now();
+  const bootPhases: Record<string, number> = {};
+  const markBoot = (name: string) => {
+    bootPhases[name] = Date.now() - bootStartedAt;
+  };
   try {
     const ref = await deps.sandbox.provision(
       {
@@ -311,7 +320,9 @@ export async function provisionComputer(
       context,
     );
     provisioned = ref;
+    markBoot("session");
     await deps.sandbox.prepare(ref, context);
+    markBoot("connect");
     const replacement =
       ref.fresh === true ||
       !existing.providerRef ||
@@ -328,8 +339,15 @@ export async function provisionComputer(
       context,
     );
     if (replacement) {
-      await restoreLastComputerPage(deps, ref, existing.lastPageUrl, context);
+      // Reopening the last page is only worth its seconds when the bot is picking a task
+      // back up. A fresh request navigates somewhere else immediately, and on a heavy page
+      // this load alone cost as much as the rest of the boot.
+      if (options?.restoreLastPage) {
+        await restoreLastComputerPage(deps, ref, existing.lastPageUrl, context);
+      }
+      markBoot("restore");
     }
+    getLogger().info("computer boot phases", { computerId, ...bootPhases });
     const activeControl = hasActiveComputerControl(existing);
     const activated = await deps.prisma.computer.updateMany({
       where: {
