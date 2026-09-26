@@ -82,6 +82,49 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(fixture.pressField).toHaveBeenCalledWith("Enter", expect.anything());
   });
 
+  it("fills from a process that never provisioned the session", async () => {
+    // The sheet is submitted to the api; the CDP connection lives in the worker. Every real
+    // sign-in used to fail here with "not provisioned in this worker".
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const worker = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1", timeoutSeconds: 300, region: "ap-southeast-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await worker.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await worker.prepare(computer, adapterContext());
+    fixture.goTo("https://auth.example.test/login");
+
+    const apiProcess = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1", timeoutSeconds: 300, region: "ap-southeast-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const connectionsBefore = fixture.connectOverCDP.mock.calls.length;
+
+    await expect(
+      apiProcess.fillSecureFields(
+        computer,
+        {
+          origin: "https://auth.example.test",
+          submit: false,
+          fields: [
+            { id: "password", value: "unlikely-plaintext", autocomplete: "current-password" },
+          ],
+        },
+        adapterContext(),
+      ),
+    ).resolves.toEqual({ filled: ["password"], missing: [] });
+    expect(fixture.fillField).toHaveBeenCalledWith("unlikely-plaintext", expect.anything());
+    // It borrowed the session over its own connection and gave it back.
+    expect(fixture.connectOverCDP.mock.calls.length).toBe(connectionsBefore + 1);
+    expect(fixture.browserClose).toHaveBeenCalled();
+  });
+
   it("refuses to fill after the page navigates away from the requested origin", async () => {
     const fixture = browserFixture();
     const api = apiFixture();
@@ -819,16 +862,18 @@ function browserFixture() {
     route: vi.fn(async () => undefined),
     grantPermissions: vi.fn(async () => undefined),
   } as unknown as BrowserContext;
+  const browserClose = vi.fn(async () => undefined);
   const browser = {
     isConnected: vi.fn(() => true),
     contexts: vi.fn(() => [browserContext]),
     newContext: vi.fn(async () => browserContext),
-    close: vi.fn(async () => undefined),
+    close: browserClose,
   } as unknown as Browser;
   const connectOverCDP = vi.fn(async () => browser);
   return {
     clickRef,
     fillRef,
+    browserClose,
     locatorFor,
     fillField,
     pressField,
