@@ -115,6 +115,7 @@ export class ComputerBrowserProvider implements BrowserProvider {
       title: typeof live.title === "string" ? live.title : "",
       tree: typeof live.tree === "string" ? live.tree : formatTree(elements),
       elements,
+      ...(typeof live.text === "string" && live.text ? { text: live.text } : {}),
     };
   }
 
@@ -150,6 +151,7 @@ export class ComputerBrowserProvider implements BrowserProvider {
       title: typeof live.title === "string" ? live.title : "",
       tree: typeof live.tree === "string" ? live.tree : elements ? formatTree(elements) : undefined,
       elements,
+      ...(typeof live.text === "string" && live.text ? { text: live.text } : {}),
     };
   }
 

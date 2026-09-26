@@ -41,7 +41,12 @@ export type PageElementSnapshot = {
   url: string;
   title: string;
   elements: PageElement[];
+  /** The page's readable text, already collapsed and capped. */
+  text?: string;
 };
+
+/** Enough of a page to answer from, without paying for a screenshot to read it. */
+export const MAX_PAGE_TEXT = 5_000;
 
 /** Kept even without a name: an empty input is still the thing you type into. */
 const NAMELESS_ROLES = new Set(["textbox", "password", "combobox", "checkbox", "radio"]);
@@ -109,7 +114,16 @@ export const PAGE_ELEMENT_COLLECTOR = `(() => {
       y: Math.round(box.top),
     });
   }
-  return { url: location.href, title: document.title, elements: collected };
+  // What a reader would see. A model that must read an answer off the page would otherwise
+  // have to take a screenshot, which costs far more time and tokens than the words do.
+  const readableRoot = document.querySelector("main, article, [role=main]") || document.body;
+  const readable = clean(readableRoot ? readableRoot.innerText : "");
+  return {
+    url: location.href,
+    title: document.title,
+    elements: collected,
+    text: readable.length > ${MAX_PAGE_TEXT} ? readable.slice(0, ${MAX_PAGE_TEXT}) + " […]" : readable,
+  };
 })()`;
 
 /** CSS selector for an element the collector tagged. */
