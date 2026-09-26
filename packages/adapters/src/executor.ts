@@ -1052,7 +1052,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
         screenLeaseId: screenLeaseIdForRun(computerLease, runId, fence),
         signal: runAbortController.signal,
       };
-      const computerBoot = provisionComputer(deps, leaseTarget.computerId, bootContext, "bot");
+      // A run that has already started is picking a task back up, so the page it was on
+      // still matters. A first turn navigates somewhere else anyway.
+      const computerBoot = provisionComputer(deps, leaseTarget.computerId, bootContext, "bot", {
+        restoreLastPage: Boolean(run.startedAt),
+      });
       // An early setup failure must not surface as an unhandled rejection.
       computerBoot.catch(() => undefined);
       try {
