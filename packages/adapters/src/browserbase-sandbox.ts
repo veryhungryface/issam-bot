@@ -512,34 +512,76 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
   /**
    * Type sign-in values the user submitted into the page the bot has open. Nothing here is
    * logged or returned: the caller only learns which field ids matched a locator.
+   *
+   * The sheet is submitted to the api, and the CDP connection to the session lives in the
+   * worker that provisioned it, so this used to throw "not provisioned in this worker" for
+   * every real sign-in - the user saw "Could not fill the sign-in form" with a perfectly
+   * good form on screen. A process without the session attaches its own short-lived CDP
+   * connection instead; Browserbase serves several, and dropping ours leaves the session and
+   * the worker's connection untouched.
    */
   async fillSecureFields(
     computer: ComputerRef,
     request: SecureFieldFillRequest,
     _context: AdapterContext,
   ): Promise<SecureFieldFillResult> {
-    const box = this.requiredBox(computer);
-    const page = requiredPage(box);
-    // Re-check at fill time: the page may have navigated between the user seeing the
-    // sheet's origin and submitting it, and the values belong only to that origin.
-    if (safeOrigin(page.url()) !== request.origin) {
-      throw new Error("The browser is no longer on the site this sign-in was requested for");
-    }
-    const filled: string[] = [];
-    const missing: string[] = [];
-    let last: Locator | undefined;
-    for (const field of request.fields) {
-      const locator = await firstVisibleLocator(page, field);
-      if (!locator) {
-        missing.push(field.id);
-        continue;
+    const attached = await this.attachForFill(computer);
+    try {
+      const page = attached.page;
+      // Re-check at fill time: the page may have navigated between the user seeing the
+      // sheet's origin and submitting it, and the values belong only to that origin.
+      if (safeOrigin(page.url()) !== request.origin) {
+        throw new Error("The browser is no longer on the site this sign-in was requested for");
       }
-      await locator.fill(field.value, { timeout: 5_000 });
-      filled.push(field.id);
-      last = locator;
+      const filled: string[] = [];
+      const missing: string[] = [];
+      let last: Locator | undefined;
+      for (const field of request.fields) {
+        const locator = await firstVisibleLocator(page, field);
+        if (!locator) {
+          missing.push(field.id);
+          continue;
+        }
+        await locator.fill(field.value, { timeout: 5_000 });
+        filled.push(field.id);
+        last = locator;
+      }
+      if (request.submit && last) await last.press("Enter", { timeout: 5_000 });
+      return { filled, missing };
+    } finally {
+      await attached.release();
     }
-    if (request.submit && last) await last.press("Enter", { timeout: 5_000 });
-    return { filled, missing };
+  }
+
+  /**
+   * The page to type into, from whichever process is asking. Returns the worker's own live
+   * page when it has one, and otherwise borrows the session over a second CDP connection
+   * that is dropped again as soon as the values are in.
+   */
+  private async attachForFill(
+    computer: ComputerRef,
+  ): Promise<{ page: Page; release: () => Promise<void> }> {
+    ensureBrowserbaseComputer(computer);
+    const local = this.boxes.get(computer.providerRef);
+    if (local?.browser?.isConnected() && local.page && !local.page.isClosed()) {
+      return { page: local.page, release: async () => undefined };
+    }
+    const { sessionId, contextId } = decodeProviderRef(computer.providerRef);
+    if (!sessionId) throw new ComputerSessionUnavailableError("Browserbase session is not running");
+    const session = await this.recoverSession(sessionId, contextId);
+    if (!session) throw new ComputerSessionUnavailableError("Browserbase session is not running");
+    const browser = await this.sdk.connectOverCDP(session.connectUrl);
+    try {
+      const browserContext = browser.contexts()[0];
+      const page = browserContext?.pages()[0];
+      if (!page || page.isClosed()) throw new Error("Browserbase page is not available");
+      // Closing a CDP connection only detaches this client; the session and the worker's
+      // own connection keep running.
+      return { page, release: async () => void (await browser.close().catch(() => undefined)) };
+    } catch (error) {
+      await browser.close().catch(() => undefined);
+      throw error;
+    }
   }
 
   async releaseScreen(computer: ComputerRef, context: AdapterContext): Promise<void> {
