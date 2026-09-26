@@ -1025,6 +1025,36 @@ export function createRunExecutor(deps: ExecutorDeps) {
       heartbeat.unref?.();
 
       const runSecrets = [...deps.secrets];
+      /**
+       * Booting a Browserbase session costs about 8 seconds (session create, CDP connect,
+       * profile restore) and needs nothing the rest of setup produces, so it runs alongside
+       * the connector sync, memory recall and model-key resolution instead of after them.
+       * The promise is awaited where the computer is first needed; the finally releases it
+       * even when setup gives up before that.
+       */
+      const setupStartedAt = Date.now();
+      const phases: Record<string, number> = {};
+      const markPhase = (name: string) => {
+        phases[name] = Date.now() - setupStartedAt;
+      };
+      runAbortController = new AbortController();
+      if (deps.shutdownSignal?.aborted) runAbortController.abort(deps.shutdownSignal.reason);
+      const onShutdown = () => runAbortController?.abort(deps.shutdownSignal?.reason);
+      deps.shutdownSignal?.addEventListener("abort", onShutdown);
+      detachShutdown = () => deps.shutdownSignal?.removeEventListener("abort", onShutdown);
+      const bootContext: AdapterContext = {
+        operationId: runId,
+        traceId: runId,
+        spaceId: run.spaceId,
+        userId: run.userId,
+        botId: run.botId,
+        runId,
+        screenLeaseId: screenLeaseIdForRun(computerLease, runId, fence),
+        signal: runAbortController.signal,
+      };
+      const computerBoot = provisionComputer(deps, leaseTarget.computerId, bootContext, "bot");
+      // An early setup failure must not surface as an unhandled rejection.
+      computerBoot.catch(() => undefined);
       try {
         const sourceBlocks =
           run.trigger === "messaging" && run.sourceMessageId
@@ -1087,12 +1117,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           hasModelOverride && bot.modelProvider
             ? await findModelCredential(deps.prisma, run, bot.modelProvider)
             : null;
-        runAbortController = new AbortController();
+        markPhase("records");
         if (!leaseValid) runAbortController.abort();
-        if (deps.shutdownSignal?.aborted) runAbortController.abort(deps.shutdownSignal.reason);
-        const onShutdown = () => runAbortController?.abort(deps.shutdownSignal?.reason);
-        deps.shutdownSignal?.addEventListener("abort", onShutdown);
-        detachShutdown = () => deps.shutdownSignal?.removeEventListener("abort", onShutdown);
         const composioRows = storedConnections.filter(
           (connection) => connection.connectorId === "composio",
         );
@@ -1318,7 +1344,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         if (!bot.computer) throw new Error("Bot has no computer");
         const storedComputer = bot.computer;
         const computerMode = parseComputerMode(storedComputer.scope);
-        let computer = await provisionComputer(deps, storedComputer.id, context, "bot");
+        markPhase("modelKey");
+        let computer = await computerBoot;
+        markPhase("computer");
         screenRelease = { computer, context };
         scheduleComputerSleep(deps.jobs, storedComputer.id);
         // Ephemeral browser sessions (Browserbase) can die mid-run; retry the
@@ -3643,6 +3671,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
         }
 
+        markPhase("tools");
+        getLogger().info("run setup phases", { runId, ...phases });
         try {
           const runtimeEvents = deps.runtime.run(
             {
@@ -4373,9 +4403,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
         detachShutdown?.();
         clearInterval(heartbeat);
         if (!retainComputerLease) {
-          if (screenRelease) {
+          // The boot runs alongside the rest of setup, so it can still land after a failure
+          // that never reached the await. Give that screen back too.
+          const booted = screenRelease ?? {
+            computer: await computerBoot.catch(() => null),
+            context: bootContext,
+          };
+          if (booted.computer) {
             await deps.sandbox
-              .releaseScreen?.(screenRelease.computer, screenRelease.context)
+              .releaseScreen?.(booted.computer, booted.context)
               .catch(() => undefined);
           }
           await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
