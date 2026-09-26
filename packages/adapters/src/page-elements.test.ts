@@ -4,6 +4,7 @@ import {
   formatElementLabel,
   formatElementTable,
   MAX_ELEMENT_CHOICES,
+  MAX_PAGE_TEXT,
   NO_ELEMENT_CHOICE,
   PAGE_ELEMENT_COLLECTOR,
   prepareElements,
@@ -138,5 +139,14 @@ describe("PAGE_ELEMENT_COLLECTOR", () => {
     // The viewport filter and the tagging are what make the table actable; keep them.
     expect(PAGE_ELEMENT_COLLECTOR).toContain("innerHeight");
     expect(PAGE_ELEMENT_COLLECTOR).toContain("data-rk");
+  });
+
+  it("collects what the page says, capped, so reading never needs a screenshot", () => {
+    // Without text in the snapshot a model that must read an answer off the page falls back
+    // to screenshots: measured in production at 7-9s per look against 2-3s for a snapshot.
+    expect(PAGE_ELEMENT_COLLECTOR).toContain("innerText");
+    expect(PAGE_ELEMENT_COLLECTOR).toContain("main, article, [role=main]");
+    expect(PAGE_ELEMENT_COLLECTOR).toContain(String(MAX_PAGE_TEXT));
+    expect(MAX_PAGE_TEXT).toBeLessThanOrEqual(8_000);
   });
 });

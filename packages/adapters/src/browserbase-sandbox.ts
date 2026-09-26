@@ -433,12 +433,19 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
   private async collectPage(
     box: BrowserbaseBox,
     context: AdapterContext,
-  ): Promise<{ url: string; title: string; tree: string; elements: BrowserSnapshotNode[] }> {
+  ): Promise<{
+    url: string;
+    title: string;
+    tree: string;
+    elements: BrowserSnapshotNode[];
+    text?: string;
+  }> {
     const page = requiredPage(box);
     const raw = (await page.evaluate(PAGE_ELEMENT_COLLECTOR)) as {
       url: string;
       title: string;
       elements: PageElement[];
+      text?: string;
     };
     throwIfAborted(context);
     const elements = prepareElements(raw.elements);
@@ -455,6 +462,7 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
         name: element.name,
         ...(element.placeholder ? { value: element.placeholder } : {}),
       })),
+      ...(raw.text ? { text: raw.text } : {}),
     };
   }
 

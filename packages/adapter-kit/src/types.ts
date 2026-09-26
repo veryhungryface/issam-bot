@@ -676,6 +676,12 @@ export interface BrowserSnapshotResult {
   /** Compact accessibility-style tree for the model. */
   tree: string;
   elements: BrowserSnapshotNode[];
+  /**
+   * What the page says, as a reader would see it. Without this a model that needs to read an
+   * answer off the page has to fall back to screenshots, which cost an order of magnitude
+   * more time and tokens per look.
+   */
+  text?: string;
   fallback?: "computer_act";
   error?: string;
 }
@@ -701,6 +707,7 @@ export interface BrowserActResult {
   /** Snapshot after the actions when available. */
   tree?: string;
   elements?: BrowserSnapshotNode[];
+  text?: string;
   fallback?: "computer_act";
   error?: string;
 }

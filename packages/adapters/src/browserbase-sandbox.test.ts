@@ -255,6 +255,7 @@ describe("BrowserbaseSandboxProvider", () => {
     fixture.evaluate.mockResolvedValue({
       url: "https://example.com/login",
       title: "로그인",
+      text: "AI 중점학교 예산 구조는 다음과 같습니다…",
       elements: [
         { ref: "r1", role: "textbox", name: "아이디", placeholder: "아이디", x: 0, y: 200 },
         { ref: "r2", role: "password", name: "비밀번호", placeholder: "", x: 0, y: 260 },
@@ -276,6 +277,8 @@ describe("BrowserbaseSandboxProvider", () => {
     // The nameless link is dropped: three options that all read `link ""` are not a choice.
     expect(opened.elements?.map((element) => element.ref)).toEqual(["r1", "r2", "r3"]);
     expect(opened.tree).toContain('r3: #3 button "로그인"');
+    // The page's own words come back, so reading it never needs a screenshot.
+    expect(opened.text).toBe("AI 중점학교 예산 구조는 다음과 같습니다…");
     // No screenshot was taken to reach that answer.
     expect(fixture.screenshot).not.toHaveBeenCalled();
 
