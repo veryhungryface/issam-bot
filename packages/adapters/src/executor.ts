@@ -1065,21 +1065,26 @@ export function createRunExecutor(deps: ExecutorDeps) {
        * there would be noise. The model's own opening line arrives later, after its first
        * turn, so this is what fills the gap.
        */
+      // Only a remote browser is slow enough to be worth announcing. An in-process sandbox
+      // boots in milliseconds, and a notice there is a spurious event on every run.
+      const bootIsRemote = deps.sandbox?.describe?.().id === "browserbase";
       let bootNoticeSent = false;
-      const bootNotice = setTimeout(() => {
-        bootNoticeSent = true;
-        void deps.events
-          .append({
-            spaceId: run.spaceId,
-            threadId: run.threadId,
-            botId: run.botId,
-            type: "thread.progress",
-            runId,
-            payload: { text: "브라우저를 여는 중이에요…", streaming: false },
-          })
-          .catch(() => undefined);
-      }, 1_200);
-      bootNotice.unref?.();
+      const bootNotice = !bootIsRemote
+        ? undefined
+        : setTimeout(() => {
+            bootNoticeSent = true;
+            void deps.events
+              .append({
+                spaceId: run.spaceId,
+                threadId: run.threadId,
+                botId: run.botId,
+                type: "thread.progress",
+                runId,
+                payload: { text: "브라우저를 여는 중이에요…", streaming: false },
+              })
+              .catch(() => undefined);
+          }, 1_200);
+      bootNotice?.unref?.();
       void computerBoot.finally(() => clearTimeout(bootNotice)).catch(() => undefined);
       try {
         const sourceBlocks =
@@ -4146,14 +4151,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   outputTokens: event.outputTokens,
                 },
               });
+              // Field names avoid "token": the log redactor treats that word as a secret and
+              // replaces the value, which is how the first traced run came back as
+              // promptTokens "[Redacted]".
               getLogger().info("model call usage", {
                 runId,
                 model: event.model,
-                promptTokens,
-                freshTokens: event.inputTokens,
+                promptSize: promptTokens,
+                freshSize: event.inputTokens,
                 cacheRead,
                 cacheWrite,
-                outputTokens: event.outputTokens,
+                outputSize: event.outputTokens,
                 sinceSetupMs: Date.now() - setupStartedAt,
               });
             } else if (event.type === "done") {
