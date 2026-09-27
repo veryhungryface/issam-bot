@@ -106,3 +106,17 @@ describe("redaction", () => {
     expect(redacted).toContain('"authorization":"[Redacted]"');
   });
 });
+
+describe("measurement fields", () => {
+  it("keeps counts whose names merely mention tokens", () => {
+    // A run's prompt size is not a credential. Naming it `promptTokens` cost us a whole
+    // production trace: every number came back as "[Redacted]".
+    expect(
+      redactBindings({ promptSize: 14748, cacheRead: 13675, outputSize: 284, freshSize: 3 }),
+    ).toEqual({ promptSize: 14748, cacheRead: 13675, outputSize: 284, freshSize: 3 });
+  });
+
+  it("still redacts anything that names a token", () => {
+    expect(redactBindings({ promptTokens: 14748 })).toEqual({ promptTokens: "[Redacted]" });
+  });
+});

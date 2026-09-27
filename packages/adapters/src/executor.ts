@@ -4146,14 +4146,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   outputTokens: event.outputTokens,
                 },
               });
+              // Field names avoid "token": the log redactor treats that word as a secret and
+              // replaces the value, which is how the first traced run came back as
+              // promptTokens "[Redacted]".
               getLogger().info("model call usage", {
                 runId,
                 model: event.model,
-                promptTokens,
-                freshTokens: event.inputTokens,
+                promptSize: promptTokens,
+                freshSize: event.inputTokens,
                 cacheRead,
                 cacheWrite,
-                outputTokens: event.outputTokens,
+                outputSize: event.outputTokens,
                 sinceSetupMs: Date.now() - setupStartedAt,
               });
             } else if (event.type === "done") {
