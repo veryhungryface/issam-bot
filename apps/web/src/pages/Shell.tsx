@@ -185,6 +185,7 @@ import {
   transcriptMovedDown,
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
+import { NARRATION_STEP_MS, workingNarration } from "../lib/working-narration";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
@@ -1614,12 +1615,48 @@ export function ShellPage() {
     ["running", "queued", "leased"].includes(run.status),
   );
   const transcriptRunning = workingRuns.length > 0;
-  // A browser boot plus a first model call is half a minute of silence; say which one it is.
-  const workingPhase = !transcriptRunning
-    ? undefined
-    : computer?.state === "booting"
-      ? t`Opening the browser…`
-      : t`Thinking…`;
+  // A browser boot plus a first model call is half a minute of silence. Rather than freeze on
+  // one label, walk through the work as it happens; `workingSince` is when this turn started.
+  const workingRunId = workingRuns[0]?.id;
+  const [workingSince, setWorkingSince] = useState<number | null>(null);
+  const [narrationTick, setNarrationTick] = useState(0);
+  useEffect(() => {
+    if (!workingRunId) {
+      setWorkingSince(null);
+      return;
+    }
+    setWorkingSince((current) => current ?? Date.now());
+  }, [workingRunId]);
+  useEffect(() => {
+    if (!workingRunId) return;
+    const timer = setInterval(() => setNarrationTick((tick) => tick + 1), NARRATION_STEP_MS / 2);
+    return () => clearInterval(timer);
+  }, [workingRunId]);
+  const narrationText = useCallback(
+    (id: string) =>
+      id === "reading"
+        ? t`Reading your request…`
+        : id === "planning"
+          ? t`Working out how to find this…`
+          : id === "web"
+            ? t`This needs something from the web…`
+            : id === "control"
+              ? t`Taking over the browser…`
+              : id === "booting"
+                ? t`Getting the browser ready…`
+                : undefined,
+    [],
+  );
+  const workingPhase = useMemo(() => {
+    if (!transcriptRunning) return undefined;
+    void narrationTick;
+    const line = workingNarration({
+      elapsedMs: workingSince ? Date.now() - workingSince : 0,
+      computerState: computer?.state,
+    });
+    if (!line) return undefined;
+    return narrationText(line.id) ?? line.text;
+  }, [transcriptRunning, workingSince, narrationTick, computer?.state, narrationText]);
   const composerRunning = currentRuns.some((run) => isActive(run.status));
   const runError = threadRunError(activeSnapshot, dismissedRunErrorIds);
   const displayedRunError = !sendError && !dictationError ? runError : null;
