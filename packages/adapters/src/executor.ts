@@ -1059,6 +1059,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
       });
       // An early setup failure must not surface as an unhandled rejection.
       computerBoot.catch(() => undefined);
+      /**
+       * A cold Browserbase session takes about eight seconds to exist. Say so, but only once
+       * it is really happening: a warm session answers in well under a second and a notice
+       * there would be noise. The model's own opening line arrives later, after its first
+       * turn, so this is what fills the gap.
+       */
+      let bootNoticeSent = false;
+      const bootNotice = setTimeout(() => {
+        bootNoticeSent = true;
+        void deps.events
+          .append({
+            spaceId: run.spaceId,
+            threadId: run.threadId,
+            botId: run.botId,
+            type: "thread.progress",
+            runId,
+            payload: { text: "브라우저를 여는 중이에요…", streaming: false },
+          })
+          .catch(() => undefined);
+      }, 1_200);
+      bootNotice.unref?.();
+      void computerBoot.finally(() => clearTimeout(bootNotice)).catch(() => undefined);
       try {
         const sourceBlocks =
           run.trigger === "messaging" && run.sourceMessageId
@@ -1351,6 +1373,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
         markPhase("modelKey");
         let computer = await computerBoot;
         markPhase("computer");
+        if (bootNoticeSent) {
+          await deps.events
+            .append({
+              spaceId: run.spaceId,
+              threadId: thread.id,
+              botId: bot.id,
+              type: "thread.progress",
+              runId,
+              payload: { text: "브라우저 준비됐어요. 작업을 시작합니다.", streaming: false },
+            })
+            .catch(() => undefined);
+        }
         screenRelease = { computer, context };
         scheduleComputerSleep(deps.jobs, storedComputer.id);
         // Ephemeral browser sessions (Browserbase) can die mid-run; retry the
@@ -4095,6 +4129,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 );
               }
             } else if (event.type === "usage") {
+              const cacheRead = event.cacheReadTokens ?? 0;
+              const cacheWrite = event.cacheWriteTokens ?? 0;
+              // What the turn actually sent, cached or not. Recording `input` alone made a
+              // fully cached 30k-token prompt look like 3 tokens.
+              const promptTokens = event.inputTokens + cacheRead + cacheWrite;
               await deps.prisma.usageRecord.create({
                 data: {
                   spaceId: run.spaceId,
@@ -4103,9 +4142,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   runId,
                   provider: event.provider,
                   model: event.model,
-                  inputTokens: event.inputTokens,
+                  inputTokens: promptTokens,
                   outputTokens: event.outputTokens,
                 },
+              });
+              getLogger().info("model call usage", {
+                runId,
+                model: event.model,
+                promptTokens,
+                freshTokens: event.inputTokens,
+                cacheRead,
+                cacheWrite,
+                outputTokens: event.outputTokens,
+                sinceSetupMs: Date.now() - setupStartedAt,
               });
             } else if (event.type === "done") {
               if (!assembled && event.text) {
