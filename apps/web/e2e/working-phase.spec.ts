@@ -18,7 +18,10 @@ test("a running turn says what it is doing before the bot speaks", async ({ page
 
   const phase = page.getByTestId("working-phase");
   await expect(phase).toBeVisible({ timeout: 30_000 });
-  await expect(phase).toHaveText(/Thinking…|Opening the browser…/);
+  // The line walks through the start of a turn instead of freezing on one label.
+  await expect(phase).toHaveText(
+    /Reading your request…|Working out how to find this…|This needs something from the web…|Taking over the browser…|Getting the browser ready…/,
+  );
 
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect
