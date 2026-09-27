@@ -426,8 +426,15 @@ export type AgentRuntimeEvent =
   | { type: "takeover"; reason: string }
   | {
       type: "usage";
+      /**
+       * Freshly sent prompt tokens only. With prompt caching most of a turn's prompt shows
+       * up in `cacheReadTokens` instead, so reading `inputTokens` alone says a 30k-token
+       * prompt cost 3 tokens - which is what this deployment's usage records claimed.
+       */
       inputTokens: number;
       outputTokens: number;
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
       provider: string;
       model: string;
     }

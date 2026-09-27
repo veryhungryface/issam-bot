@@ -1872,6 +1872,9 @@ export function createRouter(deps: RouterDeps) {
         await deps.jobs.enqueue(runContinueJob(input.runId)).catch((error) => {
           getLogger().error("browser login continue enqueue", error);
         });
+        // The worker logs "run setup phases" when it picks this up: the distance between the
+        // two lines is the resume gap, which was 13.5s in the run we traced.
+        getLogger().info("browser login queued continue", { runId: input.runId, botId: bot.id });
         scheduleComputerSleep(deps.jobs, computer.id);
         return { ok: true as const, filled: result.filled, missing: result.missing, saved };
       }),

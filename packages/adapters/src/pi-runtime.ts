@@ -283,6 +283,8 @@ export class PiAgentRuntime implements AgentRuntime {
                 type: "usage",
                 inputTokens: event.message.usage.input ?? 0,
                 outputTokens: event.message.usage.output ?? 0,
+                cacheReadTokens: event.message.usage.cacheRead ?? 0,
+                cacheWriteTokens: event.message.usage.cacheWrite ?? 0,
                 provider: model.provider,
                 model: model.id,
               });
@@ -899,6 +901,8 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
           type: "usage",
           inputTokens: event.message.usage.input ?? 0,
           outputTokens: event.message.usage.output ?? 0,
+          cacheReadTokens: event.message.usage.cacheRead ?? 0,
+          cacheWriteTokens: event.message.usage.cacheWrite ?? 0,
           provider: host.model.provider,
           model: host.model.id,
         });
