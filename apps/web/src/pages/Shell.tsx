@@ -4576,7 +4576,7 @@ const Transcript = memo(function Transcript({
             following.current = false;
           }
         }}
-        className="rk-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-4 py-5 md:px-7 md:py-6"
+        className="rk-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-2.5 py-5 sm:px-4 md:px-7 md:py-6"
       >
         {olderCursor != null ? (
           <button
@@ -4610,9 +4610,11 @@ const Transcript = memo(function Transcript({
                     peerReceipt
                       ? undefined
                       : `relative w-fit min-w-0 ${
+                          // A phone gives up only the width the action rail needs; a wide
+                          // screen keeps a readable measure instead of running edge to edge.
                           message.role === "user"
-                            ? "max-w-[min(70%,calc(100%_-_6rem))]"
-                            : "max-w-[min(74%,calc(100%_-_6rem))]"
+                            ? "max-w-[calc(100%_-_2.25rem)] sm:max-w-[min(70%,calc(100%_-_6rem))]"
+                            : "max-w-[calc(100%_-_2.25rem)] sm:max-w-[min(74%,calc(100%_-_6rem))]"
                         }`
                   }
                 >
