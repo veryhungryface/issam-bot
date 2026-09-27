@@ -1,4 +1,4 @@
-import type { AgentEvent } from "@rakazo/adapter-kit";
+import type { AgentRuntimeEvent } from "@rakazo/adapter-kit";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
  * look like three tokens in production, which is both wrong billing and a wrong signal about
  * how big the prompt is.
  */
-function promptTokens(event: Extract<AgentEvent, { type: "usage" }>): number {
+function promptTokens(event: Extract<AgentRuntimeEvent, { type: "usage" }>): number {
   return event.inputTokens + (event.cacheReadTokens ?? 0) + (event.cacheWriteTokens ?? 0);
 }
 
