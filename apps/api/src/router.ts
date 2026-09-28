@@ -1509,6 +1509,17 @@ export function createRouter(deps: RouterDeps) {
       takeover: authed.computer.takeover.handler(async ({ context, input }) => {
         let bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer?.providerRef || bot.computer.state !== "running") {
+          // A working bot holds the computer from its first moment, but opens the browser
+          // only when a tool needs one. Then the answer is about the bot, not the power
+          // state: "stop the bot first", the same conflict a running session gives.
+          const busy = bot.computer
+            ? await resolveBusyBotName(deps.prisma, {
+                computerId: bot.computer.id,
+                botId: bot.id,
+                botName: bot.name,
+              })
+            : null;
+          if (busy) throw new ORPCError("CONFLICT", { message: "Stop the bot first" });
           throw new ORPCError("BAD_REQUEST", { message: "computer must be running" });
         }
         if (hasActiveComputerControl(bot.computer) && bot.computer.controlBotId === bot.id) {

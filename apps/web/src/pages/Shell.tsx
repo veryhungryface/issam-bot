@@ -2383,7 +2383,7 @@ export function ShellPage() {
       const state = snap?.computer?.state;
       const screen = state === "running" ? await refreshComputerScreen(botId) : null;
       if (cancelled || activeBotId.current !== botId) return;
-      const action = computerPanelAutoBoot(state, screen);
+      const action = computerPanelAutoBoot(state, screen, Boolean(snap?.computer?.busyBotName));
       if (action === "wait") {
         if (state === "running") autoBooted.current = botId;
         return;
@@ -2544,6 +2544,14 @@ export function ShellPage() {
     const blocked = computerTakeoverBlocked(computer, snapshot?.run?.status);
     const needsTakeover =
       (options.takeControl ?? true) && !blocked && !userHoldsComputerControl(computer, active.id);
+    // A working bot that has not opened a browser has nothing to boot - the session is the
+    // run's to create, and booting here would only collide with its lease. Open the window
+    // anyway, so the screen appears as soon as the bot does open one.
+    if (blocked && computer?.state !== "running") {
+      setComputerError(null);
+      setComputerOpen(true);
+      return;
+    }
     try {
       await bootComputer({
         takeControl: needsTakeover,
@@ -3580,6 +3588,7 @@ export function ShellPage() {
                             computer?.state,
                             booting,
                             computerLabel(computer?.mode, active.name),
+                            Boolean(computer?.busyBotName),
                           )
                         ))}
                     </div>
@@ -6147,11 +6156,14 @@ function computerPlaceholder(
   state: ComputerStatus["state"] | undefined,
   booting: boolean,
   label: string,
+  busy = false,
 ) {
   if (state === "booting" || booting) return t`Booting live desktop…`;
   if (state === "running") return label;
   if (state === "suspended") return t`Computer is asleep. Open it to wake.`;
   if (state === "error") return t`Computer failed to boot`;
+  // The bot is working but has not needed a browser yet, so there is nothing to show.
+  if (busy) return t`Working. No browser open yet.`;
   return t`Computer is stopped`;
 }
 

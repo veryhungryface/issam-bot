@@ -142,11 +142,8 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
     .poll(async () => (await threadSnapshot(page, chiefId)).run?.status ?? "idle")
     .toBe("running");
   await captureScreenshot(page, testInfo, "48-active-team-bot-blocks-takeover");
-  await expect
-    .poll(
-      async () => (await rpc<{ state: string }>(page, "computer/status", { botId: chiefId })).state,
-    )
-    .toBe("running");
+  // Busy is the execution lease, not a live session: the browser is opened by the first
+  // tool that needs one, and this bot is working without having asked for it yet.
   await expect
     .poll(
       async () =>

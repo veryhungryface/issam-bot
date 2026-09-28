@@ -1375,6 +1375,14 @@ describe("computer event reduction", () => {
     expect(computerPanelAutoBoot("suspended")).toBe("wait");
   });
 
+  it("leaves a busy bot's computer alone instead of booting into its lease", () => {
+    // The bot opens the browser when a tool needs one; a panel boot would only collide.
+    expect(computerPanelAutoBoot("stopped", null, true)).toBe("wait");
+    expect(computerPanelAutoBoot(undefined, null, true)).toBe("wait");
+    // A live screen is still reconnected while the bot works.
+    expect(computerPanelAutoBoot("running", null, true)).toBe("recover-screen");
+  });
+
   it("maps recover-screen to computer.boot, not computer.recover", () => {
     expect(computerPanelAutoUsesBoot("recover-screen")).toBe(true);
     expect(computerPanelAutoUsesBoot("boot")).toBe(true);

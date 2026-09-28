@@ -498,9 +498,13 @@ export function computerTakeoverBlocked(
 export function computerPanelAutoBoot(
   state: ComputerStatus["state"] | undefined,
   screenUrl?: string | null,
+  busy?: boolean,
 ): "boot" | "recover-screen" | "wait" {
   if (state === "booting" || state === "suspended") return "wait";
   if (state === "running") return screenUrl ? "wait" : "recover-screen";
+  // A working bot opens the browser itself when a tool needs one, and holds the computer
+  // meanwhile. Booting from here would only collide with its lease ("Computer is busy").
+  if (busy) return "wait";
   return "boot";
 }
 
