@@ -1637,11 +1637,11 @@ export function ShellPage() {
       id === "reading"
         ? t`Reading your request…`
         : id === "planning"
-          ? t`Working out how to find this…`
-          : id === "web"
-            ? t`This needs something from the web…`
-            : id === "control"
-              ? t`Taking over the browser…`
+          ? t`Working out how to answer this…`
+          : id === "gathering"
+            ? t`Gathering what I need…`
+            : id === "assembling"
+              ? t`Putting the answer together…`
               : id === "booting"
                 ? t`Getting the browser ready…`
                 : undefined,

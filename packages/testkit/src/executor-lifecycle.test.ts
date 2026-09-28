@@ -757,6 +757,23 @@ describeIntegration("run executor lifecycle", () => {
     ).toEqual([source.id, publicSend.messageId].sort());
   });
 
+  it("never boots a computer for a turn that never uses one", async () => {
+    // A cold remote browser costs about eight seconds and a billed session. A turn that
+    // answers from text alone was paying both: every run provisioned one up front.
+    const seeded = await seedRun("no-boot", "run the weekly summary");
+    const bot = await handles.prisma.bot.findUniqueOrThrow({ where: { id: seeded.bot.id } });
+    const computerId = bot.computerId!;
+    const before = await handles.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
+
+    await handles.executor.continueRun(seeded.run.id, "worker-no-boot");
+
+    const run = await handles.prisma.run.findUniqueOrThrow({ where: { id: seeded.run.id } });
+    expect(run.status).toBe("completed");
+    const after = await handles.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
+    expect(after.state).toBe(before.state);
+    expect(after.providerRef).toBe(before.providerRef);
+  });
+
   it("recovers a computer a crashed worker left booting", async () => {
     const seeded = await seedRun("stale-boot", "write a file that says recovered");
     const bot = await handles.prisma.bot.findUniqueOrThrow({ where: { id: seeded.bot.id } });

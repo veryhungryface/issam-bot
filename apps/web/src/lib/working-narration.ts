@@ -1,12 +1,15 @@
 /**
  * What to say while a turn is starting and the bot has not spoken yet.
  *
- * A cold browser takes seven to nine seconds to exist, and the model's own first sentence
- * only arrives after its first turn. A single frozen label ("Thinking…") for that long reads
- * as a stuck bot, so the line moves through the work that is actually happening in order:
- * the request is read, then the web is the place to look, then the browser is taken over,
- * then it is coming up. Each line is true of the phase it belongs to - none of them claims
- * progress the run has not made.
+ * The model's own first sentence only arrives after its first turn, and a single frozen
+ * label ("Thinking…") for that long reads as a stuck bot. So the line moves through the
+ * work every turn really does in order: the request is read, an approach is chosen, what
+ * is needed is gathered, the answer is assembled.
+ *
+ * None of these lines names a tool, and that is deliberate. An earlier version said "this
+ * needs something from the web" and "taking over the browser" during the wait; most turns
+ * never open a browser at all, so those lines were claiming work that never happened.
+ * The browser is mentioned only once its boot is a fact the shell can see.
  *
  * Once real tool activity starts, the step list takes over and this stops.
  */
@@ -28,9 +31,9 @@ export type WorkingNarrationLine = {
 
 const OPENING: WorkingNarrationLine[] = [
   { id: "reading", text: "Reading your request…" },
-  { id: "planning", text: "Working out how to find this…" },
-  { id: "web", text: "This needs something from the web…" },
-  { id: "control", text: "Taking over the browser…" },
+  { id: "planning", text: "Working out how to answer this…" },
+  { id: "gathering", text: "Gathering what I need…" },
+  { id: "assembling", text: "Putting the answer together…" },
 ];
 
 /** Roughly how long each opening line holds before the next one. */

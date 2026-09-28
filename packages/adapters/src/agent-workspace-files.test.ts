@@ -44,7 +44,7 @@ describe("agent workspace file routing", () => {
     const readProviderFile = vi.spyOn(sandbox, "readFile");
     const writeProviderFile = vi.spyOn(sandbox, "writeFile");
     const listProviderFiles = vi.spyOn(sandbox, "listFiles");
-    const deps = { home, sandbox, computer, homeKey: "bot-1", context };
+    const deps = { home, sandbox, computer: async () => computer, homeKey: "bot-1", context };
 
     await writeAgentWorkspaceTextFile(deps, "results/result.html", "<h1>safe</h1>");
     expect(
@@ -71,12 +71,12 @@ describe("agent workspace file routing", () => {
     const deps = {
       home,
       sandbox,
-      computer: {
+      computer: async () => ({
         id: "browserbase:v1:test",
         botId: "bot-1",
         kind: "browserbase" as const,
         providerRef: "browserbase:v1:test",
-      },
+      }),
       homeKey: "bot-1",
       context,
     };

@@ -339,6 +339,9 @@ const READ_ONLY_AGENT_TOOLS = new Set([
   "cloud_agent_status",
 ]);
 const MAX_MODEL_FILE_BYTES = 250_000;
+/** How long a run waits for a co-tenant's boot before giving up on sharing the computer. */
+const BOOT_RACE_WAIT_MS = 20_000;
+const BOOT_RACE_POLL_MS = 300;
 const TURN_ATTACHMENT_UNAVAILABLE =
   "An attachment in this message could not be loaded. Tell the user the attachment was unavailable and do not guess its contents.";
 const STEERING_ATTACHMENT_UNAVAILABLE = TURN_ATTACHMENT_UNAVAILABLE;
@@ -536,7 +539,7 @@ export function computerInstructionForSandboxCapabilities(
   capabilities: SandboxCapabilities,
 ): string {
   if (capabilities.graphical && !capabilities.filesystem && !capabilities.shell) {
-    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. Work pages with browser_navigate, browser_snapshot, and browser_act: the snapshot carries the page's readable text and the elements in view with refs (r1, r2, …), so read what a page says from that text and act by ref rather than aiming at pixels. Waiting for something to appear means snapshotting again, not screenshotting: a snapshot costs a fraction of a second where a screenshot costs several. Read the refs you were given rather than counting positions yourself. When a page tool returns a computer_act fallback, or the work is visual (canvas, drawing, a map, a PDF viewer, reading an image), switch to computer_observe and computer_act: click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with browser_navigate, or open_path with a full http(s) URL; never type into or click the omnibox. After focusing a field, type a complete string in one action. After navigation, snapshot again before the next action. Deliver results in their native format: Korean documents (학습지, 보고서, 공문서) as .hwpx or .docx, slide decks as .pptx, and spreadsheets as .xlsx via create_document, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Files you create or attach already appear in the chat as download cards — never paste file paths or download links in your reply. When the user attaches hwp, hwpx, pdf, docx, xlsx, or xls files, read them with read_document. Attached photos stay saved under attachments/; use view_image to look at one again in a later turn instead of saying it is gone. Documents over 30 pages come back one 30-page window at a time: answer from the window you read, say which pages it covered, and ask the user (예: 이어서 31-60페이지도 볼까요?) before reading the next range. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it renders as a live sandboxed preview card in the chat. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
+    return "You have a persistent cloud browser and a separate contained UTF-8 result workspace. The browser starts the first time you use it, which costs several seconds, so read with web_search or web_fetch when reading is all you need and open the browser when you have to act on a page or read one that refuses those. Work pages with browser_navigate, browser_snapshot, and browser_act: the snapshot carries the page's readable text and the elements in view with refs (r1, r2, …), so read what a page says from that text and act by ref rather than aiming at pixels. Waiting for something to appear means snapshotting again, not screenshotting: a snapshot costs a fraction of a second where a screenshot costs several. Read the refs you were given rather than counting positions yourself. When a page tool returns a computer_act fallback, or the work is visual (canvas, drawing, a map, a PDF viewer, reading an image), switch to computer_observe and computer_act: click coordinates are CSS pixels with origin at the top-left of the page viewport, matching the screenshot width and height — never the browser chrome or address bar. Navigate with browser_navigate, or open_path with a full http(s) URL; never type into or click the omnibox. After focusing a field, type a complete string in one action. After navigation, snapshot again before the next action. Deliver results in their native format: Korean documents (학습지, 보고서, 공문서) as .hwpx or .docx, slide decks as .pptx, and spreadsheets as .xlsx via create_document, data as .csv or .json, charts as PNG via render_plot, and the current page view via attach_screenshot. Files you create or attach already appear in the chat as download cards — never paste file paths or download links in your reply. When the user attaches hwp, hwpx, pdf, docx, xlsx, or xls files, read them with read_document. Attached photos stay saved under attachments/; use view_image to look at one again in a later turn instead of saying it is gone. Documents over 30 pages come back one 30-page window at a time: answer from the window you read, say which pages it covered, and ask the user (예: 이어서 31-60페이지도 볼까요?) before reading the next range. Only produce an HTML file when the user explicitly asks for an HTML page or interactive artifact; it renders as a live sandboxed preview card in the chat. Local workspace files cannot be opened inside this browser. Shell commands and installed application launching are unavailable. If a new session shows a blank, stale, or 404 page, navigate to the site's home page or another stable entry point and rediscover the flow yourself; do not ask the user to reopen the browser. Request takeover only for login, MFA, CAPTCHA, protected input, or human judgment.";
   }
   if (capabilities.graphical) {
     const preciseWork = capabilities.shell
@@ -974,10 +977,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
         select: { computerId: true, computerSwitching: true },
       });
       if (!leaseTarget.computerId) throw new Error("Bot has no computer");
+      const leasedComputerId = leaseTarget.computerId;
       if (leaseTarget.computerSwitching) {
         await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
         return;
       }
+      /**
+       * One run at a time per computer is a rule about the bot, not about a live session, so
+       * the lease is taken here even though nothing boots yet: the session itself is created
+       * by the first tool that needs it (see startComputerBoot below).
+       */
       let computerLease: ComputerExecutionLease | null = null;
       try {
         computerLease = await acquireComputerExecutionLease(deps.prisma, {
@@ -1025,13 +1034,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
       heartbeat.unref?.();
 
       const runSecrets = [...deps.secrets];
-      /**
-       * Booting a Browserbase session costs about 8 seconds (session create, CDP connect,
-       * profile restore) and needs nothing the rest of setup produces, so it runs alongside
-       * the connector sync, memory recall and model-key resolution instead of after them.
-       * The promise is awaited where the computer is first needed; the finally releases it
-       * even when setup gives up before that.
-       */
       const setupStartedAt = Date.now();
       const phases: Record<string, number> = {};
       const markPhase = (name: string) => {
@@ -1052,26 +1054,47 @@ export function createRunExecutor(deps: ExecutorDeps) {
         screenLeaseId: screenLeaseIdForRun(computerLease, runId, fence),
         signal: runAbortController.signal,
       };
-      // A run that has already started is picking a task back up, so the page it was on
-      // still matters. A first turn navigates somewhere else anyway.
-      const computerBoot = provisionComputer(deps, leaseTarget.computerId, bootContext, "bot", {
-        restoreLastPage: Boolean(run.startedAt),
-      });
-      // An early setup failure must not surface as an unhandled rejection.
-      computerBoot.catch(() => undefined);
       /**
-       * A cold Browserbase session takes about eight seconds to exist. Say so, but only once
-       * it is really happening: a warm session answers in well under a second and a notice
-       * there would be noise. The model's own opening line arrives later, after its first
-       * turn, so this is what fills the gap.
+       * Nothing boots until something asks for the computer. A cold Browserbase session
+       * costs about eight seconds and a billed session, and most asks never touch it -
+       * a traced run spent 8.5s booting a browser and then answered entirely from
+       * web_search. The notice, likewise, is only told when a boot is really happening.
        */
-      // Only a remote browser is slow enough to be worth announcing. An in-process sandbox
-      // boots in milliseconds, and a notice there is a spurious event on every run.
       const bootIsRemote = deps.sandbox?.describe?.().id === "browserbase";
       let bootNoticeSent = false;
-      const bootNotice = !bootIsRemote
-        ? undefined
-        : setTimeout(() => {
+      let computerBoot: Promise<ComputerRef> | undefined;
+      /**
+       * A team's bots share one computer on separate screens, so two runs can reach for it
+       * at the same moment and one loses the boot claim. Booting up front, that loss was a
+       * setup failure the run could be requeued from; asked for mid-turn there is nothing to
+       * requeue, so the loser waits for the winner's session and joins it.
+       */
+      const joinBootRace = async (): Promise<ComputerRef> => {
+        const deadline = Date.now() + BOOT_RACE_WAIT_MS;
+        for (;;) {
+          try {
+            // A run that has already started is picking a task back up, so the page it was
+            // on still matters. A first turn navigates somewhere else anyway.
+            return await provisionComputer(deps, leasedComputerId, bootContext, "bot", {
+              restoreLastPage: Boolean(run.startedAt),
+            });
+          } catch (error) {
+            if (!(error instanceof ComputerBusyError) || Date.now() >= deadline) throw error;
+            if (bootContext.signal.aborted) throw error;
+            await new Promise((resolve) => {
+              const timer = setTimeout(resolve, BOOT_RACE_POLL_MS);
+              timer.unref?.();
+            });
+          }
+        }
+      };
+      const startComputerBoot = (): Promise<ComputerRef> => {
+        if (computerBoot) return computerBoot;
+        computerBoot = joinBootRace();
+        // An early failure must not surface as an unhandled rejection.
+        computerBoot.catch(() => undefined);
+        if (bootIsRemote) {
+          const notice = setTimeout(() => {
             bootNoticeSent = true;
             void deps.events
               .append({
@@ -1084,8 +1107,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
               })
               .catch(() => undefined);
           }, 1_200);
-      bootNotice?.unref?.();
-      void computerBoot.finally(() => clearTimeout(bootNotice)).catch(() => undefined);
+          notice.unref?.();
+          void computerBoot.finally(() => clearTimeout(notice)).catch(() => undefined);
+        }
+        return computerBoot;
+      };
       try {
         const sourceBlocks =
           run.trigger === "messaging" && run.sourceMessageId
@@ -1376,29 +1402,41 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const storedComputer = bot.computer;
         const computerMode = parseComputerMode(storedComputer.scope);
         markPhase("modelKey");
-        let computer = await computerBoot;
-        markPhase("computer");
-        if (bootNoticeSent) {
-          await deps.events
-            .append({
-              spaceId: run.spaceId,
-              threadId: thread.id,
-              botId: bot.id,
-              type: "thread.progress",
-              runId,
-              payload: { text: "브라우저 준비됐어요. 작업을 시작합니다.", streaming: false },
-            })
-            .catch(() => undefined);
-        }
-        screenRelease = { computer, context };
-        scheduleComputerSleep(deps.jobs, storedComputer.id);
+        /**
+         * The browser is booted the first time something needs it, not because a run
+         * started. Most asks are answered from web_search or from what the bot already
+         * knows: those runs were paying 8.5s of cold Browserbase start and burning a
+         * session that never got a single command.
+         */
+        let computer: ComputerRef | undefined;
+        const ensureComputer = async (): Promise<ComputerRef> => {
+          if (computer) return computer;
+          computer = await startComputerBoot();
+          markPhase("computer");
+          screenRelease = { computer, context };
+          scheduleComputerSleep(deps.jobs, storedComputer.id);
+          if (bootNoticeSent) {
+            await deps.events
+              .append({
+                spaceId: run.spaceId,
+                threadId: thread.id,
+                botId: bot.id,
+                type: "thread.progress",
+                runId,
+                payload: { text: "브라우저 준비됐어요. 작업을 시작합니다.", streaming: false },
+              })
+              .catch(() => undefined);
+          }
+          return computer;
+        };
         // Ephemeral browser sessions (Browserbase) can die mid-run; retry the
         // failed computer action once on a replacement session.
         const withRecoveredComputer = async <T>(work: (active: ComputerRef) => Promise<T>) => {
+          const active = await ensureComputer();
           const recovered = await withComputerSessionRecovery(
             deps,
             storedComputer.id,
-            computer,
+            active,
             context,
             work,
           );
@@ -1408,35 +1446,39 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return recovered.result;
         };
         const sandboxCapabilities = deps.sandbox.describe().capabilities;
-        const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
-          checkpointAndRecordComputerWorkspace(deps, storedComputer, computer, context),
-        );
+        const workspaceCheckpoint = createRunWorkspaceCheckpoint(async () => {
+          // A run that never asked for the computer has no workspace to write back.
+          if (!computer) return;
+          await checkpointAndRecordComputerWorkspace(deps, storedComputer, computer, context);
+        });
+        const turnHasFiles = Boolean(turnBlocks?.some((block) => block.kind === "file"));
         let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
         try {
-          currentTurnFiles = deps.artifacts
-            ? await materializeCurrentTurnFiles(
-                {
-                  prisma: deps.prisma,
-                  artifacts: deps.artifacts,
-                  sandbox: deps.sandbox,
-                  home: deps.home,
-                },
-                turnBlocks,
-                {
-                  context,
-                  computer,
-                  computerMode,
-                  homeKey: sandboxCapabilities.filesystem ? undefined : storedComputer.homeKey,
-                  markWorkspaceDirty: workspaceCheckpoint.markDirty,
-                },
-              )
-            : [];
+          currentTurnFiles =
+            deps.artifacts && turnHasFiles
+              ? await materializeCurrentTurnFiles(
+                  {
+                    prisma: deps.prisma,
+                    artifacts: deps.artifacts,
+                    sandbox: deps.sandbox,
+                    home: deps.home,
+                  },
+                  turnBlocks,
+                  {
+                    context,
+                    computer: await ensureComputer(),
+                    computerMode,
+                    homeKey: sandboxCapabilities.filesystem ? undefined : storedComputer.homeKey,
+                    markWorkspaceDirty: workspaceCheckpoint.markDirty,
+                  },
+                )
+              : [];
         } catch (error) {
           await workspaceCheckpoint.flush().catch(() => undefined);
           throw error;
         }
         const attachedFilesPrompt = currentTurnFilesInstruction(currentTurnFiles);
-        const graphical = computer.kind !== "desktop" && sandboxCapabilities.graphical;
+        const graphical = storedComputer.kind !== "desktop" && sandboxCapabilities.graphical;
         // Gate on the model this run will actually call — the pair written to the run row
         // above. Deriving it a second time here dropped the deployment fallback, so a
         // vision-capable default was gated as "scripted" and lost its screenshot tools.
@@ -2162,7 +2204,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const workspaceFileDeps = () => ({
             home: deps.home,
             sandbox: deps.sandbox,
-            computer,
+            // Lazy: a file tool on a browser-only run must not boot a browser.
+            computer: ensureComputer,
             homeKey: storedComputer.homeKey,
             context,
           });
@@ -2640,7 +2683,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             workspaceCheckpoint.markDirty();
             const result = await runSandboxCommand(
               deps.sandbox,
-              computer,
+              await ensureComputer(),
               [
                 "bash",
                 "-c",
@@ -2762,7 +2805,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 : name === "browser_snapshot"
                   ? browserSnapshotFromTool
                   : browserActFromTool;
-            return computerScreenToolResult(() => tool(browser, computer, context, args), finish);
+            return computerScreenToolResult(
+              () => withRecoveredComputer((active) => tool(browser, active, context, args)),
+              finish,
+            );
           }
 
           if (name.startsWith("cloud_agent_")) {
@@ -3369,6 +3415,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (!(await renewRunLease(deps, runId, workerId, fence))) {
               return secretPausedToolResult();
             }
+            // What the user types is typed into this session by the API, so the session has
+            // to exist before the card is handed to them.
+            await ensureComputer();
             await workspaceCheckpoint.flush();
             const paused = await deps.events.pauseRunForInput({
               spaceId: run.spaceId,
@@ -3789,7 +3838,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         const { images, files, unavailableInstruction } =
                           await settleSteeringAttachmentLoads(
                             loadCurrentTurnImages(deps, item.blocks, context),
-                            deps.artifacts
+                            deps.artifacts && item.blocks?.some((block) => block.kind === "file")
                               ? materializeCurrentTurnFiles(
                                   {
                                     prisma: deps.prisma,
@@ -3799,7 +3848,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                                   item.blocks,
                                   {
                                     context,
-                                    computer,
+                                    computer: await ensureComputer(),
                                     computerMode,
                                     markWorkspaceDirty: workspaceCheckpoint.markDirty,
                                   },
@@ -3954,11 +4003,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 hasStreamedText = false;
                 pendingProgress = "";
               }
+              // The user is about to drive this browser, so it has to be running even if
+              // the turn had not needed it yet.
+              const takeoverComputer = await ensureComputer().catch(() => undefined);
               // Show the user what the bot is looking at so they know what to do.
               let screenshotArtifactId: string | undefined;
-              if (deps.artifacts) {
+              if (deps.artifacts && takeoverComputer) {
                 try {
-                  const observation = await deps.sandbox.observe(computer, context);
+                  const observation = await deps.sandbox.observe(takeoverComputer, context);
                   let bytes = observation.image;
                   try {
                     const sharpModule = await import("sharp");
@@ -4187,7 +4239,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             for (const file of turn.files ?? []) {
               workspaceCheckpoint.markDirty();
               await deps.sandbox.writeFile(
-                computer,
+                await ensureComputer(),
                 {
                   path: resolveBotWorkspacePath(computerMode, bot.id, file.path),
                   content: new TextEncoder().encode(file.content),
@@ -4464,10 +4516,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
         detachShutdown?.();
         clearInterval(heartbeat);
         if (!retainComputerLease) {
-          // The boot runs alongside the rest of setup, so it can still land after a failure
-          // that never reached the await. Give that screen back too.
+          // A boot asked for late can still land after a failure that never reached the
+          // await. Give that screen back too; a run that never booted has nothing to return.
           const booted = screenRelease ?? {
-            computer: await computerBoot.catch(() => null),
+            computer: computerBoot ? await computerBoot.catch(() => null) : null,
             context: bootContext,
           };
           if (booted.computer) {
