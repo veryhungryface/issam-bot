@@ -6,13 +6,22 @@ describe("workingNarration", () => {
     const at = (ms: number) => workingNarration({ elapsedMs: ms })?.id;
     expect(at(0)).toBe("reading");
     expect(at(NARRATION_STEP_MS + 10)).toBe("planning");
-    expect(at(NARRATION_STEP_MS * 2 + 10)).toBe("web");
-    expect(at(NARRATION_STEP_MS * 3 + 10)).toBe("control");
+    expect(at(NARRATION_STEP_MS * 2 + 10)).toBe("gathering");
+    expect(at(NARRATION_STEP_MS * 3 + 10)).toBe("assembling");
   });
 
   it("holds on the last line rather than looping back", () => {
-    // A cold boot runs 7-9s; cycling back to "reading your request" would be a lie.
-    expect(workingNarration({ elapsedMs: NARRATION_STEP_MS * 20 })?.id).toBe("control");
+    // A long first turn is normal; cycling back to "reading your request" would be a lie.
+    expect(workingNarration({ elapsedMs: NARRATION_STEP_MS * 20 })?.id).toBe("assembling");
+  });
+
+  it("never claims the browser before a boot is a fact", () => {
+    // Most turns answer from search alone. Saying "taking over the browser" during the
+    // wait described work that never happened.
+    for (let step = 0; step < 8; step += 1) {
+      const line = workingNarration({ elapsedMs: NARRATION_STEP_MS * step });
+      expect(line?.text.toLowerCase()).not.toContain("browser");
+    }
   });
 
   it("says the browser is coming up as soon as that is a fact", () => {

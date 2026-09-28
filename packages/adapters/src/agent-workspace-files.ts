@@ -9,7 +9,11 @@ import type {
 export type AgentWorkspaceFileDeps = {
   home: AgentHomeStore;
   sandbox: SandboxProvider;
-  computer: ComputerRef;
+  /**
+   * Asked for only on the sandbox path. A Browserbase run keeps its files in the home store,
+   * and resolving this eagerly would boot a remote browser just to list a directory.
+   */
+  computer: () => Promise<ComputerRef>;
   homeKey: string;
   context: AdapterContext;
 };
@@ -24,7 +28,7 @@ export async function listAgentWorkspaceFiles(
 ): Promise<ComputerFileEntry[]> {
   return usesAgentHomeFiles(deps.sandbox)
     ? deps.home.list(deps.homeKey, storedPath, deps.context)
-    : deps.sandbox.listFiles(deps.computer, storedPath, deps.context);
+    : deps.sandbox.listFiles(await deps.computer(), storedPath, deps.context);
 }
 
 export async function readAgentWorkspaceFile(
@@ -35,7 +39,7 @@ export async function readAgentWorkspaceFile(
   if (usesAgentHomeFiles(deps.sandbox)) {
     return deps.home.readBytes(deps.homeKey, storedPath, deps.context, options);
   }
-  return deps.sandbox.readFile(deps.computer, storedPath, deps.context, options);
+  return deps.sandbox.readFile(await deps.computer(), storedPath, deps.context, options);
 }
 
 export async function writeAgentWorkspaceTextFile(
@@ -48,7 +52,7 @@ export async function writeAgentWorkspaceTextFile(
     return;
   }
   await deps.sandbox.writeFile(
-    deps.computer,
+    await deps.computer(),
     { path: storedPath, content: new TextEncoder().encode(content) },
     deps.context,
   );
@@ -63,5 +67,5 @@ export async function writeAgentWorkspaceFile(
     await deps.home.writeBytes(deps.homeKey, storedPath, content, deps.context);
     return;
   }
-  await deps.sandbox.writeFile(deps.computer, { path: storedPath, content }, deps.context);
+  await deps.sandbox.writeFile(await deps.computer(), { path: storedPath, content }, deps.context);
 }
