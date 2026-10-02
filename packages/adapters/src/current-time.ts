@@ -1,8 +1,10 @@
 /**
  * Models have no clock. Without an explicit anchor they infer "now" from training data
  * or from timestamps that happen to appear in the conversation, and then reason about
- * deadlines, recency and scheduling from a stale date. Every run states the real present
- * moment in its system instructions so that never has to be guessed.
+ * deadlines, recency and scheduling from a stale date. Every turn states the real present
+ * moment on the turn message so that never has to be guessed. It deliberately does not go in
+ * the system prompt: this text changes every minute, and the provider's cached prefix ends at
+ * the first block that changed, so from there the whole rest of the prompt would be reread.
  *
  * UTC is always stated because it is unambiguous. This deployment serves one country, so
  * DEPLOYMENT_TIME_ZONE adds the local reading the user actually thinks in — a Korean
