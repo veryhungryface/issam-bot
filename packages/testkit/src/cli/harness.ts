@@ -55,6 +55,10 @@ async function main() {
     process.env.VERIFY_DATABASE = "1";
     process.env.WAKEUP_DRIVER = "memory";
     process.env.SANDBOX_PROVIDER = sandboxProvider;
+    // The emulated stack's model servers are local listeners, and every spec signs up a
+    // fresh account that is not the deployment owner. This is the shared-local-model case
+    // the flag exists for; who may reach a private endpoint is gated in unit tests.
+    process.env.RAKAZO_SHARE_PRIVATE_MODELS = "1";
     process.env.AGENT_RUNTIME = agentRuntime;
     // Playwright/E2E force the offline cloud-agent emulator; clear Cursor keys so cards never hit a live VM.
     process.env.CLOUD_AGENT_PROVIDER = "emulator";

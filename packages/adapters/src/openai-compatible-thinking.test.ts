@@ -1,6 +1,6 @@
 import { type Model, Type } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildModelConnectPlaintext } from "./model-connect.js";
 import { registerOpenAiCompatibleRuntime } from "./pi-openai-compatible-provider.js";
 
@@ -57,6 +57,19 @@ function fixtureResponse(): Response {
     },
   );
 }
+
+/**
+ * These exercise connect/normalize/runtime wiring with a local model server, which is the
+ * deployment owner's case. The gate that decides who may reach a private endpoint at all is
+ * covered in openai-compatible-url.test.ts.
+ */
+beforeAll(() => {
+  process.env.RAKAZO_SHARE_PRIVATE_MODELS = "1";
+});
+
+afterAll(() => {
+  delete process.env.RAKAZO_SHARE_PRIVATE_MODELS;
+});
 
 describe("OpenAI-compatible standard thinking transport", () => {
   const provider = "openai-compatible";

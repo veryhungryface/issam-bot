@@ -836,6 +836,10 @@ describeWithDatabase("API authorization and resource isolation", () => {
   });
 
   it("validates custom thinking against the saved connection capability", async () => {
+    // This account is not the deployment owner, and the endpoint below is loopback: who may
+    // reach a private model endpoint is gated now (openai-compatible-url.test.ts covers that
+    // gate). Share local model servers for this case so the subject stays thinking capability.
+    process.env.RAKAZO_SHARE_PRIVATE_MODELS = "1";
     const cookie = await signup(app, `custom-thinking-${stamp}@rakazo.test`, "Custom Thinking");
     const bot = await rpc<Bot>(app, cookie, "bots/create", botInput("Thinking Bot"));
     const connection = {
@@ -875,6 +879,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
     expect(
       await rpc(app, cookie, "bots/update", { ...update, thinkingLevel: "off" }),
     ).toMatchObject({ thinkingLevel: "off" });
+    delete process.env.RAKAZO_SHARE_PRIVATE_MODELS;
   });
 
   it("validates per-bot model overrides against connected providers and catalog", async () => {

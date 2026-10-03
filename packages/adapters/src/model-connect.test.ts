@@ -1,6 +1,19 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildModelConnectPlaintext, modelCredentialDto } from "./model-connect.js";
 import { parseModelSecret, serializeModelSecret } from "./pi-oauth.js";
+
+/**
+ * These exercise connect/normalize/runtime wiring with a local model server, which is the
+ * deployment owner's case. The gate that decides who may reach a private endpoint at all is
+ * covered in openai-compatible-url.test.ts.
+ */
+beforeAll(() => {
+  process.env.RAKAZO_SHARE_PRIVATE_MODELS = "1";
+});
+
+afterAll(() => {
+  delete process.env.RAKAZO_SHARE_PRIVATE_MODELS;
+});
 
 describe("modelCredentialDto", () => {
   it("returns stored baseUrl and modelId for openai-compatible credentials", () => {

@@ -60,7 +60,9 @@ describe("openai-compatible URL policy", () => {
 
   it("validates request URLs without changing their path", () => {
     expect(
-      assertAllowedOpenAiCompatibleRequestUrl("http://127.0.0.1:8000/v1/chat/completions").href,
+      assertAllowedOpenAiCompatibleRequestUrl("http://127.0.0.1:8000/v1/chat/completions", {
+        allowPrivate: true,
+      }).href,
     ).toBe("http://127.0.0.1:8000/v1/chat/completions");
   });
 
@@ -71,19 +73,20 @@ describe("openai-compatible URL policy", () => {
     );
   });
 
-  it("allows loopback and RFC1918 hosts by default", () => {
-    expect(assertAllowedOpenAiCompatibleUrl("http://127.0.0.1:8000/v1").href).toBe(
+  it("allows loopback and RFC1918 hosts for a caller with private access", () => {
+    const owner = { allowPrivate: true };
+    expect(assertAllowedOpenAiCompatibleUrl("http://127.0.0.1:8000/v1", owner).href).toBe(
       "http://127.0.0.1:8000/v1",
     );
-    expect(assertAllowedOpenAiCompatibleUrl("http://localhost:11434/v1").href).toBe(
+    expect(assertAllowedOpenAiCompatibleUrl("http://localhost:11434/v1", owner).href).toBe(
       "http://localhost:11434/v1",
     );
-    expect(assertAllowedOpenAiCompatibleUrl("http://192.168.1.20:8080/v1").href).toBe(
+    expect(assertAllowedOpenAiCompatibleUrl("http://192.168.1.20:8080/v1", owner).href).toBe(
       "http://192.168.1.20:8080/v1",
     );
-    expect(assertAllowedOpenAiCompatibleUrl("http://host.docker.internal:8000/v1").href).toBe(
-      "http://host.docker.internal:8000/v1",
-    );
+    expect(
+      assertAllowedOpenAiCompatibleUrl("http://host.docker.internal:8000/v1", owner).href,
+    ).toBe("http://host.docker.internal:8000/v1");
     expect(() => assertAllowedOpenAiCompatibleUrl("http://ollama.local:11434/v1")).toThrow(
       /Public model endpoints are blocked/,
     );
@@ -154,10 +157,37 @@ describe("assertHttpsForKeyedOpenAiCompatibleUrl", () => {
   });
 
   it("allows private http when an API key is set", () => {
-    const url = assertAllowedOpenAiCompatibleUrl("http://127.0.0.1:8000/v1");
+    const owner = { allowPrivate: true };
+    const url = assertAllowedOpenAiCompatibleUrl("http://127.0.0.1:8000/v1", owner);
     expect(() => assertHttpsForKeyedOpenAiCompatibleUrl(url, "local-secret")).not.toThrow();
-    const lan = assertAllowedOpenAiCompatibleUrl("http://192.168.1.20:8080/v1");
+    const lan = assertAllowedOpenAiCompatibleUrl("http://192.168.1.20:8080/v1", owner);
     expect(() => assertHttpsForKeyedOpenAiCompatibleUrl(lan, "local-secret")).not.toThrow();
+  });
+
+  it("refuses a private endpoint to a caller without private access", () => {
+    // The probe reports answered / refused / timed out, which maps the internal network.
+    for (const raw of [
+      "http://127.0.0.1:8000/v1",
+      "http://localhost:11434/v1",
+      "http://10.0.0.5:8080/v1",
+      "http://host.docker.internal:8000/v1",
+    ]) {
+      expect(() => assertAllowedOpenAiCompatibleUrl(raw)).toThrow(/deployment owner/);
+      expect(() => assertAllowedOpenAiCompatibleUrl(raw, { allowPrivate: false })).toThrow(
+        /deployment owner/,
+      );
+    }
+  });
+
+  it("shares local model servers with everyone when the deployment says so", () => {
+    process.env.RAKAZO_SHARE_PRIVATE_MODELS = "1";
+    try {
+      expect(assertAllowedOpenAiCompatibleUrl("http://127.0.0.1:8000/v1").href).toBe(
+        "http://127.0.0.1:8000/v1",
+      );
+    } finally {
+      delete process.env.RAKAZO_SHARE_PRIVATE_MODELS;
+    }
   });
 
   it("skips the HTTPS check when no API key is set", () => {

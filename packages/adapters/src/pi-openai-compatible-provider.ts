@@ -248,7 +248,10 @@ export type OpenAiCompatibleConnectInput = {
   apiKey?: string;
 };
 
-export function prepareOpenAiCompatibleConnect(input: OpenAiCompatibleConnectInput): {
+export function prepareOpenAiCompatibleConnect(
+  input: OpenAiCompatibleConnectInput,
+  opts?: { allowPrivate?: boolean },
+): {
   baseUrl: string;
   modelId: string;
   apiKey?: string;
@@ -257,7 +260,9 @@ export function prepareOpenAiCompatibleConnect(input: OpenAiCompatibleConnectInp
   const modelId = input.modelId?.trim();
   if (!baseUrl) throw new Error("Base URL is required for OpenAI-compatible models");
   if (!modelId) throw new Error("Model id is required for OpenAI-compatible models");
-  const allowed = assertAllowedOpenAiCompatibleUrl(baseUrl);
+  const allowed = assertAllowedOpenAiCompatibleUrl(baseUrl, {
+    allowPrivate: opts?.allowPrivate,
+  });
   const apiKey = input.apiKey?.trim();
   assertHttpsForKeyedOpenAiCompatibleUrl(allowed, apiKey);
   const normalized = allowed.href;
@@ -333,8 +338,11 @@ export async function probeOpenAiCompatibleModels(
   input: { baseUrl: string; apiKey?: string },
   fetchImpl: typeof fetch = fetch,
   signal?: AbortSignal,
+  opts?: { allowPrivate?: boolean },
 ): Promise<string[]> {
-  const baseUrl = assertAllowedOpenAiCompatibleUrl(input.baseUrl);
+  const baseUrl = assertAllowedOpenAiCompatibleUrl(input.baseUrl, {
+    allowPrivate: opts?.allowPrivate,
+  });
   assertHttpsForKeyedOpenAiCompatibleUrl(baseUrl, input.apiKey);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);

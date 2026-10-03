@@ -1,6 +1,6 @@
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { AgentRunRequest } from "@rakazo/adapter-kit";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildModelConnectPlaintext, modelCredentialDto } from "./model-connect.js";
 import { resolveModelAuth } from "./pi-oauth.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
@@ -9,6 +9,19 @@ import { modelsForRequest } from "./pi-runtime.js";
 function requestModel(id: string, baseUrl: string): Pick<AgentRunRequest, "model"> {
   return { model: { provider: OPENAI_COMPATIBLE_PROVIDER_ID, id, baseUrl } };
 }
+
+/**
+ * These exercise connect/normalize/runtime wiring with a local model server, which is the
+ * deployment owner's case. The gate that decides who may reach a private endpoint at all is
+ * covered in openai-compatible-url.test.ts.
+ */
+beforeAll(() => {
+  process.env.RAKAZO_SHARE_PRIVATE_MODELS = "1";
+});
+
+afterAll(() => {
+  delete process.env.RAKAZO_SHARE_PRIVATE_MODELS;
+});
 
 describe("request model catalogs", () => {
   it("isolates concurrent OpenAI-compatible endpoint registrations", () => {

@@ -11,9 +11,10 @@ import {
 export function buildModelConnectPlaintext(
   input: ModelConnectInput,
   previousPlaintext?: string,
+  opts?: { allowPrivate?: boolean },
 ): string {
   if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
-    const prepared = prepareOpenAiCompatibleConnect(input);
+    const prepared = prepareOpenAiCompatibleConnect(input, opts);
     const previous = previousPlaintext ? parseModelSecret(previousPlaintext) : undefined;
     if (
       input.apiKey === undefined &&
@@ -21,10 +22,10 @@ export function buildModelConnectPlaintext(
       previous.baseUrl === prepared.baseUrl
     ) {
       // Revalidate the inherited key too: public endpoints must still use HTTPS.
-      prepared.apiKey = prepareOpenAiCompatibleConnect({
-        ...input,
-        apiKey: previous.apiKey,
-      }).apiKey;
+      prepared.apiKey = prepareOpenAiCompatibleConnect(
+        { ...input, apiKey: previous.apiKey },
+        opts,
+      ).apiKey;
     }
     const secret: StoredModelSecret = {
       kind: "openai_compatible",
