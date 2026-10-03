@@ -35,6 +35,7 @@ export * from "./self-update.js";
 export * from "./signup-policy.js";
 export * from "./speech-text.js";
 export * from "./stream-progress.js";
+export * from "./stuck-work.js";
 export * from "./teach-playbook.js";
 export * from "./teach-recording.js";
 export * from "./text-direction.js";

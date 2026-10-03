@@ -96,6 +96,7 @@ async function main() {
           "packages/testkit/src/connections.test.ts",
           "packages/testkit/src/bot-secrets.test.ts",
           "packages/testkit/src/browser-login.test.ts",
+          "packages/testkit/src/stuck-work.test.ts",
           "packages/db/src/space-membership.postgres.test.ts",
           "packages/db/src/messaging.postgres.test.ts",
           "packages/memory/src/commit.postgres.test.ts",

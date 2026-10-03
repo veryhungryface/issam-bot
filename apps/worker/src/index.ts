@@ -164,6 +164,8 @@ async function main() {
     });
   // One provider instance so emulator launches and polls share the same Map.
   const cloudAgent = createCloudAgentConnection();
+  // Shared with the reconciler, which reminds about waits the executor started.
+  const notifications = new ExpoPushProvider(dataDir);
   const executor = createRunExecutor({
     prisma,
     runtime,
@@ -185,7 +187,7 @@ async function main() {
     secretStore: secrets,
     deploymentModelKey,
     dataDir,
-    notifications: new ExpoPushProvider(dataDir),
+    notifications,
     jobs,
     events,
     messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
@@ -231,6 +233,7 @@ async function main() {
     prisma,
     jobs,
     events,
+    notifications,
     leadership: createPostgresReconciliationLeadership(pool),
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
   });
