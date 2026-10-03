@@ -10,6 +10,16 @@ export function openAiCompatAllowPublicHosts(): boolean {
   return process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC === "1";
 }
 
+/**
+ * A private model endpoint makes this server fetch an address only it can reach, and the
+ * probe reports back whether that address answered, refused or timed out - which maps the
+ * internal network for anyone with an account. So it belongs to whoever owns the deployment,
+ * or to every user when a self-hoster says local model servers are shared.
+ */
+export function openAiCompatSharesPrivateModels(): boolean {
+  return process.env.RAKAZO_SHARE_PRIVATE_MODELS === "1";
+}
+
 export function normalizeOpenAiCompatibleBaseUrl(raw: string): string {
   const trimmed = raw.trim();
   let url: URL;
@@ -65,11 +75,21 @@ function isBlockedHostname(hostname: string): boolean {
 
 export function assertAllowedOpenAiCompatibleUrl(
   raw: string,
-  opts?: { allowPublic?: boolean },
+  opts?: OpenAiCompatibleUrlOptions,
 ): URL {
   const normalized = normalizeOpenAiCompatibleBaseUrl(raw);
   return assertAllowedOpenAiCompatibleRequestUrl(normalized, opts);
 }
+
+export type OpenAiCompatibleUrlOptions = {
+  allowPublic?: boolean;
+  /** The caller's standing for private hosts. Undefined means "whatever the env allows". */
+  allowPrivate?: boolean;
+};
+
+/** The one message a caller without private access ever gets, so nothing is mapped. */
+export const PRIVATE_MODEL_ENDPOINT_REFUSED =
+  "Private model endpoints are available to the deployment owner. Set RAKAZO_SHARE_PRIVATE_MODELS=1 to share a local model server with every user.";
 
 /**
  * When an API key will be sent, refuse public http:// endpoints so the Bearer
@@ -91,7 +111,7 @@ export function assertHttpsForKeyedOpenAiCompatibleUrl(
 
 export function assertAllowedOpenAiCompatibleRequestUrl(
   raw: string,
-  opts?: { allowPublic?: boolean },
+  opts?: OpenAiCompatibleUrlOptions,
 ): URL {
   let url: URL;
   try {
@@ -110,7 +130,11 @@ export function assertAllowedOpenAiCompatibleRequestUrl(
     throw new Error("Base URL targets a blocked metadata or link-local host");
   }
   const allowPublic = opts?.allowPublic ?? openAiCompatAllowPublicHosts();
-  if (isPrivateOpenAiCompatibleHostname(hostname)) return url;
+  if (isPrivateOpenAiCompatibleHostname(hostname)) {
+    const allowPrivate = opts?.allowPrivate ?? openAiCompatSharesPrivateModels();
+    if (!allowPrivate) throw new Error(PRIVATE_MODEL_ENDPOINT_REFUSED);
+    return url;
+  }
   if (!allowPublic) {
     throw new Error(
       "Public model endpoints are blocked. Set RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC=1 to allow them. A private reverse proxy on localhost or an RFC1918 address does not need that gate.",

@@ -51,6 +51,7 @@ import {
   type MemoryProviderResolver,
   mapScratchpadItem,
   modelCredentialDto,
+  openAiCompatSharesPrivateModels,
   type PiOAuthLogins,
   planLiveConnectionSync,
   prepareApiInstall,
@@ -305,6 +306,15 @@ function mcpServerDto(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/**
+ * Private model endpoints make this server fetch an address only it can reach, so they
+ * belong to whoever owns the deployment - or to everyone when a self-hoster says the local
+ * model server is shared. A single-user install is unaffected: that account is the owner.
+ */
+function mayUsePrivateModelEndpoint(actor: Actor): boolean {
+  return actor.isDeploymentOwner || openAiCompatSharesPrivateModels();
 }
 
 function connectionContext(
@@ -636,7 +646,9 @@ export function createRouter(deps: RouterDeps) {
                 previousPlaintext = deps.secrets.load(secret.ciphertext, credential.secretId);
             }
           }
-          plaintext = buildModelConnectPlaintext(input, previousPlaintext);
+          plaintext = buildModelConnectPlaintext(input, previousPlaintext, {
+            allowPrivate: mayUsePrivateModelEndpoint(context.actor),
+          });
         } catch (error) {
           throw new ORPCError("BAD_REQUEST", {
             message: error instanceof Error ? error.message : "Invalid model connection",
@@ -652,10 +664,18 @@ export function createRouter(deps: RouterDeps) {
       }),
       probeOpenAiCompatible: authed.models.probeOpenAiCompatible.handler(
         async ({ context, input }) => {
+          const allowPrivate = mayUsePrivateModelEndpoint(context.actor);
           try {
-            const models = await probeOpenAiCompatibleModels(input, fetch, context.signal);
+            const models = await probeOpenAiCompatibleModels(input, fetch, context.signal, {
+              allowPrivate,
+            });
             return { models };
           } catch (error) {
+            // Without private access the caller learns one thing: it did not work. Answered,
+            // refused and timed out read differently, and the difference maps the network.
+            if (!allowPrivate) {
+              throw new ORPCError("BAD_REQUEST", { message: "Could not list models" });
+            }
             throw new ORPCError("BAD_REQUEST", {
               message: error instanceof Error ? error.message : "Could not list models",
             });

@@ -1,6 +1,6 @@
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@rakazo/contracts";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildModelConnectPlaintext } from "./model-connect.js";
 import { listPiCatalog } from "./pi-models.js";
 import { parseModelSecret, secretValuesToRedact, serializeModelSecret } from "./pi-oauth.js";
@@ -13,6 +13,19 @@ import {
   probeOpenAiCompatibleModels,
   registerOpenAiCompatibleRuntime,
 } from "./pi-openai-compatible-provider.js";
+
+/**
+ * These exercise connect/normalize/runtime wiring with a local model server, which is the
+ * deployment owner's case. The gate that decides who may reach a private endpoint at all is
+ * covered in openai-compatible-url.test.ts.
+ */
+beforeAll(() => {
+  process.env.RAKAZO_SHARE_PRIVATE_MODELS = "1";
+});
+
+afterAll(() => {
+  delete process.env.RAKAZO_SHARE_PRIVATE_MODELS;
+});
 
 describe("model connect", () => {
   it("serializes keyless openai-compatible credentials", () => {
@@ -297,7 +310,7 @@ describe("openai-compatible provider", () => {
   });
 
   it("lists openai-compatible in the catalog even without RAKAZO_LOCAL_MODELS", () => {
-    delete process.env.RAKAZO_LOCAL_MODELS;
+    delete process.env.RAKAZO_SHARE_PRIVATE_MODELS;
     const entries = listPiCatalog().filter(
       (entry) => entry.provider === OPENAI_COMPATIBLE_PROVIDER_ID,
     );
