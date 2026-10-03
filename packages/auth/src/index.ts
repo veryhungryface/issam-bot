@@ -134,6 +134,9 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       organization({
         allowUserToCreateOrganization: false,
         creatorRole: "owner",
+        // Defense in depth behind the dispatcher below: the product deletes a Space
+        // through spaces/remove, which checks owner, default, last, empty and teardown.
+        disableOrganizationDeletion: true,
       }),
     ],
     hooks: {
@@ -274,11 +277,16 @@ function escapeHtml(value: string): string {
 
 export type Auth = ReturnType<typeof createAuth>;
 
-export const blockedAuthPaths = [
-  "/organization/create",
-  "/organization/invite",
-  "/organization/accept-invitation",
-  "/organization/reject-invitation",
-  "/organization/remove-member",
-  "/organization/update-member-role",
-];
+/**
+ * Spaces are Better Auth organizations, and a personal tenant makes the user its owner. The
+ * dispatcher denied a handful of routes by name, so an ordinary session could still call
+ * /organization/delete on its own default Space and cascade every Space away, skipping all
+ * the checks spaces/remove enforces; /organization/leave and /organization/update were
+ * reachable the same way.
+ *
+ * No web, desktop or mobile client calls the organization plugin over HTTP, so the whole
+ * surface stays closed - including routes a future plugin version adds.
+ */
+export function isBlockedAuthPath(path: string): boolean {
+  return path.startsWith("/organization");
+}
