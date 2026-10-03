@@ -493,8 +493,8 @@ export function createRouter(deps: RouterDeps) {
       ]);
       const { bots, groups, botSections } = navigation.current;
       // Bots created before check-ins existed have no schedule yet, and a schedule
-      // the worker dropped never comes back on its own. Converging here is cheap
-      // (one idempotent upsert per bot) and runs once per app load.
+      // the worker dropped never comes back on its own. Converging here catches
+      // both; a schedule that already matches costs one read and is left alone.
       await syncBotCheckInRoutines(
         { prisma: deps.prisma, jobs: deps.jobs },
         bots.map((bot) => ({ ...bot, userId: actor.userId })),
@@ -780,6 +780,9 @@ export function createRouter(deps: RouterDeps) {
             })),
           });
         }
+        await syncBotCheckInRoutines({ prisma: deps.prisma, jobs: deps.jobs }, [
+          { ...duplicate, userId: context.actor.userId },
+        ]);
         return duplicate;
       }),
       reorder: authed.bots.reorder.handler(async ({ context, input }) => {
