@@ -74,10 +74,13 @@
     "extra": {
       "router": {},
       "supportsRTL": true,
-      "eas": {}
+      "eas": {
+        "projectId": "02c96129-f49c-4074-93af-4ffd9e78868d"
+      }
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    }
+    },
+    "owner": "sitpo"
   }
 }
