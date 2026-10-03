@@ -1,4 +1,4 @@
-import { ONCE_ROUTINE_CRON } from "@rakazo/core";
+import { CHECK_IN_ROUTINE_KIND, ONCE_ROUTINE_CRON } from "@rakazo/core";
 import { describe, expect, it, vi } from "vitest";
 import {
   cancelScheduleFromTool,
@@ -381,6 +381,7 @@ describe("schedule tool persistence", () => {
           spaceId: "ws-1",
           botId: "bot-1",
           userId: "user-1",
+          kind: { not: CHECK_IN_ROUTINE_KIND },
           threadId: "group-thread-1",
         },
       }),
@@ -400,6 +401,7 @@ describe("schedule tool persistence", () => {
           spaceId: "ws-1",
           botId: "bot-1",
           userId: "user-1",
+          kind: { not: CHECK_IN_ROUTINE_KIND },
           threadId: "group-thread-1",
           id: "routine-1",
         },
@@ -410,7 +412,12 @@ describe("schedule tool persistence", () => {
     await listSchedulesFromTool(deps, { spaceId: "ws-1", botId: "bot-1", userId: "user-1" });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { spaceId: "ws-1", botId: "bot-1", userId: "user-1" },
+        where: {
+          spaceId: "ws-1",
+          botId: "bot-1",
+          userId: "user-1",
+          kind: { not: CHECK_IN_ROUTINE_KIND },
+        },
       }),
     );
 
@@ -423,7 +430,13 @@ describe("schedule tool persistence", () => {
     });
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { spaceId: "ws-1", botId: "bot-1", userId: "user-1", id: "routine-1" },
+        where: {
+          spaceId: "ws-1",
+          botId: "bot-1",
+          userId: "user-1",
+          kind: { not: CHECK_IN_ROUTINE_KIND },
+          id: "routine-1",
+        },
       }),
     );
   });

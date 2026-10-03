@@ -350,6 +350,9 @@ model Bot {
   computerSwitching Boolean           @default(false)
   voiceId           String?
   autoSpeak         Boolean           @default(false)
+  checkInsEnabled   Boolean           @default(true)
+  checkInQuietStartHour Int           @default(22)
+  checkInQuietEndHour   Int           @default(8)
   modelProvider     String?
   modelId           String?
   thinkingLevel     String?
@@ -681,6 +684,9 @@ model Routine {
   threadId       String?
   thread         Thread?   @relation(fields: [threadId], references: [id], onDelete: SetNull)
   name           String
+  // "user" for routines the user wrote and sees in the list; "checkin" for the
+  // single system-owned row that wakes the bot to decide whether to speak first.
+  kind           String    @default("user")
   prompt         String
   crons          String[]
   timezone       String    @default("UTC")
@@ -695,6 +701,7 @@ model Routine {
 
   @@index([active, nextRunAt])
   @@index([spaceId, botId])
+  @@index([botId, kind])
   @@map("routines")
 }
 

@@ -93,6 +93,7 @@ async function main() {
           "packages/testkit/src/voice.test.ts",
           "packages/testkit/src/search.test.ts",
           "packages/testkit/src/executor-lifecycle.test.ts",
+          "packages/testkit/src/check-in.test.ts",
           "packages/testkit/src/connections.test.ts",
           "packages/testkit/src/bot-secrets.test.ts",
           "packages/testkit/src/browser-login.test.ts",

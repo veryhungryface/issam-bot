@@ -5,9 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createRunExecutor,
   createRunWorkspaceCheckpoint,
+  LONG_WORK_PROGRESS_GUIDANCE,
   loadCurrentTurnImages,
   missingTurnImagesInstruction,
   runNotificationsEnabled,
+  runReplyGuidance,
   runTurnInstructions,
   runTurnPrompt,
   selectBuiltinToolsForRun,
@@ -1359,6 +1361,7 @@ describe("turn prompt and instruction order", () => {
     pluginLine: "No plugins are connected yet.",
     agentSkillsLine: undefined,
     taughtSkillsLine: undefined,
+    replyGuidance: LONG_WORK_PROGRESS_GUIDANCE,
     groupContext: undefined,
     messagingContext: undefined,
     redactedMemoryContext: "Memory: the user teaches third grade.",
@@ -1400,6 +1403,17 @@ describe("turn prompt and instruction order", () => {
     }
     // The bot's own instructions stay first: they are stable and set the voice.
     expect(rendered.startsWith(parts.botInstructions)).toBe(true);
+  });
+
+  it("carries the silence rule for a scheduled run in place of progress guidance", () => {
+    const rendered = runTurnInstructions({
+      ...parts,
+      replyGuidance: runReplyGuidance("routine"),
+    })
+      .filter(Boolean)
+      .join("\n\n");
+    expect(rendered).toContain("NO_RESPONSE");
+    expect(rendered).not.toContain("message_user line");
   });
 
   it("leaves the untrusted-content rule last so recency works for it", () => {

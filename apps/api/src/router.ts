@@ -72,6 +72,8 @@ import {
   serializeBrowserLogin,
   serializeModelSecret,
   storeBotSecret,
+  syncBotCheckInRoutine,
+  syncBotCheckInRoutines,
   syncBrowserSessionUsage,
   takeoverLeaseMs,
   toComputerRef,
@@ -92,11 +94,13 @@ import {
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
+  CHECK_IN_ROUTINE_KIND,
   containsSecret,
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
+  USER_ROUTINE_KIND,
 } from "@rakazo/core";
 import {
   appendEventInTransaction,
@@ -488,6 +492,13 @@ export function createRouter(deps: RouterDeps) {
         groupRepos.listGroups(actor, { archived: true }),
       ]);
       const { bots, groups, botSections } = navigation.current;
+      // Bots created before check-ins existed have no schedule yet, and a schedule
+      // the worker dropped never comes back on its own. Converging here catches
+      // both; a schedule that already matches costs one read and is left alone.
+      await syncBotCheckInRoutines(
+        { prisma: deps.prisma, jobs: deps.jobs },
+        bots.map((bot) => ({ ...bot, userId: actor.userId })),
+      );
       const active = bots.find((bot) => bot.id === input.botId) ?? bots[0];
       const [thread, routines] = active
         ? await Promise.all([
@@ -729,9 +740,13 @@ export function createRouter(deps: RouterDeps) {
         if (!found) throw new IsolationError();
         return found;
       }),
-      create: authed.bots.create.handler(async ({ context, input }) =>
-        repos.createBot(context.actor, input),
-      ),
+      create: authed.bots.create.handler(async ({ context, input }) => {
+        const bot = await repos.createBot(context.actor, input);
+        await syncBotCheckInRoutines({ prisma: deps.prisma, jobs: deps.jobs }, [
+          { ...bot, userId: context.actor.userId },
+        ]);
+        return bot;
+      }),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
         const duplicate = await repos.createBot(context.actor, {
@@ -765,6 +780,9 @@ export function createRouter(deps: RouterDeps) {
             })),
           });
         }
+        await syncBotCheckInRoutines({ prisma: deps.prisma, jobs: deps.jobs }, [
+          { ...duplicate, userId: context.actor.userId },
+        ]);
         return duplicate;
       }),
       reorder: authed.bots.reorder.handler(async ({ context, input }) => {
@@ -860,6 +878,9 @@ export function createRouter(deps: RouterDeps) {
             sectionId: input.sectionId,
             voiceId: input.voiceId,
             autoSpeak: input.autoSpeak,
+            checkInsEnabled: input.checkInsEnabled,
+            checkInQuietStartHour: input.checkInQuietStartHour,
+            checkInQuietEndHour: input.checkInQuietEndHour,
             ...(input.modelProvider !== undefined
               ? { modelProvider: input.modelProvider, modelId: input.modelId ?? null }
               : {}),
@@ -869,6 +890,19 @@ export function createRouter(deps: RouterDeps) {
         const bots = await repos.listBots(context.actor);
         const bot = bots.find((b) => b.id === input.botId);
         if (!bot) throw new IsolationError();
+        if (
+          input.checkInsEnabled !== undefined ||
+          input.checkInQuietStartHour !== undefined ||
+          input.checkInQuietEndHour !== undefined
+        ) {
+          await syncBotCheckInRoutine(
+            { prisma: deps.prisma, jobs: deps.jobs },
+            {
+              ...bot,
+              userId: context.actor.userId,
+            },
+          );
+        }
         return bot;
       }),
       setComputer: authed.bots.setComputer.handler(async ({ context, input }) => {
@@ -2188,6 +2222,7 @@ export function createRouter(deps: RouterDeps) {
             spaceId: context.actor.spaceId,
             botId: input.botId,
             userId: context.actor.userId,
+            kind: USER_ROUTINE_KIND,
             name: input.name,
             prompt: input.prompt,
             crons: input.crons,
@@ -2213,11 +2248,14 @@ export function createRouter(deps: RouterDeps) {
         return mapRoutine(row);
       }),
       update: authed.routines.update.handler(async ({ context, input }) => {
+        // The check-in schedule is system-owned: it is not listed, so it must not
+        // be editable, cancellable or test-runnable through the routine surface.
         const existing = await deps.prisma.routine.findFirst({
           where: {
             id: input.routineId,
             spaceId: context.actor.spaceId,
             userId: context.actor.userId,
+            kind: { not: CHECK_IN_ROUTINE_KIND },
           },
         });
         if (!existing) throw new IsolationError();
@@ -2322,7 +2360,11 @@ export function createRouter(deps: RouterDeps) {
       }),
       remove: authed.routines.remove.handler(async ({ context, input }) => {
         const existing = await deps.prisma.routine.findFirst({
-          where: { id: input.routineId, spaceId: context.actor.spaceId },
+          where: {
+            id: input.routineId,
+            spaceId: context.actor.spaceId,
+            kind: { not: CHECK_IN_ROUTINE_KIND },
+          },
         });
         if (!existing) throw new IsolationError();
         await deps.prisma.routine.delete({ where: { id: existing.id } });
@@ -2335,6 +2377,7 @@ export function createRouter(deps: RouterDeps) {
             id: input.routineId,
             spaceId: context.actor.spaceId,
             userId: context.actor.userId,
+            kind: { not: CHECK_IN_ROUTINE_KIND },
           },
         });
         if (!routine) throw new IsolationError();
@@ -3793,7 +3836,11 @@ export function createRouter(deps: RouterDeps) {
             where: { botId: input.botId, spaceId: context.actor.spaceId },
           }),
           deps.prisma.routine.findMany({
-            where: { botId: input.botId, spaceId: context.actor.spaceId },
+            where: {
+              botId: input.botId,
+              spaceId: context.actor.spaceId,
+              kind: { not: CHECK_IN_ROUTINE_KIND },
+            },
           }),
           (async () => {
             const exported: Array<{ path: string; content: string }> = [];
@@ -4428,8 +4475,10 @@ function mapRoutine(row: {
 }
 
 async function listRoutinesDto(deps: RouterDeps, actor: Actor, botId: string) {
+  // The check-in schedule is the system's, not the user's. It would otherwise
+  // show up here as five mystery firings a day that nobody wrote.
   const rows = await deps.prisma.routine.findMany({
-    where: { botId, spaceId: actor.spaceId },
+    where: { botId, spaceId: actor.spaceId, kind: { not: CHECK_IN_ROUTINE_KIND } },
   });
   return rows.map(mapRoutine);
 }
