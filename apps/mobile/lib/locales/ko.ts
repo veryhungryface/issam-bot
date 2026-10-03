@@ -245,7 +245,7 @@ export const KO_MESSAGES: Record<string, string> = {
   "Long press to pin or move to a section": "길게 눌러 고정하거나 섹션으로 옮기세요",
   "Long press to pin, move, or silence notifications":
     "길게 눌러 고정, 이동, 알림 끄기를 할 수 있습니다",
-  "Enter your Rakazo server address.": "Issam Bot 서버 주소를 입력하세요.",
+  "Enter your Rakazo server address.": "아이쌤봇 서버 주소를 입력하세요.",
   "Show less": "접기",
   Members: "멤버",
   "Members ({min}–{max})": "멤버 ({min}–{max})",
@@ -301,7 +301,7 @@ export const KO_MESSAGES: Record<string, string> = {
   Pin: "고정",
   "Please try again.": "다시 시도해 주세요.",
   "Point this app at your self-hosted Rakazo origin, the same HTTPS URL you open in a browser.":
-    "브라우저에서 접속하는 것과 같은 HTTPS 주소, 즉 직접 운영하는 Issam Bot 주소를 입력하세요.",
+    "브라우저에서 접속하는 것과 같은 HTTPS 주소, 즉 직접 운영하는 아이쌤봇 주소를 입력하세요.",
   Private: "Bot 전용",
   Providers: "서비스",
   "Public servers need https://. HTTP only works on your local network.":
@@ -360,10 +360,10 @@ export const KO_MESSAGES: Record<string, string> = {
   "Show more": "더 보기",
   "Show {label}": "{label} 보기",
   "Sign in": "로그인",
-  "Sign in to Rakazo": "Issam Bot 로그인",
+  "Sign in to Rakazo": "아이쌤봇 로그인",
   "Sign out": "로그아웃",
   "Sign up": "가입하기",
-  "Sign up for Rakazo": "Issam Bot 가입",
+  "Sign up for Rakazo": "아이쌤봇 가입",
   "Sign-in": "로그인",
   "Sign-up": "가입",
   "Sign-in did not return a session": "로그인에서 세션을 받지 못했습니다",
@@ -388,7 +388,7 @@ export const KO_MESSAGES: Record<string, string> = {
   Team: "팀 공용",
   "Team Computer": "팀 컴퓨터",
   "That doesn’t look like a URL": "주소 형식이 아닌 것 같습니다",
-  "That URL did not look like a Rakazo server": "그 주소는 Issam Bot 서버가 아닌 것 같습니다",
+  "That URL did not look like a Rakazo server": "그 주소는 아이쌤봇 서버가 아닌 것 같습니다",
   "That URL is missing a host": "그 주소에 호스트가 없습니다",
   "The server changed while starting the request": "요청을 시작하는 동안 서버가 바뀌었습니다",
   "This permanently deletes your account, bots, conversations, memories, files, and saved connections. This cannot be undone.":
@@ -466,7 +466,7 @@ export const KO_MESSAGES: Record<string, string> = {
   "OpenAPI JSON": "OpenAPI JSON",
   "Opened its thread.": "대화가 만들어졌습니다.",
   "Paste the OpenAI-compatible address from your server. Rakazo adds /v1 if needed.":
-    "서버의 OpenAI 호환 주소를 붙여넣으세요. 필요하면 Issam Bot이 /v1을 추가합니다.",
+    "서버의 OpenAI 호환 주소를 붙여넣으세요. 필요하면 아이쌤봇이 /v1을 추가합니다.",
   Paused: "일시 중지됨",
   Prompt: "프롬프트",
   "Recording a live demonstration needs desktop or web with the full computer view. You can still ask this bot to run saved skills from chat.":
@@ -481,7 +481,7 @@ export const KO_MESSAGES: Record<string, string> = {
   "This removes every message and stops current work. The bot, computer, memory, and routines are kept.":
     "모든 메시지를 지우고 진행 중인 작업을 멈춥니다. 봇, 컴퓨터, 기억, 루틴은 그대로 남습니다.",
   "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider.":
-    "이 구독 로그인 방식은 아직 Issam Bot에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요.",
+    "이 구독 로그인 방식은 아직 아이쌤봇에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요.",
   "Tool sources": "도구 소스",
   "Verify and add": "확인 후 추가",
   "{count} model": "모델 {count}개",

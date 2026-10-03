@@ -9,7 +9,7 @@ under *our* account.
 
 ## What the repository already carries
 
-- App identity renamed to 이삼봇 (`com.issambot.app` on both platforms, version 1.0.0,
+- App identity renamed to 아이쌤봇 (`com.issambot.app` on both platforms, version 1.0.0,
   Korean permission prompts). Upstream's Expo account, project id and OTA endpoint were
   removed; `eas init` writes ours.
 - The URL scheme stays `rakazo://`. It never appears in front of the user, and the API
@@ -62,6 +62,27 @@ wording wherever the same English source appears there, so both surfaces say the
 thing, and two tests keep it honest — every `t()` id in the app must have a Korean value,
 and every value must carry the same `{placeholders}` as its source.
 
-## Known gaps
+## Icons
 
-- The icon is still upstream's Rakazo mark, shared with the web app's icons.
+Every icon is built from the supplied mascot artwork by `scripts/build-icons.mjs`. The file
+we were given is an icon *mockup* — a rounded white card with a drop shadow, on white — so
+the script crops the character out of it, washes the card's neutral grey edge to white
+(the felt's own light tones are warm, so only the card goes), and composes each platform's
+asset at the size and padding that platform expects: full-bleed for iOS, inside the safe
+zone for Android's adaptive icon, a rounded card with transparent corners for the dark
+splash, and the web's favicons down to 16px.
+
+The Android status-bar icon is a drawn four-point star rather than a traced outline: it is
+rendered a few millimetres wide in one flat colour, and at that size the mascot's mitts,
+eyes and mouth turn to mush. The shape it is built from stays legible.
+
+To rebuild after new artwork, from the repository root:
+
+```bash
+node scripts/build-icons.mjs apps/mobile/assets/source/mascot.png /tmp/icons
+cp /tmp/icons/{icon,adaptive-icon,splash-icon,notification-icon,monochrome-icon}.png apps/mobile/assets/
+cp /tmp/icons/{icon-192,icon-512,apple-touch-icon,favicon-32x32,favicon-16x16}.png apps/web/public/
+```
+
+`favicon.ico` and `favicon.svg` wrap the same raster (an ICO holding 16/32/64 PNGs, and an
+SVG embedding the 64px one) so every favicon path shows the same mascot.
