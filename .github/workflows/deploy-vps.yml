@@ -62,10 +62,13 @@ jobs:
           ssh "${ssh_args[@]}" 'sudo -n docker logout ghcr.io >/dev/null 2>&1 || true' || true
           if [[ "${{ job.status }}" == "success" ]]; then
             for attempt in {1..18}; do
-              # The public /health says only {"ok":true} now; the revision lives on the
-              # internal route, which the edge does not serve. Read it on the host, and
-              # keep the old public check as a fallback for a release that predates it.
+              # The public /health says only {"ok":true} now, so the revision comes from
+              # /internal/health, which the edge does not route. Three ways in, because
+              # only the last one is guaranteed: the host's published API port, then the
+              # api container itself (node is in the image, curl may not be), then the old
+              # public body for a release that predates the split.
               if ssh "${ssh_args[@]}" 'curl --fail --silent --max-time 10 http://127.0.0.1:3100/internal/health' | grep -Fq '"revision":"${{ inputs.git_sha }}"' \
+                || ssh "${ssh_args[@]}" 'sudo -n docker exec issam-bot-api-1 node -e "fetch(\"http://127.0.0.1:3100/internal/health\").then((r) => r.text()).then((t) => process.stdout.write(t))"' | grep -Fq '"revision":"${{ inputs.git_sha }}"' \
                 || curl --fail --silent --max-time 10 "http://${{ inputs.host }}/health" | grep -Fq '"revision":"${{ inputs.git_sha }}"'; then
                 ssh "${ssh_args[@]}" \
                   "sudo -n sed -i 's|^ISSAM_BOT_IMAGE=.*|ISSAM_BOT_IMAGE=ghcr.io/veryhungryface/issam-bot:${{ inputs.image_tag }}|' /opt/issam-bot/secret.env && sudo -n sed -i 's|^GIT_SHA=.*|GIT_SHA=${{ inputs.git_sha }}|' /opt/issam-bot/secret.env"
