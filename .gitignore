@@ -49,3 +49,7 @@ playwright-report-www
 
 # Agent worktrees: a checkout of this repo, with its own config files
 .claude/worktrees/
+
+# Firebase client config: shipped inside the app, but this is a public repository
+# and it names our project. EAS gets it from the GOOGLE_SERVICES_JSON file variable.
+apps/mobile/google-services.json

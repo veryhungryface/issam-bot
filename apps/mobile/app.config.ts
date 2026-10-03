@@ -20,5 +20,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     }
   }
 
+  // EAS writes the Firebase client config to a temp path and names it here; locally the
+  // checked-out copy (gitignored) is used. Without it an Android build has no FCM project
+  // and push never arrives.
+  const googleServices = process.env.GOOGLE_SERVICES_JSON;
+  if (googleServices) {
+    return {
+      ...(config as ExpoConfig),
+      android: { ...config.android, googleServicesFile: googleServices },
+    };
+  }
+
   return config as ExpoConfig;
 };
