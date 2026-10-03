@@ -158,6 +158,7 @@ import { screenIframeSandbox as liveViewIframeSandbox } from "../lib/live-view";
 import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
+import { registerNativePushToken } from "../lib/native-shell";
 import { isFileDrag, revokePendingAttachmentPreviews } from "../lib/pending-attachments";
 import { markAfterPaint, markOnce } from "../lib/performance";
 import { clearSpaceSelection, rpc, selectedSpaceId, selectSpace } from "../lib/rpc";
@@ -317,6 +318,13 @@ export function ShellPage() {
   searchParamsRef.current = searchParams;
   const session = authClient.useSession();
   const userId = session.data?.user.id;
+  // The phone app is this page inside a native shell. The shell holds the push token the
+  // operating system issued, and the session that may register it is here, so this is where
+  // the two meet - once per signed-in user, silent when there is no shell.
+  useEffect(() => {
+    if (!userId) return;
+    void registerNativePushToken((input) => rpc.notifications.registerPush(input));
+  }, [userId]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [bots, setBots] = useState<Bot[]>([]);
   const botsRef = useRef(bots);

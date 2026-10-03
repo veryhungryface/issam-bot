@@ -194,17 +194,29 @@ describe("Android mobile platform contract", () => {
     );
   });
 
-  it("shows agent notification silence in the menu, inbox avatar, and DM header only", () => {
-    const index = readFileSync(resolve(mobileRoot, "app/index.tsx"), "utf8");
+  it("shows agent notification silence in the native screens that still draw it", () => {
+    // The inbox moved to the web app, which draws its own silenced state; these screens are
+    // no longer the entry but are kept until the native UI is removed outright.
     const thread = readFileSync(resolve(mobileRoot, "app/thread.tsx"), "utf8");
     const avatar = readFileSync(resolve(mobileRoot, "components/bot-avatar.tsx"), "utf8");
     const menu = readFileSync(resolve(mobileRoot, "components/bot-organize-modal.tsx"), "utf8");
     expect(menu).toContain("Silence notifications");
     expect(menu).toContain("Resume notifications");
-    expect(index).toContain("muted={!bot.notifyOnFinish}");
     expect(thread).toContain("muted={!currentBot.notifyOnFinish}");
     expect(avatar).toContain('accessibilityLabel={t("Notifications silenced")}');
     expect(avatar).toContain('android="notifications-off"');
     expect(thread.match(/muted=\{/g)).toHaveLength(1);
+  });
+
+  it("opens the web app in a shell, and keeps what a browser cannot do", () => {
+    const entry = readFileSync(resolve(mobileRoot, "app/index.tsx"), "utf8");
+    expect(entry).toContain("react-native-webview");
+    // The push token the OS issued, injected for the page to register with its own session.
+    expect(entry).toContain("__ISSAM_NATIVE__");
+    // A tapped notification lands on its conversation; the tray and badge clear on resume.
+    expect(entry).toContain("addNotificationResponseReceivedListener");
+    expect(entry).toContain("clearDeliveredNotifications");
+    // Android's back button walks the page history before it leaves the app.
+    expect(entry).toContain("hardwareBackPress");
   });
 });

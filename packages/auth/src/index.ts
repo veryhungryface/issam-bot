@@ -56,7 +56,7 @@ export function authRateLimitOptions(nodeEnv = process.env.NODE_ENV) {
 export function createAuth(prisma: PrismaClient, env: AuthEnv) {
   return betterAuth({
     rateLimit: authRateLimitOptions(),
-    appName: "Issam Bot",
+    appName: "아이쌤봇",
     secret: env.secret,
     baseURL: env.baseURL,
     trustedOrigins: [env.webOrigin, env.baseURL, ...(env.extraOrigins ?? [])],
