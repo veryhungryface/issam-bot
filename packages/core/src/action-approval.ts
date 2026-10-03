@@ -58,17 +58,31 @@ export function connectorKindFromToolName(toolName: string, connectorKinds: stri
   return (segment ?? toolName).toLowerCase();
 }
 
-export function connectorToolRequiresApproval(toolName: string): boolean {
+/**
+ * Whether a connector tool is consequential enough to ask about.
+ *
+ * `readOnly` is the tool's *declared* effect. For an installed API that is derived from the
+ * stored HTTP method, which is what will actually be dispatched, so a declared write always
+ * needs approval however harmless the name reads - an operation called `get_invoices` whose
+ * route is `POST /invoices` used to run unattended from a webhook. A declared read never
+ * relaxes the name check, because the provider chooses both the name and the hint.
+ */
+export function connectorToolRequiresApproval(toolName: string, readOnly?: boolean): boolean {
+  if (readOnly === false) return true;
   if (MUTATING_CONNECTOR_PATTERN.test(toolName)) return true;
   if (COMPOUND_CONNECTOR_ACTION_PATTERN.test(toolName)) return true;
   return !READ_ONLY_CONNECTOR_PATTERN.test(toolName);
 }
 
-export function toolRequiresApproval(toolName: string, viaConnector: boolean): boolean {
+export function toolRequiresApproval(
+  toolName: string,
+  viaConnector: boolean,
+  readOnly?: boolean,
+): boolean {
   if (APPROVAL_EXEMPT_TOOLS.has(toolName)) return false;
   if (toolRequiresExplicitApproval(toolName)) return true;
   if (APPROVAL_REQUIRED_BUILTIN_TOOLS.has(toolName)) return true;
-  if (viaConnector) return connectorToolRequiresApproval(toolName);
+  if (viaConnector) return connectorToolRequiresApproval(toolName, readOnly);
   return false;
 }
 
@@ -77,9 +91,14 @@ export function toolRequiresExplicitApproval(toolName: string): boolean {
   return EXPLICIT_APPROVAL_BUILTIN_TOOLS.has(toolName);
 }
 
-function categoryMatches(category: string, toolName: string, connectorKind: string): boolean {
+function categoryMatches(
+  category: string,
+  toolName: string,
+  connectorKind: string,
+  readOnly?: boolean,
+): boolean {
   const normalized = category.toLowerCase();
-  const consequential = connectorToolRequiresApproval(toolName);
+  const consequential = connectorToolRequiresApproval(toolName, readOnly);
   if (normalized === "email") {
     if (EMAIL_CONNECTOR_SLUGS.has(connectorKind.toLowerCase())) return consequential;
     return consequential && /send.*mail|gmail_send|outlook_send/i.test(toolName);
@@ -91,7 +110,12 @@ function categoryMatches(category: string, toolName: string, connectorKind: stri
   return false;
 }
 
-function ruleMatches(rule: ActionApprovalRule, toolName: string, connectorKind: string): boolean {
+function ruleMatches(
+  rule: ActionApprovalRule,
+  toolName: string,
+  connectorKind: string,
+  readOnly?: boolean,
+): boolean {
   const value = rule.matchValue.toLowerCase();
   switch (rule.matchKind) {
     case "tool":
@@ -99,7 +123,7 @@ function ruleMatches(rule: ActionApprovalRule, toolName: string, connectorKind: 
     case "connector":
       return connectorKind.toLowerCase() === value;
     case "category":
-      return categoryMatches(rule.matchValue, toolName, connectorKind);
+      return categoryMatches(rule.matchValue, toolName, connectorKind, readOnly);
     default:
       return false;
   }
@@ -131,10 +155,12 @@ export function resolveActionApprovalDetail(input: {
   toolName: string;
   connectorKind?: string;
   rules: ActionApprovalRule[];
+  /** The tool's declared effect, when the catalog states one. */
+  readOnly?: boolean;
 }): ActionApprovalResolved {
   const connectorKind = input.connectorKind ?? connectorKindFromToolName(input.toolName);
   const matchingRules = input.rules.filter((rule) =>
-    ruleMatches(rule, input.toolName, connectorKind),
+    ruleMatches(rule, input.toolName, connectorKind, input.readOnly),
   );
   if (matchingRules.length === 0) {
     return { decision: "allow", source: "default", matchingRules };
@@ -152,6 +178,7 @@ export function resolveActionApproval(input: {
   toolName: string;
   connectorKind?: string;
   rules: ActionApprovalRule[];
+  readOnly?: boolean;
 }): "ask" | "allow" {
   return resolveActionApprovalDetail(input).decision;
 }

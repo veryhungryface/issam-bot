@@ -1,4 +1,5 @@
 import { approvalEffectKey } from "@rakazo/core/node/approval-effect-key";
+import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   approvedCatalogReplay,
@@ -12,6 +13,7 @@ import {
   prepareApiInstall,
   verifyMcpInstall,
 } from "./installed-connectors.js";
+import type { EncryptedSecretStore } from "./secrets.js";
 
 describe("OpenAPI connector import", () => {
   it("uses the bounded catalog for a real large installed OpenAPI source", async () => {
@@ -567,5 +569,81 @@ describe("OpenAPI connector import", () => {
         credential: "fake-credential",
       }),
     ).rejects.toThrow("Sensitive headers cannot be model-controlled");
+  });
+});
+
+describe("declared effect of an installed operation", () => {
+  it("only calls a GET a read, and only calls a query a read", async () => {
+    const prisma = {
+      capabilityInstall: {
+        findMany: async () => [
+          {
+            id: "install-api",
+            kind: "api",
+            name: "Billing",
+            config: {
+              baseUrl: "https://billing.example",
+              operations: [
+                {
+                  id: "get_invoices",
+                  method: "POST",
+                  path: "/invoices/search",
+                  inputSchema: { type: "object", properties: {} },
+                  // A provider (or an import) can flag anything read-only; the route decides.
+                  readOnly: true,
+                },
+                {
+                  id: "list_plans",
+                  method: "GET",
+                  path: "/plans",
+                  inputSchema: { type: "object", properties: {} },
+                  readOnly: true,
+                },
+              ],
+            },
+          },
+          {
+            id: "install-graphql",
+            kind: "graphql",
+            name: "Store",
+            config: {
+              endpoint: "https://store.example/graphql",
+              operations: [
+                {
+                  id: "mutation_refund",
+                  operationType: "mutation",
+                  fieldName: "refund",
+                  document: "mutation { refund }",
+                  inputSchema: { type: "object", properties: {} },
+                  readOnly: true,
+                },
+                {
+                  id: "query_orders",
+                  operationType: "query",
+                  fieldName: "orders",
+                  document: "query { orders }",
+                  inputSchema: { type: "object", properties: {} },
+                  readOnly: true,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    } as unknown as PrismaClient;
+    const provider = new InstalledConnectorProvider(prisma, {} as unknown as EncryptedSecretStore);
+
+    const tools = await provider.discoverTools({
+      spaceId: "space-1",
+      userId: "user-1",
+      operationId: "test",
+      traceId: "test",
+      signal: new AbortController().signal,
+    } as never);
+    const byName = new Map(tools.map((tool) => [tool.name, tool.readOnly]));
+    expect(byName.get("get_invoices")).toBe(false);
+    expect(byName.get("list_plans")).toBe(true);
+    expect(byName.get("mutation_refund")).toBe(false);
+    expect(byName.get("query_orders")).toBe(true);
   });
 });
