@@ -1,16 +1,39 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   authRateLimitOptions,
-  blockedAuthPaths,
+  isBlockedAuthPath,
   passwordResetEmail,
   resolveSignupPolicy,
   withoutSessionTokens,
 } from "./index.js";
 
 describe("auth policy", () => {
-  it("blocks invitation and org-creation paths in version 1", () => {
-    expect(blockedAuthPaths.some((path) => path.includes("invite"))).toBe(true);
-    expect(blockedAuthPaths.some((path) => path.includes("create"))).toBe(true);
+  it("closes every organization route, not a list of names", () => {
+    // A session could call /organization/delete on its own default Space and cascade
+    // every Space away, skipping the checks spaces/remove enforces.
+    for (const path of [
+      "/organization/delete",
+      "/organization/leave",
+      "/organization/update",
+      "/organization/create",
+      "/organization/invite",
+      "/organization/remove-member",
+      "/organization/something-a-future-version-adds",
+    ]) {
+      expect(isBlockedAuthPath(path)).toBe(true);
+    }
+  });
+
+  it("leaves the routes the clients actually use alone", () => {
+    for (const path of [
+      "/sign-in/email",
+      "/sign-up/email",
+      "/get-session",
+      "/list-sessions",
+      "/request-password-reset",
+    ]) {
+      expect(isBlockedAuthPath(path)).toBe(false);
+    }
   });
 });
 
