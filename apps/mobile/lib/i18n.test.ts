@@ -46,6 +46,19 @@ describe("mobile i18n", () => {
     expect(t("Not a real string")).toBe("Not a real string");
   });
 
+  it("translates Korean chrome and keeps interpolations", async () => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    resetI18nForTests("ko");
+    expect(t("Account")).toBe("계정");
+    // Reused verbatim from the web catalog, so both surfaces say the same thing.
+    expect(t("New bot")).toBe("새 Bot 만들기");
+    expect(t("{runs} runs · {tokens} tokens", { runs: 3, tokens: 12 })).toBe(
+      "실행 3회 · 토큰 12개",
+    );
+    expect(t("Delete {name}?", { name: "Scout" })).toBe("Scout을 삭제할까요?");
+    expect(t("Not a real string")).toBe("Not a real string");
+  });
+
   it("translates seeded Chinese chrome and keeps interpolations", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     resetI18nForTests("zh-CN");
@@ -58,20 +71,27 @@ describe("mobile i18n", () => {
     expect(t("Delete {name}?", { name: "Scout" })).toBe("要删除 Scout 吗？");
   });
 
-  it("preserves interpolations in the Chinese catalog", async () => {
-    const { ZH_MESSAGES } = await import("./locales/zh");
-    const empty = Object.entries(ZH_MESSAGES).filter(([, value]) => !value.trim());
-    const interpolationMismatches = Object.entries(ZH_MESSAGES).filter(([id, value]) => {
+  it.each([
+    ["Chinese", async () => (await import("./locales/zh")).ZH_MESSAGES],
+    ["Korean", async () => (await import("./locales/ko")).KO_MESSAGES],
+  ])("preserves interpolations in the %s catalog", async (_label, load) => {
+    const messages = await load();
+    const empty = Object.entries(messages).filter(([, value]) => !value.trim());
+    const interpolationMismatches = Object.entries(messages).filter(([id, value]) => {
       const tokens = (message: string) =>
         [...message.matchAll(/\{([A-Za-z0-9_]+)\}/g)].map((match) => match[1]).sort();
       return JSON.stringify(tokens(id)) !== JSON.stringify(tokens(value));
     });
     expect(empty).toEqual([]);
+    // A dropped {name} ships a message with a hole in it.
     expect(interpolationMismatches).toEqual([]);
   });
 
-  it("translates every mobile chrome t() id", async () => {
-    const { ZH_MESSAGES } = await import("./locales/zh");
+  it.each([
+    ["Chinese", async () => (await import("./locales/zh")).ZH_MESSAGES],
+    ["Korean", async () => (await import("./locales/ko")).KO_MESSAGES],
+  ])("translates every mobile chrome t() id into %s", async (_label, load) => {
+    const messages = await load();
     const { EMPTY_PLUGIN_CATALOG_MESSAGE, SLASH_ACTIONS } = await import("@rakazo/core");
     const { OPENAI_COMPATIBLE_BASE_URL_HINT } = await import("@rakazo/contracts");
     const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -90,7 +110,7 @@ describe("mobile i18n", () => {
         ids.add(JSON.parse(`"${match[1]}"`) as string);
       }
     }
-    const missing = [...ids].filter((id) => !ZH_MESSAGES[id]?.trim()).sort();
+    const missing = [...ids].filter((id) => !messages[id]?.trim()).sort();
     expect(missing).toEqual([]);
   });
 

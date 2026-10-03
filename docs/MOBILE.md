@@ -54,9 +54,14 @@ server then pushes for the things it already notifies about: a run finishing whe
 `notifyOnFinish` is on, a sign-in sheet or takeover waiting on you, the four-hour
 stuck-work reminder, and a check-in that decides it has something to say.
 
+## Language
+
+The app is Korean on a Korean phone with nothing to choose: `resolveUiLocale` reads the
+device language, and `ko` is a supported locale now. The catalog reuses the web catalog's
+wording wherever the same English source appears there, so both surfaces say the same
+thing, and two tests keep it honest — every `t()` id in the app must have a Korean value,
+and every value must carry the same `{placeholders}` as its source.
+
 ## Known gaps
 
-- The app's UI is English (and Chinese); there is no Korean catalog yet — 470 strings, of
-  which 249 already have approved Korean wording in the web catalog. It ships as an OTA
-  update whenever we do it, with no rebuild.
 - The icon is still upstream's Rakazo mark, shared with the web app's icons.

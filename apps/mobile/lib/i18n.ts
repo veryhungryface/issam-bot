@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { KO_MESSAGES } from "./locales/ko";
 import { ZH_MESSAGES } from "./locales/zh";
 import {
   htmlLangForLocale,
@@ -8,6 +9,7 @@ import {
 } from "./ui-locale";
 
 const catalogs: Partial<Record<UiLocale, Record<string, string>>> = {
+  ko: KO_MESSAGES,
   "zh-CN": ZH_MESSAGES,
 };
 
