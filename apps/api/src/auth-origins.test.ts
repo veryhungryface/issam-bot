@@ -54,9 +54,12 @@ describe("isTrustedOrigin", () => {
     expect(isTrustedOrigin("http://localhost:4173", local)).toBe(false);
   });
 
-  it("keeps the native and Expo shells working", () => {
+  it("keeps the native shell working and no longer trusts any Expo host", () => {
+    // Native clients, Expo Go included, send rakazo://. Every exp:// URL used to match,
+    // so an email verification link could redirect to any Expo host.
     expect(isTrustedOrigin("rakazo://app", env)).toBe(true);
-    expect(isTrustedOrigin("exp://127.0.0.1:8081", env)).toBe(true);
+    expect(isTrustedOrigin("exp://127.0.0.1:8081", env)).toBe(false);
+    expect(isTrustedOrigin("exp://u.expo.dev/whatever", env)).toBe(false);
   });
 
   it("treats a missing Origin as a non-browser caller", () => {

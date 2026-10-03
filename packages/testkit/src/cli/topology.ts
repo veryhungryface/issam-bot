@@ -194,7 +194,8 @@ async function waitForHealth(baseUrl: string, timeoutMs: number) {
   let last = "";
   while (Date.now() - started < timeoutMs) {
     try {
-      const response = await fetch(`${baseUrl}/health`);
+      // The public /health is a constant body; the backends it has to assert are internal.
+      const response = await fetch(`${baseUrl}/internal/health`);
       const body = (await response.json()) as Record<string, unknown>;
       if (
         response.ok &&

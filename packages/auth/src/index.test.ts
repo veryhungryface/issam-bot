@@ -4,6 +4,7 @@ import {
   blockedAuthPaths,
   passwordResetEmail,
   resolveSignupPolicy,
+  withoutSessionTokens,
 } from "./index.js";
 
 describe("auth policy", () => {
@@ -98,5 +99,40 @@ describe("authRateLimitOptions", () => {
   it("stays off elsewhere, where the suites sign in constantly", () => {
     expect(authRateLimitOptions("test").enabled).toBe(false);
     expect(authRateLimitOptions(undefined).enabled).toBe(false);
+  });
+});
+
+describe("withoutSessionTokens", () => {
+  it("strips the token from every listed session", () => {
+    const listed = withoutSessionTokens("/list-sessions", [
+      { id: "s1", token: "secret-1", userAgent: "iPhone" },
+      { id: "s2", token: "secret-2", userAgent: "Chrome" },
+    ]);
+    expect(listed).toEqual([
+      { id: "s1", userAgent: "iPhone" },
+      { id: "s2", userAgent: "Chrome" },
+    ]);
+  });
+
+  it("strips the token from a session read", () => {
+    for (const path of ["/get-session", "/update-session"]) {
+      expect(
+        withoutSessionTokens(path, {
+          session: { id: "s1", token: "secret" },
+          user: { id: "u1" },
+        }),
+      ).toEqual({ session: { id: "s1" }, user: { id: "u1" } });
+    }
+  });
+
+  it("leaves sign-in and sign-up alone, which must return the token they issued", () => {
+    const issued = { token: "fresh", user: { id: "u1" } };
+    expect(withoutSessionTokens("/sign-in/email", issued)).toBeUndefined();
+    expect(withoutSessionTokens("/sign-up/email", issued)).toBeUndefined();
+  });
+
+  it("keeps a body it does not recognise", () => {
+    expect(withoutSessionTokens("/list-sessions", { not: "an array" })).toBeUndefined();
+    expect(withoutSessionTokens("/get-session", null)).toBeUndefined();
   });
 });

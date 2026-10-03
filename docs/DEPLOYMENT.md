@@ -104,10 +104,15 @@ store enabled. Keep hostname verification enabled and rotate the pinned CA befor
 1. Back up the managed database and app data with `sudo ./scripts/prod-backup.sh`.
 2. Update the Git checkout and set `ISSAM_BOT_IMAGE` to the new immutable image digest.
 3. Run `docker compose ... pull` and `docker compose ... up -d`.
-4. Set `EXPECTED_REVISION` and run the health check.
+4. Set `EXPECTED_REVISION` and run the health check **on the host**: the public `/health`
+   answers `{"ok":true}` and nothing else, while the deployed revision and the runtime,
+   sandbox, job and realtime backends live on `/internal/health`, which the edge does not
+   route and which refuses any request carrying proxy forwarding headers.
 5. Inspect API and worker logs without printing the secret environment.
 
 ```bash
+# Public liveness from anywhere; the revision check reads http://127.0.0.1:3100/internal/health
+# on the host (override with INTERNAL_HEALTH_URL).
 EXPECTED_REVISION=<commit> ./scripts/healthcheck.sh https://agent.example.com
 docker compose --env-file /opt/issam-bot/secret.env logs --since=10m api worker
 ```
@@ -116,8 +121,8 @@ For an application rollback, restore the previous image digest and redeploy. Dat
 not automatic: use a tested compatible backup only when a migration cannot roll forward.
 
 The VPS deployment workflow starts a candidate revision with temporary Compose environment
-overrides, leaving the image and revision persisted in `secret.env` unchanged until `/health`
-reports the exact requested Git SHA. A pull or startup failure restores the persisted Compose
+overrides, leaving the image and revision persisted in `secret.env` unchanged until
+`/internal/health` (read over SSH on the host) reports the exact requested Git SHA. A pull or startup failure restores the persisted Compose
 configuration, and a revision/health timeout re-creates the previous services from that
 configuration. Database migrations remain forward-only, so releases with incompatible migrations
 still require the tested database backup procedure above.

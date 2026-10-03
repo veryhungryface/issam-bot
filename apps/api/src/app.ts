@@ -77,6 +77,7 @@ import { MarkdownMemoryStore } from "@rakazo/memory";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { type AppEnv, loadEnv } from "./env.js";
+import { healthRoutes } from "./health.js";
 import { createMessagingInboundHandler } from "./messaging-inbound.js";
 import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
 import { createRouter } from "./router.js";
@@ -281,9 +282,9 @@ export async function createApp(
     email,
     onEmailError: (error) => getLogger().error("transactional email delivery failed", error),
     extraOrigins: [
+      // Native clients, including Expo Go, send rakazo://. Every exp:// URL matched this
+      // list, which let an email verification link redirect to any Expo host.
       "rakazo://",
-      "exp://",
-      "exp://*",
       "http://localhost:8081",
       "http://127.0.0.1:8081",
       "http://localhost:19006",
@@ -518,9 +519,9 @@ export async function createApp(
     mountMessagingWebhookRoutes(app, { messaging });
   }
 
-  app.get("/health", (c) =>
-    c.json({
-      ok: true,
+  app.route(
+    "/",
+    healthRoutes(() => ({
       runtime: env.agentRuntime,
       sandbox: env.sandboxProvider,
       composio: Boolean(stack.composio),
@@ -530,7 +531,7 @@ export async function createApp(
       jobs: jobKind,
       realtime: realtime.describe().id,
       revision: env.gitSha ?? null,
-    }),
+    })),
   );
 
   return {
@@ -570,14 +571,16 @@ export async function createApp(
  * another local port - a dev server, a demo, a page they opened - could call the API with
  * their cookie. The allowlist is now the origins this deployment actually configures, plus
  * the localhost/127.0.0.1/[::1] spellings of those same origins, which are the same server
- * reached by another name. Native and Expo shells keep their custom schemes.
+ * reached by another name. The native shell keeps its rakazo:// scheme.
  */
 export function isTrustedOrigin(
   origin: string,
   env: Pick<AppEnv, "webOrigin" | "apiUrl" | "authUrl">,
 ) {
   if (!origin) return true;
-  if (origin.startsWith("rakazo://") || origin.startsWith("exp://")) return true;
+  // Native clients, Expo Go included, send rakazo://. Every exp:// URL used to match too,
+  // which let an email verification link redirect to any Expo host.
+  if (origin.startsWith("rakazo://")) return true;
   const allowed = new Set([env.webOrigin, env.apiUrl, env.authUrl].flatMap(originVariants));
   return allowed.has(origin);
 }
