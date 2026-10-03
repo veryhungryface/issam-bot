@@ -6,6 +6,10 @@ on:
       origin:
         description: Public HTTPS origin (no trailing slash)
         required: true
+      host:
+        description: VPS host to configure
+        required: false
+        default: 3.37.14.63
 
 permissions:
   contents: read
@@ -36,7 +40,9 @@ jobs:
           ORIGIN: ${{ inputs.origin }}
         run: |
           host="${ORIGIN#https://}"
-          ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes deploy@172.245.30.225)
+          # The host is an input: this was pinned to the old US box and silently
+          # configured a machine we no longer run.
+          ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes "deploy@${{ inputs.host }}")
           ssh "${ssh_args[@]}" \
             "sudo -n sed -i \
               -e 's|^WEB_ORIGIN=.*|WEB_ORIGIN=${ORIGIN}|' \
