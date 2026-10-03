@@ -301,3 +301,37 @@ describe("applyJudgeDecision", () => {
     expect(applyJudgeDecision({ decision: "error", consequential: false })).toBe("allow");
   });
 });
+
+describe("a connector tool's declared effect", () => {
+  it("asks about a write however harmlessly it is named", () => {
+    // The finding: an installed operation called get_* whose stored route is POST ran
+    // unattended, because the gate only ever read the name.
+    for (const name of ["get_invoices", "read_report", "find_customer", "list_things"]) {
+      expect(connectorToolRequiresApproval(name)).toBe(false);
+      expect(connectorToolRequiresApproval(name, false)).toBe(true);
+      expect(toolRequiresApproval(name, true, false)).toBe(true);
+    }
+  });
+
+  it("never lets a declared read relax the name check", () => {
+    // The provider picks the name and the hint, so a read-only flag cannot buy trust.
+    for (const name of ["delete_customer", "send_email", "create_and_send_invoice"]) {
+      expect(connectorToolRequiresApproval(name, true)).toBe(true);
+      expect(toolRequiresApproval(name, true, true)).toBe(true);
+    }
+  });
+
+  it("leaves a tool with no declared effect to the name, as before", () => {
+    expect(connectorToolRequiresApproval("get_invoices", undefined)).toBe(false);
+    expect(connectorToolRequiresApproval("delete_invoice", undefined)).toBe(true);
+  });
+
+  it("counts a declared write as consequential for a category rule", () => {
+    const rules = [
+      { effect: "require_approval" as const, matchKind: "category" as const, matchValue: "email" },
+    ];
+    const gmailRead = { toolName: "gmail_get_thread", connectorKind: "gmail", rules };
+    expect(resolveActionApproval(gmailRead)).toBe("allow");
+    expect(resolveActionApproval({ ...gmailRead, readOnly: false })).toBe("ask");
+  });
+});

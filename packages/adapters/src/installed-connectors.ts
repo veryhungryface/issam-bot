@@ -177,7 +177,9 @@ export class InstalledConnectorProvider implements ConnectorProvider {
           name: operation.name ?? operation.id,
           description: operation.description ?? `${operation.method} ${operation.path}`,
           inputSchema: operation.inputSchema,
-          readOnly: operation.readOnly,
+          // The stored method is what gets dispatched, so it decides. A read-only flag
+          // cannot turn a POST into a read, whatever the operation is called.
+          readOnly: operation.readOnly && operation.method === "GET",
           route: {
             connectorId: "installed",
             resourceId: install.id,
@@ -192,7 +194,8 @@ export class InstalledConnectorProvider implements ConnectorProvider {
           name: operation.name ?? operation.id,
           description: operation.description ?? `${operation.operationType} ${operation.fieldName}`,
           inputSchema: operation.inputSchema,
-          readOnly: operation.readOnly,
+          // Likewise: only a query is a read. A mutation flagged read-only is still a write.
+          readOnly: operation.readOnly && operation.operationType === "query",
           route: {
             connectorId: "installed",
             resourceId: install.id,

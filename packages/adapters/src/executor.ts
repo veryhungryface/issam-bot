@@ -1539,6 +1539,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const connectorSchemas = new Map(
           exposedConnectorTools.map((tool) => [tool.name, tool.inputSchema] as const),
         );
+        // The effect the catalog declares for each tool. An installed API derives it from the
+        // stored HTTP method, so it describes what will actually be dispatched - not how the
+        // provider chose to name the operation.
+        const connectorEffects = new Map(
+          exposedConnectorTools.map((tool) => [tool.name, tool.readOnly] as const),
+        );
         let approvalRulesPromise: Promise<ActionApprovalRule[]> | undefined;
         const loadApprovalRules = () => {
           approvalRulesPromise ??= deps.prisma.actionApprovalRule
@@ -1901,7 +1907,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
           }
           const viaConnector = !BUILTIN_AGENT_TOOL_NAMES.has(name);
-          const requiresApprovalByDefault = toolRequiresApproval(name, viaConnector);
+          const declaredReadOnly = connectorEffects.get(name);
+          const requiresApprovalByDefault = toolRequiresApproval(
+            name,
+            viaConnector,
+            declaredReadOnly,
+          );
           const requiresExplicitApproval = toolRequiresExplicitApproval(name);
           const connectorKind = connectorKindFromToolName(
             name,
@@ -1913,6 +1924,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 toolName: name,
                 connectorKind,
                 rules: await loadApprovalRules(),
+                readOnly: declaredReadOnly,
               });
           const autoReviewPref = requiresExplicitApproval
             ? false
