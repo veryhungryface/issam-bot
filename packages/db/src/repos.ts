@@ -6,7 +6,11 @@ import {
   type MessageBlock,
   type SpaceBot,
 } from "@rakazo/contracts";
-import { userVisibleMessages } from "@rakazo/core";
+import {
+  DEFAULT_CHECK_IN_QUIET_END_HOUR,
+  DEFAULT_CHECK_IN_QUIET_START_HOUR,
+  userVisibleMessages,
+} from "@rakazo/core";
 import type { PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
@@ -37,6 +41,9 @@ function mapBot(
     computer: { scope: string } | null;
     voiceId?: string | null;
     autoSpeak?: boolean;
+    checkInsEnabled?: boolean;
+    checkInQuietStartHour?: number;
+    checkInQuietEndHour?: number;
     modelProvider?: string | null;
     modelId?: string | null;
     thinkingLevel?: string | null;
@@ -71,6 +78,9 @@ function mapBot(
     updatedAt: bot.updatedAt.toISOString(),
     voiceId: bot.voiceId ?? null,
     autoSpeak: bot.autoSpeak ?? false,
+    checkInsEnabled: bot.checkInsEnabled ?? true,
+    checkInQuietStartHour: bot.checkInQuietStartHour ?? DEFAULT_CHECK_IN_QUIET_START_HOUR,
+    checkInQuietEndHour: bot.checkInQuietEndHour ?? DEFAULT_CHECK_IN_QUIET_END_HOUR,
     modelProvider: bot.modelProvider ?? null,
     modelId: bot.modelId ?? null,
     thinkingLevel: (bot.thinkingLevel as Bot["thinkingLevel"]) ?? null,

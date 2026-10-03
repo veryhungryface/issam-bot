@@ -42,6 +42,13 @@ const KnowledgeSection = lazy(() =>
 
 const fieldLabelClass = "mt-4 block text-[14px] text-muted-foreground";
 
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+/** 24-hour labels read the same in every language this app ships. */
+function hourLabel(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
 function ComputerModePicker({
   value,
   onChange,
@@ -197,6 +204,9 @@ export function BotSettings({
     computerMode: ComputerMode;
     memoryScope?: "isolated" | "shared" | null;
     autoSpeak?: boolean;
+    checkInsEnabled?: boolean;
+    checkInQuietStartHour?: number;
+    checkInQuietEndHour?: number;
     voiceId?: string | null;
     modelProvider?: string | null;
     modelId?: string | null;
@@ -215,6 +225,9 @@ export function BotSettings({
   const [computerMode, setComputerMode] = useState(bot.computerMode);
   const [memoryScope, setMemoryScope] = useState(bot.memoryScope);
   const [autoSpeak, setAutoSpeak] = useState(bot.autoSpeak);
+  const [checkInsEnabled, setCheckInsEnabled] = useState(bot.checkInsEnabled);
+  const [quietStartHour, setQuietStartHour] = useState(bot.checkInQuietStartHour);
+  const [quietEndHour, setQuietEndHour] = useState(bot.checkInQuietEndHour);
   const [voiceId, setVoiceId] = useState(bot.voiceId ?? "");
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [modelKey, setModelKey] = useState(
@@ -303,6 +316,38 @@ export function BotSettings({
     effectiveEntry?.thinkingLevels ??
     []
   ).filter((level) => level !== "off");
+  // Both ends of quiet hours read as part of one sentence, so they go into the
+  // translation as placeholders — Korean puts them in the other order.
+  const quietStartSelect = (
+    <NativeSelect
+      key="quiet-start"
+      aria-label={t`Quiet hours start`}
+      size="sm"
+      value={String(quietStartHour)}
+      onChange={(event) => setQuietStartHour(Number(event.target.value))}
+    >
+      {HOURS.map((hour) => (
+        <NativeSelectOption key={hour} value={String(hour)}>
+          {hourLabel(hour)}
+        </NativeSelectOption>
+      ))}
+    </NativeSelect>
+  );
+  const quietEndSelect = (
+    <NativeSelect
+      key="quiet-end"
+      aria-label={t`Quiet hours end`}
+      size="sm"
+      value={String(quietEndHour)}
+      onChange={(event) => setQuietEndHour(Number(event.target.value))}
+    >
+      {HOURS.map((hour) => (
+        <NativeSelectOption key={hour} value={String(hour)}>
+          {hourLabel(hour)}
+        </NativeSelectOption>
+      ))}
+    </NativeSelect>
+  );
 
   return (
     <div data-testid="bot-settings">
@@ -459,6 +504,32 @@ export function BotSettings({
             </div>
           </div>
         ) : null}
+        <div className="mt-5 rounded-xl border border-border p-3">
+          <label
+            htmlFor={`${ids}-check-ins`}
+            className="flex cursor-pointer items-center gap-3 text-[14px] text-foreground/75"
+          >
+            <Switch
+              id={`${ids}-check-ins`}
+              checked={checkInsEnabled}
+              onCheckedChange={(checked) => setCheckInsEnabled(checked)}
+            />
+            <Trans>Start conversations on its own</Trans>
+          </label>
+          <p className="mt-2 text-[13px] text-foreground/55">
+            <Trans>
+              Checks five times a day and writes only when it has something specific to say. Most
+              checks end in silence.
+            </Trans>
+          </p>
+          {checkInsEnabled ? (
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-[14px] text-foreground/75">
+              <Trans>
+                Stay quiet from {quietStartSelect} to {quietEndSelect}
+              </Trans>
+            </p>
+          ) : null}
+        </div>
         <label
           htmlFor={`${ids}-auto-speak`}
           className="mt-5 flex cursor-pointer items-center gap-3 text-[14px] text-foreground/75"
@@ -512,6 +583,9 @@ export function BotSettings({
               computerMode,
               memoryScope,
               autoSpeak,
+              checkInsEnabled,
+              checkInQuietStartHour: quietStartHour,
+              checkInQuietEndHour: quietEndHour,
               voiceId: voiceId || null,
               modelProvider: selected?.provider ?? null,
               modelId: selected?.modelId ?? null,

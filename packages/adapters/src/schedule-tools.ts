@@ -1,11 +1,13 @@
 import type { JobPublisher } from "@rakazo/adapter-kit";
 import { routineJobKey, routineWakeupJob } from "@rakazo/adapter-kit";
 import {
+  CHECK_IN_ROUTINE_KIND,
   cronFromPreset,
   isOneShotRoutineCron,
   isOneShotRoutineCrons,
   nextCronDate,
   ONCE_ROUTINE_CRON,
+  USER_ROUTINE_KIND,
 } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 
@@ -201,6 +203,7 @@ export async function createScheduleFromTool(
       botId: input.botId,
       userId: input.userId,
       threadId: input.threadId,
+      kind: USER_ROUTINE_KIND,
       name,
       prompt,
       crons: [resolved.cron],
@@ -253,11 +256,14 @@ export async function listSchedulesFromTool(
   deps: Pick<ScheduleToolDeps, "prisma">,
   input: { spaceId: string; botId: string; userId: string; threadId?: string },
 ) {
+  // The check-in schedule is the system's. A bot that could see it would try to
+  // edit it, and a bot that could cancel it could switch itself off.
   const rows = await deps.prisma.routine.findMany({
     where: {
       spaceId: input.spaceId,
       botId: input.botId,
       userId: input.userId,
+      kind: { not: CHECK_IN_ROUTINE_KIND },
       ...(input.threadId ? { threadId: input.threadId } : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -298,6 +304,7 @@ export async function cancelScheduleFromTool(
       spaceId: input.spaceId,
       botId: input.botId,
       userId: input.userId,
+      kind: { not: CHECK_IN_ROUTINE_KIND },
       ...(input.threadId ? { threadId: input.threadId } : {}),
       ...(routineId ? { id: routineId } : { name: name! }),
     },

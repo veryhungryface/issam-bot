@@ -44,6 +44,8 @@ import {
   assertTransition,
   blocksToAgentHistoryText,
   botMessageAllowsSilence,
+  CHECK_IN_ROUTINE_KIND,
+  checkInWakeDecision,
   connectorKindFromToolName,
   containsSecret,
   createStreamingRedactor,
@@ -164,6 +166,12 @@ import {
   browserSnapshotFromTool,
 } from "./browser-tools.js";
 import { agentConnectionTools, builtinAgentTools } from "./builtin-tools.js";
+import {
+  checkInLocalHour,
+  checkInRunPrompt,
+  checkInTimeZone,
+  loadCheckInSituation,
+} from "./check-in.js";
 import { archiveSpawnedBot, spawnBot } from "./child-bots.js";
 import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
@@ -286,6 +294,7 @@ import {
 } from "./scratchpad-tools.js";
 import { inferScript } from "./scripted-runtime.js";
 import type { EncryptedSecretStore } from "./secrets.js";
+import { isExactNoResponse, NO_RESPONSE, stripNoResponseReply } from "./silent-reply.js";
 import {
   listAgentSkillRecords,
   skillCreateFromTool,
@@ -841,11 +850,54 @@ export function createRunExecutor(deps: ExecutorDeps) {
             routine.timezone,
           );
       const previousLastRunAt = routine.lastRunAt;
-      const skillRecords = await listAgentSkillRecords(deps.prisma, {
-        spaceId: routine.spaceId,
-        userId: routine.userId,
-      });
-      const routinePrompt = expandSkillReferencesInPrompt(routine.prompt, skillRecords);
+      /**
+       * A check-in is the bot deciding whether to speak first, so most of them
+       * must cost nothing at all: no model call, no chat message, and above all
+       * no Browserbase session. Everything decidable from the bot's own rows —
+       * the user's switch, quiet hours, a conversation still in progress, a
+       * check-in that already spoke, and the absence of anything to notice — is
+       * decided here, before a run exists.
+       */
+      let checkInPrompt: string | undefined;
+      if (routine.kind === CHECK_IN_ROUTINE_KIND) {
+        const timeZone = checkInTimeZone();
+        const now = new Date();
+        const situation = await loadCheckInSituation(deps.prisma, {
+          spaceId: routine.spaceId,
+          botId: bot.id,
+          threadId: thread.id,
+          routineId: routine.id,
+          now,
+        });
+        const decision = checkInWakeDecision({
+          enabled: bot.checkInsEnabled,
+          localHour: checkInLocalHour(now, timeZone),
+          quietStartHour: bot.checkInQuietStartHour,
+          quietEndHour: bot.checkInQuietEndHour,
+          signals: situation.signals,
+        });
+        if (!decision.wake) {
+          // Move the schedule on and re-arm it; skipping a check must not retire it.
+          const advanced = await deps.prisma.routine.updateMany({
+            where: { id: routine.id, active: true, nextRunAt: scheduledAt },
+            data: { lastRunAt: now, nextRunAt, ...(nextRunAt ? {} : { active: false }) },
+          });
+          if (advanced.count === 1 && nextRunAt) {
+            await deps.jobs.enqueue(routineWakeupJob(routine.id, nextRunAt));
+          }
+          getLogger().info("check-in skipped", { botId: bot.id, reason: decision.reason });
+          return;
+        }
+        checkInPrompt = checkInRunPrompt(situation);
+      }
+      const skillRecords = checkInPrompt
+        ? []
+        : await listAgentSkillRecords(deps.prisma, {
+            spaceId: routine.spaceId,
+            userId: routine.userId,
+          });
+      const routinePrompt =
+        checkInPrompt ?? expandSkillReferencesInPrompt(routine.prompt, skillRecords);
       const claimed = await deps.prisma.$transaction(async (tx) => {
         const updated = await tx.routine.updateMany({
           where: { id: routine.id, active: true, nextRunAt: scheduledAt },
@@ -1275,6 +1327,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           peerMessage?.intent,
           peerMessage?.repliesToRequest,
         );
+        const allowSilentEmptyRun =
+          allowSilentPeerMessage || messagingChannelRun || runAllowsSilentEmpty(run.trigger);
         const emptyResponseText = peerMessage
           ? peerMessage.intent === "result" ||
             peerMessage.intent === "status" ||
@@ -1594,6 +1648,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // Rehydrate from this run's prior progress rows so a resume after ask/takeover
         // still knows progress was already published (skip hollow finals; status outcome).
         let publishedMidTurnUserMessage = false;
+        // Routine runs discard promoted narration instead of posting it as chat:
+        // a check-in that stays silent must leave no trace in the thread.
+        let discardedMidTurnNarration = false;
         const midTurnUserTexts: string[] = [];
         let midTurnProgressCount = 0;
         {
@@ -1680,6 +1737,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           assembled = "";
           hasStreamedText = false;
           pendingProgress = "";
+          if (!runPromotesMidTurnNarration(run.trigger)) {
+            discardedMidTurnNarration = true;
+            return;
+          }
           await publishMessage(
             deps,
             run,
@@ -3784,6 +3845,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pluginLine,
                 agentSkillsLine,
                 taughtSkillsLine,
+                replyGuidance: runReplyGuidance(run.trigger),
                 groupContext,
                 messagingContext,
                 redactedMemoryContext: memoryContext
@@ -3813,7 +3875,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
               resumeFromCheckpoint: takeoverResume?.checkpoint,
               script,
-              allowSilentEmpty: allowSilentPeerMessage || messagingChannelRun,
+              allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
               executeTool: scripted ? undefined : applyTool,
               claimSteering: scripted
@@ -3981,7 +4043,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               await publishMidTurnNarration();
               if (assembled.trim()) {
                 const narration = clampUserProgressMessage(redactSecrets(assembled, runSecrets));
-                if (narration) {
+                if (narration && runPromotesMidTurnNarration(run.trigger)) {
                   await publishMessage(
                     deps,
                     run,
@@ -3992,6 +4054,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   );
                   midTurnUserTexts.push(narration);
                   publishedMidTurnUserMessage = true;
+                } else if (narration) {
+                  discardedMidTurnNarration = true;
                 }
                 assembled = "";
                 hasStreamedText = false;
@@ -4212,8 +4276,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               });
             } else if (event.type === "done") {
               if (!assembled && event.text) {
-                if (publishedMidTurnUserMessage) {
-                  // Mid-turn progress already published the streamed narration.
+                if (publishedMidTurnUserMessage || discardedMidTurnNarration) {
+                  // Mid-turn narration was already published or discarded (routines).
                   // Post-tool finals are streamed into assembled; do not restore
                   // cumulative done.text (clamp/redaction make substring stripping brittle).
                 } else {
@@ -4268,14 +4332,20 @@ export function createRunExecutor(deps: ExecutorDeps) {
           terminalCheckpointComplete = true;
 
           flushPendingTools();
-          if (!assembled) {
+          // Only routine runs are instructed to emit NO_RESPONSE. Other
+          // allowSilentEmpty wakes (FYI, messaging) may finish truly empty.
+          const silentReply = runAllowsSilentEmpty(run.trigger)
+            ? stripNoResponseReply(assembled, messageSegments)
+            : { assembled, blocks: messageSegments };
+          let completionBlocks = silentReply.blocks;
+          if (!silentReply.assembled) {
             // Mid-turn progress already posted durable chat messages; skip the empty
             // "…" fallback so we do not add a junk final bubble. Delegated bot_message
             // runs still return via botMessageOutcomeFromMidTurn below (status when
-            // only progress was posted, result when a final reply exists).
-            messageSegments = completionMessageSegments(messageSegments, {
-              allowSilentEmpty:
-                allowSilentPeerMessage || messagingChannelRun || publishedMidTurnUserMessage,
+            // only progress was posted, result when a final reply exists). Exact
+            // NO_RESPONSE finals are treated as empty before this fallback runs.
+            completionBlocks = completionMessageSegments(completionBlocks, {
+              allowSilentEmpty: allowSilentEmptyRun || publishedMidTurnUserMessage,
               emptyResponseText,
               suppressOutput: handedOff,
               skipEmptyFallback: publishedTerminalSubagent || publishedMidTurnUserMessage,
@@ -4284,12 +4354,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           const blocks = handedOff
             ? []
             : finalBlocksAfterMidTurnProgress(
-                redactBlocks(messageSegments, runSecrets),
-                publishedMidTurnUserMessage,
+                redactBlocks(completionBlocks, runSecrets),
+                publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
               );
           const text = handedOff
             ? ""
-            : redactSecrets(completionNotificationBody(assembled, blocks), runSecrets);
+            : redactSecrets(completionNotificationBody(silentReply.assembled, blocks), runSecrets);
           if (containsSecret(text, runSecrets)) {
             throw new Error("refusing to persist a secret in the thread");
           }
@@ -4696,6 +4766,8 @@ export function runTurnInstructions(parts: {
   pluginLine: string | undefined;
   agentSkillsLine: string | undefined;
   taughtSkillsLine: string | undefined;
+  /** Progress guidance for a waiting user, or the silence rule for a scheduled run. */
+  replyGuidance: string;
   groupContext: string | undefined;
   messagingContext: string | undefined;
   redactedMemoryContext: string | undefined;
@@ -4718,7 +4790,7 @@ export function runTurnInstructions(parts: {
     'For charts and data visualization, use the render_plot tool: it renders bar, line, scatter, histogram, heatmap, faceted and many more chart types from a JSON spec and attaches the PNG to the chat. Call render_plot with {"help": true} before your first chart to read the full guide.',
     "When the user asks you to add or connect an MCP server (and gives you its details), use add_mcp_server. If it uses browser sign-in, an approval card appears in the chat — tell the user to click Authorize on it.",
     "Never print API keys, access tokens, or secret values. Prefer tools over claiming you already did the work.",
-    "Open a task that will take more than a few seconds with one short message_user line saying what you are about to do, before the first tool call: booting a browser and reading a page is half a minute of silence otherwise. Then send a few short progress updates the same way. Keep them brief and high-signal. Do not narrate every tool call. Thinking stays private. Put the final answer in your normal reply, not a duplicate message_user.",
+    parts.replyGuidance,
     "When the user names a website or a URL, open it with the browser directly. Searching the connector catalog first costs a whole round trip and answers a question nobody asked; search it only when a connected account is the point of the task (a calendar, an inbox, a CRM).",
     // Volatile last: memory, scratchpad and the bot roster change between runs, and
     // everything above them stays in the model's cached prefix when they do.
@@ -4753,6 +4825,33 @@ export function threadContextForRun<T>(
     : messagingChannelRun
       ? { ...context, summary: null, historyCompactedUpToSeq: null, includeSemanticRecall: false }
       : { ...context, includeSemanticRecall: true };
+}
+
+export { isExactNoResponse, NO_RESPONSE, stripNoResponseReply };
+
+export const LONG_WORK_PROGRESS_GUIDANCE =
+  "Open a task that will take more than a few seconds with one short message_user line saying what you are about to do, before the first tool call: booting a browser and reading a page is half a minute of silence otherwise. Then send a few short progress updates the same way. Keep them brief and high-signal. Do not narrate every tool call. Thinking stays private. Put the final answer in your normal reply, not a duplicate message_user.";
+
+export const ROUTINE_SILENT_REPLY_GUIDANCE = `If this routine's prompt says to stay silent when there is nothing to report, the entire final assistant reply must be exactly ${NO_RESPONSE} \u2014 no surrounding prose, no variants, no progress updates, no all-clear, and no meta note that you are staying silent. Do not call message_user unless you have something to report.`;
+
+/** Scheduled runs may finish with nothing to say; a person waiting on a reply may not. */
+export function runAllowsSilentEmpty(trigger: string): boolean {
+  return trigger === "routine";
+}
+
+/**
+ * Narration exists so a waiting user can see progress. Nobody is waiting on a
+ * scheduled run, so promoting its narration into chat would be the very "just
+ * checking in" noise a silent check-in is supposed to avoid.
+ */
+export function runPromotesMidTurnNarration(trigger: string): boolean {
+  return trigger !== "routine";
+}
+
+export function runReplyGuidance(trigger: string): string {
+  return runAllowsSilentEmpty(trigger)
+    ? ROUTINE_SILENT_REPLY_GUIDANCE
+    : LONG_WORK_PROGRESS_GUIDANCE;
 }
 
 export function completionMessageSegments(

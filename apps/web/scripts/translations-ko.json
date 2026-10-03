@@ -579,5 +579,10 @@
   "Message from": "메시지 보낸 봇",
   "This chat is view-only": "이 채팅은 읽기 전용입니다",
   "Could not load this chat.": "이 채팅을 불러오지 못했습니다.",
-  "No messages with {peerBotName} yet.": "{peerBotName}와의 메시지가 아직 없습니다."
+  "No messages with {peerBotName} yet.": "{peerBotName}와의 메시지가 아직 없습니다.",
+  "Start conversations on its own": "먼저 말 걸기",
+  "Checks five times a day and writes only when it has something specific to say. Most checks end in silence.": "하루 다섯 번 살펴보고, 구체적으로 할 말이 있을 때만 메시지를 보냅니다. 대부분은 아무 말도 하지 않습니다.",
+  "Stay quiet from {quietStartSelect} to {quietEndSelect}": "{quietStartSelect}부터 {quietEndSelect}까지는 조용히",
+  "Quiet hours start": "방해 금지 시작 시각",
+  "Quiet hours end": "방해 금지 종료 시각"
 }

@@ -73,6 +73,49 @@ describe("inferScript request_secret", () => {
   });
 });
 
+describe("inferScript write_file", () => {
+  it("posts the reply after the tool so a routine run still has a durable final", () => {
+    expect(
+      inferScript("write a file in your home called notes/result.txt that says routine-ok"),
+    ).toEqual([
+      {
+        toolCalls: [
+          { name: "write_file", args: { path: "notes/result.txt", content: "routine-ok\n" } },
+        ],
+      },
+      { assistant: "writing that into my home now.", complete: true },
+    ]);
+  });
+});
+
+describe("inferScript check-in", () => {
+  const checkIn = (situation: string) =>
+    [
+      "This is an unprompted check-in, not a reply.",
+      `<check_in_context>\n${situation}\n</check_in_context>`,
+    ].join("\n\n");
+
+  it("stays silent unless the situation it was handed names finished work", () => {
+    expect(inferScript(checkIn("Last conversation: 3 days ago"))).toEqual([
+      { assistant: "NO_RESPONSE", complete: true },
+    ]);
+    expect(inferScript(checkIn("The lesson plan draft is done, right?"))).toEqual([
+      {
+        assistant: "The lesson plan draft is finished and waiting for your review.",
+        complete: true,
+      },
+    ]);
+  });
+
+  it("does not let the quoted conversation steal another branch", () => {
+    // The situation block carries the user's own words; "write a file" in there
+    // must not turn a check-in into a file-writing run.
+    expect(
+      inferScript(checkIn('the last thing the user said was: "write a file called notes/x.txt"')),
+    ).toEqual([{ assistant: "NO_RESPONSE", complete: true }]);
+  });
+});
+
 describe("ScriptedAgentRuntime executionIds", () => {
   it("gives repeated tools distinct executionIds within a run", async () => {
     const runtime = new ScriptedAgentRuntime();

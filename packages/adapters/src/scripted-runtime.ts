@@ -5,6 +5,7 @@ import type {
   AgentRuntimeEvent,
 } from "@rakazo/adapter-kit";
 import { abortableDelay, inferHandoffTargetName } from "@rakazo/core";
+import { NO_RESPONSE } from "./silent-reply.js";
 
 const running = new Map<string, AbortController>();
 
@@ -148,6 +149,20 @@ export function inferScript(
         complete: true,
       },
     ];
+  }
+  // Check-ins before every content-based intent: the situation block quotes the
+  // user's own words, and those words must not be able to steal a branch. The
+  // emulated judgment keeps the real one's shape — silence unless the situation
+  // it was handed names something finished.
+  if (lower.includes("this is an unprompted check-in")) {
+    return lower.includes("the lesson plan draft is done")
+      ? [
+          {
+            assistant: "The lesson plan draft is finished and waiting for your review.",
+            complete: true,
+          },
+        ]
+      : [{ assistant: NO_RESPONSE, complete: true }];
   }
   // Before every content-based intent so payload text cannot steal the branch.
   if (lower.includes("message the bot named") || lower.includes("message bot named")) {
@@ -431,9 +446,12 @@ export function inferScript(
     const filePath =
       /(?:called|named|path|file)\s+([A-Za-z0-9._/-]+)/i.exec(prompt)?.[1] ?? "notes/result.txt";
     return [
-      { assistant: "writing that into my home and attaching it to the thread." },
       { toolCalls: [{ name: "write_file", args: { path: filePath, content } }] },
-      { toolCalls: [{ name: "attach_file", args: { path: filePath } }], complete: true },
+      { toolCalls: [{ name: "attach_file", args: { path: filePath } }] },
+      {
+        assistant: "writing that into my home and attaching it to the thread.",
+        complete: true,
+      },
     ];
   }
   if (
@@ -444,12 +462,11 @@ export function inferScript(
     const content = `${said.trim()}\n`;
     const filePath =
       /(?:called|named)\s+([A-Za-z0-9._/-]+)/i.exec(prompt)?.[1] ?? "notes/result.txt";
+    // Reply last, after the tool: a routine run discards promoted narration, so a
+    // pre-tool line would leave the turn with no durable final message at all.
     return [
-      { assistant: "writing that into my home now." },
-      {
-        toolCalls: [{ name: "write_file", args: { path: filePath, content } }],
-        complete: true,
-      },
+      { toolCalls: [{ name: "write_file", args: { path: filePath, content } }] },
+      { assistant: "writing that into my home now.", complete: true },
     ];
   }
   if (lower.includes("remember")) {

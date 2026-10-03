@@ -46,6 +46,9 @@ export const BotSchema = z.object({
   createdAt: z.string(),
   voiceId: z.string().nullable(),
   autoSpeak: z.boolean(),
+  checkInsEnabled: z.boolean(),
+  checkInQuietStartHour: z.number().int(),
+  checkInQuietEndHour: z.number().int(),
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
   thinkingLevel: ThinkingLevelSchema.nullable(),
@@ -207,6 +210,13 @@ export function normalizeCreateBotProfile(
   };
 }
 
+/**
+ * Quiet hours are whole local hours: the user picks "nothing after 10pm", not a
+ * minute. Equal bounds mean no quiet hours, which the schedule treats as a
+ * 24-hour waking window rather than silence all day.
+ */
+const QuietHour = z.number().int().min(0).max(23);
+
 export const UpdateBotInput = z
   .object({
     botId: Id,
@@ -221,6 +231,9 @@ export const UpdateBotInput = z
     sectionId: Id.nullable().optional(),
     voiceId: z.string().max(120).nullable().optional(),
     autoSpeak: z.boolean().optional(),
+    checkInsEnabled: z.boolean().optional(),
+    checkInQuietStartHour: QuietHour.optional(),
+    checkInQuietEndHour: QuietHour.optional(),
     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
     modelId: z.string().trim().min(1).max(200).nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
