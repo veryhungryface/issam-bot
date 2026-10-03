@@ -1,4 +1,4 @@
-export const UI_LOCALES = ["en", "zh-CN"] as const;
+export const UI_LOCALES = ["en", "ko", "zh-CN"] as const;
 
 export type UiLocale = (typeof UI_LOCALES)[number];
 
@@ -6,6 +6,7 @@ export const UI_LOCALE_STORAGE_KEY = "rakazo.uiLocale";
 
 export const UI_LOCALE_LABELS: Record<UiLocale, string> = {
   en: "English",
+  ko: "한국어",
   "zh-CN": "简体中文",
 };
 
@@ -14,7 +15,9 @@ export function htmlLangForLocale(locale: string): string {
 }
 
 export function isUiLocale(value: string | null | undefined): value is UiLocale {
-  return value === "en" || value === "zh-CN";
+  // Derived from UI_LOCALES: a hand-written list silently ignored a locale that had a
+  // catalog, so a Korean phone fell back to English.
+  return UI_LOCALES.includes(value as UiLocale);
 }
 
 /** Normalize BCP-47 tags to a mobile UI locale, else `en`. */

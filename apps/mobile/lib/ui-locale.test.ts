@@ -10,10 +10,10 @@ import {
 
 describe("UI_LOCALES", () => {
   it("only offers locales that have mobile catalogs today", () => {
-    expect([...UI_LOCALES]).toEqual(["en", "zh-CN"]);
-    expect(Object.keys(UI_LOCALE_LABELS).sort()).toEqual(["en", "zh-CN"]);
+    expect([...UI_LOCALES]).toEqual(["en", "ko", "zh-CN"]);
+    expect(Object.keys(UI_LOCALE_LABELS).sort()).toEqual(["en", "ko", "zh-CN"]);
+    // The web offers these; the phone app has no catalog for them yet.
     expect(isUiLocale("de")).toBe(false);
-    expect(isUiLocale("ko")).toBe(false);
     expect(isUiLocale("tr")).toBe(false);
     expect(isUiLocale("hi")).toBe(false);
     expect(isUiLocale("pt-BR")).toBe(false);
@@ -39,8 +39,6 @@ describe("normalizeUiLocale", () => {
     expect(normalizeUiLocale("fr-FR")).toBe("en");
     expect(normalizeUiLocale("de")).toBe("en");
     expect(normalizeUiLocale("de-DE")).toBe("en");
-    expect(normalizeUiLocale("ko")).toBe("en");
-    expect(normalizeUiLocale("ko-KR")).toBe("en");
     expect(normalizeUiLocale("tr")).toBe("en");
     expect(normalizeUiLocale("hi")).toBe("en");
     expect(normalizeUiLocale("pt")).toBe("en");
@@ -90,5 +88,17 @@ describe("resolveUiLocale", () => {
         deviceLanguage: null,
       }),
     ).toBe("en");
+  });
+});
+
+describe("a Korean phone", () => {
+  it("resolves to the Korean catalog from the device language alone", () => {
+    // The user's phones are Korean; nothing should have to be chosen in settings.
+    for (const tag of ["ko", "ko-KR", "ko_KR", "KO-kr"]) {
+      expect(normalizeUiLocale(tag)).toBe("ko");
+    }
+    expect(resolveUiLocale({ deviceLanguage: "ko-KR" })).toBe("ko");
+    // An explicit choice still wins over the device.
+    expect(resolveUiLocale({ stored: "en", deviceLanguage: "ko-KR" })).toBe("en");
   });
 });
