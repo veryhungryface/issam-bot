@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { blockedAuthPaths, passwordResetEmail, resolveSignupPolicy } from "./index.js";
+import {
+  authRateLimitOptions,
+  blockedAuthPaths,
+  passwordResetEmail,
+  resolveSignupPolicy,
+} from "./index.js";
 
 describe("auth policy", () => {
   it("blocks invitation and org-creation paths in version 1", () => {
@@ -76,5 +81,22 @@ describe("resolveSignupPolicy", () => {
         signupAllowlist: "environment-only@example.com",
       }),
     ).resolves.toEqual({ enabled: false, allowlist: ["approved@example.com"] });
+  });
+});
+
+describe("authRateLimitOptions", () => {
+  it("caps credential attempts in production", () => {
+    const options = authRateLimitOptions("production");
+    expect(options.enabled).toBe(true);
+    expect(options.storage).toBe("database");
+    // Shared across API processes, so two workers cannot each grant the full allowance.
+    for (const path of ["/sign-in/email", "/sign-up/email", "/request-password-reset"]) {
+      expect(options.customRules[path]).toEqual({ window: 15 * 60, max: 10 });
+    }
+  });
+
+  it("stays off elsewhere, where the suites sign in constantly", () => {
+    expect(authRateLimitOptions("test").enabled).toBe(false);
+    expect(authRateLimitOptions(undefined).enabled).toBe(false);
   });
 });

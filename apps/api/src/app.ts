@@ -563,16 +563,44 @@ export async function createApp(
   };
 }
 
-function isTrustedOrigin(origin: string, env: AppEnv) {
+/**
+ * Which browser origins may use a session on this API.
+ *
+ * This used to trust *any* loopback origin, so anything a person happened to be running on
+ * another local port - a dev server, a demo, a page they opened - could call the API with
+ * their cookie. The allowlist is now the origins this deployment actually configures, plus
+ * the localhost/127.0.0.1/[::1] spellings of those same origins, which are the same server
+ * reached by another name. Native and Expo shells keep their custom schemes.
+ */
+export function isTrustedOrigin(
+  origin: string,
+  env: Pick<AppEnv, "webOrigin" | "apiUrl" | "authUrl">,
+) {
   if (!origin) return true;
-  if (origin === env.webOrigin || origin === env.apiUrl || origin === env.authUrl) return true;
   if (origin.startsWith("rakazo://") || origin.startsWith("exp://")) return true;
+  const allowed = new Set([env.webOrigin, env.apiUrl, env.authUrl].flatMap(originVariants));
+  return allowed.has(origin);
+}
+
+/** An origin plus the other spellings of the same loopback server. */
+function originVariants(origin: string | undefined): string[] {
+  if (!origin) return [];
+  const variants = [origin];
   try {
-    const host = new URL(origin).hostname;
-    return isLoopbackHost(host);
+    const url = new URL(origin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return variants;
+    // A browser Origin header never has a trailing slash; a configured URL may.
+    variants.push(url.origin);
+    if (!isLoopbackHost(url.hostname)) return variants;
+    for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
+      const twin = new URL(url.origin);
+      twin.hostname = host;
+      variants.push(twin.origin);
+    }
   } catch {
-    return false;
+    return variants;
   }
+  return variants;
 }
 
 function isLoopbackHost(host: string): boolean {
