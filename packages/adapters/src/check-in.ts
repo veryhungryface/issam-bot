@@ -62,10 +62,32 @@ export function checkInLocalHour(now: Date, timeZone: string): number {
   );
 }
 
+/** True when the stored schedule already matches the settings and is armed. */
+export function checkInScheduleSettled(
+  row: { kind: string; crons: string[]; timezone: string; active: boolean; nextRunAt: Date | null },
+  want: { crons: string[]; timezone: string; active: boolean },
+): boolean {
+  return (
+    row.kind === CHECK_IN_ROUTINE_KIND &&
+    row.timezone === want.timezone &&
+    row.active === want.active &&
+    row.crons.length === want.crons.length &&
+    row.crons.every((cron, index) => cron === want.crons[index]) &&
+    // An inactive schedule has nothing to arm; an active one must have a next fire.
+    (!want.active || row.nextRunAt !== null)
+  );
+}
+
 /**
  * Bring a bot's check-in schedule in line with its settings. Idempotent: the
  * row's id is derived from the bot, so repeated syncs and concurrent callers
  * converge on one schedule instead of stacking up extra ones.
+ *
+ * A schedule that already matches is left strictly alone. This runs on every
+ * app load, and recomputing nextRunAt each time would walk a check that is due
+ * right now forward to the next slot and replace its queued job with it — the
+ * user would silently lose that check. A nextRunAt in the past is the job
+ * reconciler's business, not ours.
  */
 export async function syncBotCheckInRoutine(
   deps: { prisma: PrismaClient; jobs: JobPublisher },
@@ -74,8 +96,13 @@ export async function syncBotCheckInRoutine(
   const routineId = checkInRoutineId(bot.id);
   const timezone = checkInTimeZone();
   const crons = checkInCrons(bot.checkInQuietStartHour, bot.checkInQuietEndHour);
+  const existing = await deps.prisma.routine.findUnique({
+    where: { id: routineId },
+    select: { kind: true, crons: true, timezone: true, active: true, nextRunAt: true },
+  });
   const nextRunAt = bot.checkInsEnabled ? nextCronDateAcross(crons, new Date(), timezone) : null;
   const active = bot.checkInsEnabled && nextRunAt !== null;
+  if (existing && checkInScheduleSettled(existing, { crons, timezone, active })) return;
   // The prompt is rebuilt from live signals at wake time; the stored one only
   // has to be non-empty and has to explain the row if anyone ever reads it.
   const prompt = formatCheckInPrompt();
