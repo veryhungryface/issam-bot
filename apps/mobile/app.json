@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "이삼봇",
+    "name": "아이쌤봇",
     "slug": "issam-bot",
     "scheme": "rakazo",
     "version": "1.0.0",
@@ -26,14 +26,14 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#2965EC"
+          "color": "#F26A1B"
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "이삼봇에 이미지를 첨부할 때 사진 보관함을 사용합니다.",
-          "cameraPermission": "이삼봇에 사진을 첨부할 때 카메라를 사용합니다.",
+          "photosPermission": "아이쌤봇에 이미지를 첨부할 때 사진 보관함을 사용합니다.",
+          "cameraPermission": "아이쌤봇에 사진을 첨부할 때 카메라를 사용합니다.",
           "microphonePermission": false
         }
       ],
@@ -49,9 +49,9 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSCameraUsageDescription": "이삼봇에 사진을 첨부할 때 카메라를 사용합니다.",
-        "NSPhotoLibraryUsageDescription": "이삼봇에 이미지를 첨부할 때 사진 보관함을 사용합니다.",
-        "NSLocalNetworkUsageDescription": "같은 네트워크에 직접 띄운 이삼봇 서버에 연결할 때 사용합니다.",
+        "NSCameraUsageDescription": "아이쌤봇에 사진을 첨부할 때 카메라를 사용합니다.",
+        "NSPhotoLibraryUsageDescription": "아이쌤봇에 이미지를 첨부할 때 사진 보관함을 사용합니다.",
+        "NSLocalNetworkUsageDescription": "같은 네트워크에 직접 띄운 아이쌤봇 서버에 연결할 때 사용합니다.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
@@ -65,7 +65,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
-        "backgroundColor": "#2965EC"
+        "backgroundColor": "#FFFFFF"
       }
     },
     "web": {
