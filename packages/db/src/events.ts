@@ -35,6 +35,12 @@ export interface AppendEventInput {
   type: ProductEvent["type"];
   payload: Record<string, unknown>;
   runId?: string;
+  /**
+   * The run's last word. History writes are refused once a run is cancelled - that guard is
+   * what stops a worker from talking after a stop - but the event that announces the cancel
+   * is itself written after the row is terminal, so it says so here. Nothing else should.
+   */
+  terminal?: boolean;
 }
 
 export interface ThreadEvents {
@@ -1344,9 +1350,10 @@ async function finalizeRunOnce(
   });
 }
 
-async function createSteeringContinuation(
+/** Exported for stuck-run expiry, which frees steering the same way a finished run does. */
+export async function createSteeringContinuation(
   tx: Prisma.TransactionClient,
-  input: FinalizeRunBase,
+  input: { spaceId: string; threadId: string; botId: string },
 ): Promise<string | null> {
   const active = await tx.run.findFirst({
     where: {
@@ -1406,7 +1413,7 @@ export async function appendEventInTransaction(
     data: { nextEventSeq: { increment: 1 } },
     select: { nextEventSeq: true },
   });
-  await assertRunCanWriteHistory(tx, input.runId);
+  if (!input.terminal) await assertRunCanWriteHistory(tx, input.runId);
   // Unpaired UTF-16 surrogates (e.g. a split emoji high half) are invalid JSON for Postgres.
   const payload = sanitizeJsonValue(input.payload);
   return tx.event.create({
