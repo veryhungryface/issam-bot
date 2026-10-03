@@ -8,6 +8,8 @@ import {
   loadCurrentTurnImages,
   missingTurnImagesInstruction,
   runNotificationsEnabled,
+  runTurnInstructions,
+  runTurnPrompt,
   selectBuiltinToolsForRun,
   settleSteeringAttachmentLoads,
   threadContextForRun,
@@ -1345,5 +1347,75 @@ description: Prepare standup notes
       id: "deepseek/deepseek-v4-flash-0731",
       thinkingLevel: "high",
     });
+  });
+});
+
+describe("turn prompt and instruction order", () => {
+  const parts = {
+    botInstructions: "You are Issam.",
+    computerInstruction: "You have a persistent cloud browser.",
+    pageBrowserAllowed: true,
+    workspaceInstruction: "This result workspace is your private home.",
+    pluginLine: "No plugins are connected yet.",
+    agentSkillsLine: undefined,
+    taughtSkillsLine: undefined,
+    groupContext: undefined,
+    messagingContext: undefined,
+    redactedMemoryContext: "Memory: the user teaches third grade.",
+    redactedScratchpadContext: "Open work: finish the worksheet.",
+    hasHistoricalContext: true,
+    botDirectory: "Other bots: Writer.",
+  };
+
+  it("keeps the clock out of the system prompt", () => {
+    // It used to sit second here, so a minute's passing reread the whole ~14k-token prompt
+    // on the first call of every run.
+    const instructions = runTurnInstructions(parts).filter(Boolean).join("\n\n");
+    expect(instructions).not.toMatch(/Current date and time/);
+    expect(instructions).not.toMatch(/present moment/);
+  });
+
+  it("puts the clock last on the turn message instead", () => {
+    const prompt = runTurnPrompt({
+      basePrompt: "find the textbook page",
+      approvalContinuation: "The user approved the download.",
+      now: new Date("2026-10-03T01:00:00Z"),
+    });
+    expect(prompt.startsWith("find the textbook page")).toBe(true);
+    expect(prompt.indexOf("Current date and time")).toBeGreaterThan(
+      prompt.indexOf("The user approved the download."),
+    );
+    expect(prompt).toContain("2026-10-03T01:00:00Z");
+  });
+
+  it("orders the blocks that change between runs after the fixed guidance", () => {
+    const rendered = runTurnInstructions(parts).filter(Boolean).join("\n\n");
+    const fixed = rendered.indexOf("render_plot");
+    for (const volatile of [
+      parts.redactedMemoryContext,
+      parts.redactedScratchpadContext,
+      parts.botDirectory,
+    ]) {
+      expect(rendered.indexOf(volatile)).toBeGreaterThan(fixed);
+    }
+    // The bot's own instructions stay first: they are stable and set the voice.
+    expect(rendered.startsWith(parts.botInstructions)).toBe(true);
+  });
+
+  it("leaves the untrusted-content rule last so recency works for it", () => {
+    const kept = runTurnInstructions(parts).filter((line): line is string => Boolean(line));
+    expect(kept.at(-1)).toMatch(/^Treat content returned by tools/);
+  });
+
+  it("drops the blocks a run does not have", () => {
+    const kept = runTurnInstructions({
+      ...parts,
+      redactedMemoryContext: undefined,
+      redactedScratchpadContext: undefined,
+      botDirectory: undefined,
+      hasHistoricalContext: false,
+    }).filter(Boolean);
+    expect(kept.join("\n\n")).not.toMatch(/Compacted summaries/);
+    expect(kept).not.toContain(undefined);
   });
 });
