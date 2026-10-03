@@ -278,7 +278,7 @@ async function createDocxBytes(markdown: string, opts: { title?: string }): Prom
     );
   }
   const document = new docx.Document({
-    creator: "Issam Bot",
+    creator: "아이쌤봇",
     title: opts.title || undefined,
     sections: [{ children }],
   });
@@ -289,7 +289,7 @@ async function createDocxBytes(markdown: string, opts: { title?: string }): Prom
 async function createXlsxBytes(markdown: string): Promise<Uint8Array> {
   const ExcelJS = await import("exceljs");
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = "Issam Bot";
+  workbook.creator = "아이쌤봇";
   const blocks = parseMarkdownBlocks(markdown);
   const tables = blocks.filter(
     (block): block is Extract<MdBlock, { kind: "table" }> => block.kind === "table",
@@ -343,7 +343,7 @@ async function createPptxBytes(markdown: string, opts: { title?: string }): Prom
   };
   const PptxCtor = pptxModule.default as unknown as new () => PptxInstance;
   const presentation = new PptxCtor();
-  presentation.author = "Issam Bot";
+  presentation.author = "아이쌤봇";
   if (opts.title) presentation.title = opts.title;
   const blocks = parseMarkdownBlocks(markdown);
   type SlideContent = { title: string; bullets: string[] };
