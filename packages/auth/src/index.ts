@@ -35,8 +35,27 @@ export async function resolveSignupPolicy(
   return signupPolicyFromEnv(env);
 }
 
+const CREDENTIAL_PATHS = ["/sign-in/email", "/sign-up/email", "/request-password-reset"] as const;
+
+/**
+ * A cap on credential attempts, shared by every API process through the database so two
+ * workers cannot each grant the full allowance. Ten tries per quarter hour is far above
+ * what a person mistyping a password needs and far below what guessing one requires.
+ *
+ * Off outside production: the test suites and the local stack sign in constantly.
+ */
+export function authRateLimitOptions(nodeEnv = process.env.NODE_ENV) {
+  const rule = { window: 15 * 60, max: 10 };
+  return {
+    enabled: nodeEnv === "production",
+    storage: "database" as const,
+    customRules: Object.fromEntries(CREDENTIAL_PATHS.map((path) => [path, rule])),
+  };
+}
+
 export function createAuth(prisma: PrismaClient, env: AuthEnv) {
   return betterAuth({
+    rateLimit: authRateLimitOptions(),
     appName: "Issam Bot",
     secret: env.secret,
     baseURL: env.baseURL,
