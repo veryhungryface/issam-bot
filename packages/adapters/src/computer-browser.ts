@@ -132,6 +132,22 @@ export class ComputerBrowserProvider implements BrowserProvider {
       { command: "act", actions: request.actions },
       context,
     );
+    if (live?.ok === false && live.fallback === undefined && typeof live.tree === "string") {
+      // The page tools still work; a ref did not. Sending the model to screenshots here would
+      // cost 7-9s a step for a problem the fresh snapshot already solves.
+      const elements = Array.isArray(live.elements) ? live.elements : [];
+      return {
+        ok: false,
+        completed: typeof live.completed === "number" ? live.completed : 0,
+        uncertain: live.uncertain ?? false,
+        url: typeof live.url === "string" ? live.url : "",
+        title: typeof live.title === "string" ? live.title : "",
+        tree: live.tree,
+        elements,
+        ...(typeof live.text === "string" && live.text ? { text: live.text } : {}),
+        error: live.error || "Page action could not run",
+      };
+    }
     if (live?.ok !== true || live.fallback === "computer_act") {
       return {
         ok: false,
