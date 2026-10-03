@@ -2753,9 +2753,12 @@ async function waitFor(app: App, cookie: string, botId: string, pred: (snap: Sna
   throw new Error(`timeout waiting for thread: ${JSON.stringify(last)}`);
 }
 
+// Same patience as waitFor above: both wait for a run to reach a terminal state,
+// and half the budget made the slowest journeys fail on a loaded CI runner while
+// passing everywhere else.
 async function waitForDatabase(pred: () => Promise<boolean>) {
   const start = Date.now();
-  while (Date.now() - start < 10_000) {
+  while (Date.now() - start < 20_000) {
     if (await pred()) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
