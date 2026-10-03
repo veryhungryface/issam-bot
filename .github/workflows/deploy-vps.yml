@@ -8,7 +8,7 @@ on:
         required: true
         default: sha-840385d
       git_sha:
-        description: Full Git revision reported by /health
+        description: Full Git revision reported by /internal/health
         required: true
         default: 840385d222f7fa8b25dc6bf990d1e5d7d6a93ef1
       host:
@@ -62,7 +62,11 @@ jobs:
           ssh "${ssh_args[@]}" 'sudo -n docker logout ghcr.io >/dev/null 2>&1 || true' || true
           if [[ "${{ job.status }}" == "success" ]]; then
             for attempt in {1..18}; do
-              if curl --fail --silent --show-error --max-time 10 "http://${{ inputs.host }}/health" | grep -Fq '"revision":"${{ inputs.git_sha }}"'; then
+              # The public /health says only {"ok":true} now; the revision lives on the
+              # internal route, which the edge does not serve. Read it on the host, and
+              # keep the old public check as a fallback for a release that predates it.
+              if ssh "${ssh_args[@]}" 'curl --fail --silent --max-time 10 http://127.0.0.1:3100/internal/health' | grep -Fq '"revision":"${{ inputs.git_sha }}"' \
+                || curl --fail --silent --max-time 10 "http://${{ inputs.host }}/health" | grep -Fq '"revision":"${{ inputs.git_sha }}"'; then
                 ssh "${ssh_args[@]}" \
                   "sudo -n sed -i 's|^ISSAM_BOT_IMAGE=.*|ISSAM_BOT_IMAGE=ghcr.io/veryhungryface/issam-bot:${{ inputs.image_tag }}|' /opt/issam-bot/secret.env && sudo -n sed -i 's|^GIT_SHA=.*|GIT_SHA=${{ inputs.git_sha }}|' /opt/issam-bot/secret.env"
                 exit 0

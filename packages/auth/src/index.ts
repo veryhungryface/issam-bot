@@ -143,6 +143,14 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             throw new APIError("BAD_REQUEST", { message: "Email is not available" });
           }
         }
+        // Better Auth waives the password for a session under a day old, so a borrowed
+        // session alone could delete the account and everything the bots have saved.
+        if (ctx.path === "/delete-user" && !ctx.body?.password) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Invalid password",
+            code: "INVALID_PASSWORD",
+          });
+        }
         let policy =
           ctx.path === "/sign-up/email" || ctx.path === "/sign-in/email"
             ? await resolveSignupPolicy(prisma, env)
@@ -185,6 +193,10 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             },
           },
         };
+      }),
+      after: createAuthMiddleware(async (ctx) => {
+        const redacted = withoutSessionTokens(ctx.path, ctx.context.returned);
+        if (redacted) return ctx.json(redacted);
       }),
     },
     databaseHooks: {
@@ -231,6 +243,39 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       },
     },
   });
+}
+
+/**
+ * A session token is a bearer credential: the bearer plugin accepts one as proof of the
+ * session. Reads that *describe* sessions were handing them out, so a reply that only had
+ * to say "you are signed in on three devices" also carried three usable credentials.
+ * Sign-in and sign-up still return the token they just issued. Undefined keeps the body.
+ */
+export function withoutSessionTokens(
+  path: string,
+  returned: unknown,
+): Record<string, unknown> | unknown[] | undefined {
+  if (path === "/list-sessions" && Array.isArray(returned)) {
+    return returned.map(withoutToken);
+  }
+  if (
+    (path === "/get-session" || path === "/update-session") &&
+    isRecord(returned) &&
+    isRecord(returned.session)
+  ) {
+    return { ...returned, session: withoutToken(returned.session) };
+  }
+  return undefined;
+}
+
+function withoutToken(session: unknown): unknown {
+  if (!isRecord(session)) return session;
+  const { token: _token, ...rest } = session;
+  return rest;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export function verificationEmail(email: string, url: string): TransactionalEmail {

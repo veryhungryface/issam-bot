@@ -31,8 +31,18 @@ if [[ "$response" != *'"ok":true'* ]]; then
   exit 1
 fi
 
+# The public /health is a constant body now. The revision lives on /internal/health,
+# which the edge does not route, so check it against the API port on the host itself.
+if [[ -n "$EXPECTED_REVISION" ]]; then
+  details="$(curl --fail --silent --show-error \
+    --connect-timeout 5 \
+    --max-time "$TIMEOUT_SECONDS" \
+    "${INTERNAL_HEALTH_URL:-http://127.0.0.1:3100/internal/health}" || true)"
+  response="$details"
+fi
+
 if [[ -n "$EXPECTED_REVISION" && "$response" != *"\"revision\":\"$EXPECTED_REVISION\""* ]]; then
-  echo "Health endpoint revision does not match EXPECTED_REVISION." >&2
+  echo "Internal health revision does not match EXPECTED_REVISION." >&2
   exit 1
 fi
 

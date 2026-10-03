@@ -6,6 +6,11 @@
 {$RAKAZO_HOST:app.example.com} {
 	encode zstd gzip
 
+	# A first visit typed as http:// can be intercepted before the redirect. A localhost
+	# trial of this stack must not pin HTTPS onto every local dev server, so it is excluded.
+	@hsts not host localhost 127.0.0.1
+	header @hsts Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
 	handle /health {
 		reverse_proxy api:3100 {
 			import deploy_retry

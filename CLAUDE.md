@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-Rakazo — an open-source platform for persistent AI teammates (bots with conversations, memory, routines, and computer access). This checkout is the **issam-bot deployment profile**: a Browserbase-only web/API/worker stack (see `docs/ARCHITECTURE.md`, `docs/BROWSERBASE.md`, `docs/DEPLOYMENT.md`). In this profile the only Chrome runtime is remote Browserbase sessions — the server never runs Chrome, Xvfb, VNC, or a desktop container — the model provider is company Qwen (temporarily OpenAI, `docs/QWEN_PROVIDER.md`), and the web app is served from Vercel (`vercel.json` rewrites `/api`, `/rpc`, `/health` to the VPS).
+Rakazo — an open-source platform for persistent AI teammates (bots with conversations, memory, routines, and computer access). This checkout is the **issam-bot deployment profile**: a Browserbase-only web/API/worker stack (see `docs/ARCHITECTURE.md`, `docs/BROWSERBASE.md`, `docs/DEPLOYMENT.md`). In this profile the only Chrome runtime is remote Browserbase sessions — the server never runs Chrome, Xvfb, VNC, or a desktop container — the model provider is company Qwen (temporarily OpenAI, `docs/QWEN_PROVIDER.md`), and the web app is served from Vercel (`vercel.json` rewrites `/api`, `/rpc`, `/health` to the VPS). `/health` is public liveness only (`{"ok":true}`); the deployed revision and backend details are on `/internal/health`, which is reachable only from the host.
 
 This is a **public repository**. Never commit secrets, `.env` files, private URLs, or real production data; use placeholders. Review the staged diff before committing.
 
