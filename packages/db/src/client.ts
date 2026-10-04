@@ -8,9 +8,41 @@ export type Db = PrismaClient;
 export interface DbClientOptions {
   poolMax?: number;
   applicationName?: string;
+  /** How long one interactive transaction may run before Prisma expires it. */
+  transactionTimeoutMs?: number;
+  /** How long a transaction may wait for a pooled connection before it starts. */
+  transactionMaxWaitMs?: number;
 }
 
 const DEFAULT_POOL_MAX = 4;
+
+/**
+ * Prisma's own defaults are 5s and 2s, sized for a database on the same machine. Ours is
+ * not: the API and worker run on a VPS and the database is hosted elsewhere, so a single
+ * transaction - a lock, a few reads, a message and its events - is a dozen round trips
+ * across the internet. At 5s a slow moment does not slow a run down, it fails it, and the
+ * user reads "a query cannot be executed on an expired transaction" in their chat.
+ *
+ * These are a ceiling, not a budget. A transaction that needs this long is still a problem;
+ * it just should not be the user's problem.
+ */
+const DEFAULT_TRANSACTION_TIMEOUT_MS = 20_000;
+const DEFAULT_TRANSACTION_MAX_WAIT_MS = 10_000;
+
+/** Positive integer from the environment, else the default. */
+export function transactionTimingFromEnv(env: NodeJS.ProcessEnv = process.env): {
+  timeout: number;
+  maxWait: number;
+} {
+  const read = (name: string, fallback: number) => {
+    const parsed = Number(env[name]);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+  };
+  return {
+    timeout: read("DB_TRANSACTION_TIMEOUT_MS", DEFAULT_TRANSACTION_TIMEOUT_MS),
+    maxWait: read("DB_TRANSACTION_MAX_WAIT_MS", DEFAULT_TRANSACTION_MAX_WAIT_MS),
+  };
+}
 const CONNECT_RETRY_ATTEMPTS = 8;
 
 export function createPool(connectionString: string, options: DbClientOptions = {}): Pool {
@@ -43,7 +75,14 @@ export function createDb(
 ): { prisma: PrismaClient; pool: Pool } {
   const pool = createPool(connectionString, options);
   const adapter = new PrismaPg(pool);
-  const prisma = new PrismaClient({ adapter });
+  const timing = transactionTimingFromEnv();
+  const prisma = new PrismaClient({
+    adapter,
+    transactionOptions: {
+      timeout: options.transactionTimeoutMs ?? timing.timeout,
+      maxWait: options.transactionMaxWaitMs ?? timing.maxWait,
+    },
+  });
   return { prisma, pool };
 }
 
