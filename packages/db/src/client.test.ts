@@ -5,6 +5,7 @@ import {
   isTooManyDatabaseConnections,
   parsePositiveInteger,
   retryOnTooManyConnections,
+  transactionTimingFromEnv,
 } from "./client.js";
 
 const pools: Array<{ end: () => Promise<void> }> = [];
@@ -111,5 +112,36 @@ describe("createPool", () => {
     expect(pool.listenerCount("error")).toBeGreaterThan(0);
     expect(pool.listenerCount("connect")).toBeGreaterThan(0);
     expect(() => pool.emit("error", new Error("idle client lost"))).not.toThrow();
+  });
+});
+
+describe("transaction timing", () => {
+  it("uses a ceiling that fits a database across the internet, not Prisma's local default", () => {
+    const { timeout, maxWait } = transactionTimingFromEnv({});
+    // Prisma's defaults are 5s and 2s; at those a slow moment fails a run outright and the
+    // user reads "a query cannot be executed on an expired transaction" in their chat.
+    expect(timeout).toBeGreaterThan(5_000);
+    expect(maxWait).toBeGreaterThan(2_000);
+    expect(timeout).toBeGreaterThan(maxWait);
+  });
+
+  it("can be tuned per deployment", () => {
+    expect(
+      transactionTimingFromEnv({
+        DB_TRANSACTION_TIMEOUT_MS: "30000",
+        DB_TRANSACTION_MAX_WAIT_MS: "7500",
+      }),
+    ).toEqual({ timeout: 30_000, maxWait: 7_500 });
+  });
+
+  it("ignores a value that would disable the ceiling", () => {
+    for (const bad of ["0", "-1", "", "soon", "NaN"]) {
+      const { timeout, maxWait } = transactionTimingFromEnv({
+        DB_TRANSACTION_TIMEOUT_MS: bad,
+        DB_TRANSACTION_MAX_WAIT_MS: bad,
+      });
+      expect(timeout).toBeGreaterThan(5_000);
+      expect(maxWait).toBeGreaterThan(2_000);
+    }
   });
 });
