@@ -7,7 +7,7 @@ import type {
   SandboxProvider,
 } from "@rakazo/adapter-kit";
 import { messagingDeliverJob } from "@rakazo/adapter-kit";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import { type PrismaClient, readAgentsPausedAt, type ThreadEvents } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
 import { expireComputerControl } from "./computer-control.js";
@@ -94,6 +94,8 @@ export function createBackgroundJobHandlers(deps: {
       );
     },
     "history.compact": async (payload) => {
+      // A model call like any other; under the emergency stop the next run asks again.
+      if (await readAgentsPausedAt(deps.prisma)) return;
       await compactHistory(
         {
           prisma: deps.prisma,

@@ -64,7 +64,9 @@ describe("createBackgroundJobHandlers", () => {
   });
 
   it("compacts the requested thread with the runtime, job publisher, and model key it was given", async () => {
-    const prisma = {} as unknown as PrismaClient;
+    const prisma = {
+      deploymentSettings: { findUnique: vi.fn(async () => null) },
+    } as unknown as PrismaClient;
     const runtime = {} as unknown as AgentRuntime;
     const jobs = {} as unknown as JobPublisher;
     const secretStore = {} as unknown as EncryptedSecretStore;
@@ -97,6 +99,29 @@ describe("createBackgroundJobHandlers", () => {
       },
       "thread-1",
     );
+  });
+
+  it("skips compaction under the emergency stop, since it is a model call like any other", async () => {
+    vi.mocked(compactHistory).mockClear();
+    const prisma = {
+      deploymentSettings: { findUnique: vi.fn(async () => ({ agentsPausedAt: new Date() })) },
+    } as unknown as PrismaClient;
+    const handlers = createBackgroundJobHandlers({
+      executor: {} as unknown as ReturnType<typeof createRunExecutor>,
+      prisma,
+      sandbox: {} as unknown as SandboxProvider,
+      home: {} as unknown as AgentHomeStore,
+      jobs: {} as unknown as JobPublisher,
+      events: {} as unknown as ThreadEvents,
+      workerId: "worker-1",
+      runtime: {} as unknown as AgentRuntime,
+      secretStore: {} as unknown as EncryptedSecretStore,
+      memoryProviders: { resolve: vi.fn(async () => null) },
+    });
+
+    await handlers["history.compact"]({ threadId: "thread-1" });
+
+    expect(compactHistory).not.toHaveBeenCalled();
   });
 
   it("resolves the deployment model when no user credential is configured", async () => {

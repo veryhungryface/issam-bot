@@ -870,7 +870,19 @@ export const DeploymentSettingsSchema = z.object({
   computerHost: z.enum(["docker", "this-mac"]).nullable(),
   canChooseHostComputer: z.boolean(),
   sandboxProvider: z.string(),
+  /** Set while the owner's emergency stop is on: no agent work starts. */
+  agentsPausedAt: z.string().nullable(),
 });
+
+/** What turning the emergency stop on or off did, for the owner to see. */
+export const AgentsPauseResultSchema = z.object({
+  deployment: DeploymentSettingsSchema,
+  /** Runs that were active and are now cancelled. Zero when turning the stop off. */
+  cancelledRuns: z.number().int().nonnegative(),
+  /** Browsers asked to shut down now instead of after their idle timeout. */
+  sleepingComputers: z.number().int().nonnegative(),
+});
+export type AgentsPauseResult = z.infer<typeof AgentsPauseResultSchema>;
 
 export const ServerUpdateSourceSchema = z.object({
   repoUrl: z.string().max(400),

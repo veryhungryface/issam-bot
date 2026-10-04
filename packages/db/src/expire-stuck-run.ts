@@ -84,35 +84,7 @@ export async function expireStuckRun(
     await tx.task.updateMany({ where: { id: run.taskId }, data: { status: "cancelled" } });
   }
 
-  // A sign-in sheet left open on a cancelled run still says "조치 필요" and still accepts
-  // nothing - the exact state the user reported once before. Close it the way Skip does.
-  const sheets = await tx.message.findMany({
-    where: { runId: input.runId, threadId: run.threadId },
-    select: { id: true, blocks: true },
-  });
-  for (const sheet of sheets) {
-    const blocks = Array.isArray(sheet.blocks) ? (sheet.blocks as MessageBlock[]) : [];
-    let closed = false;
-    const next = blocks.map((block) => {
-      if (block.kind !== "browser_login" || block.status !== "pending") return block;
-      closed = true;
-      return { ...block, status: "cancelled" as const };
-    });
-    if (!closed) continue;
-    await tx.message.update({
-      where: { id: sheet.id },
-      data: { blocks: next as unknown as Prisma.InputJsonValue },
-    });
-    await appendEventInTransaction(tx, {
-      spaceId: run.spaceId,
-      threadId: run.threadId,
-      botId: run.botId,
-      type: "thread.message.updated",
-      runId: input.runId,
-      payload: { messageId: sheet.id, blocks: next },
-      terminal: true,
-    });
-  }
+  await closePendingSignInSheets(tx, { ...run, runId: input.runId });
 
   const text = stuckWorkStatusMessage(input.status);
   const blocks: MessageBlock[] = [{ kind: "meta", text }];
@@ -168,4 +140,41 @@ export async function expireStuckRun(
     botId: run.botId,
   });
   return { seq: cancelledEvent.seq, continuationRunId };
+}
+
+/**
+ * A sign-in sheet left open on a cancelled run still says "조치 필요" and still accepts
+ * nothing - the exact state the user reported once before. Close it the way Skip does.
+ */
+export async function closePendingSignInSheets(
+  tx: Prisma.TransactionClient,
+  run: { runId: string; spaceId: string; threadId: string; botId: string },
+): Promise<void> {
+  const sheets = await tx.message.findMany({
+    where: { runId: run.runId, threadId: run.threadId },
+    select: { id: true, blocks: true },
+  });
+  for (const sheet of sheets) {
+    const blocks = Array.isArray(sheet.blocks) ? (sheet.blocks as MessageBlock[]) : [];
+    let closed = false;
+    const next = blocks.map((block) => {
+      if (block.kind !== "browser_login" || block.status !== "pending") return block;
+      closed = true;
+      return { ...block, status: "cancelled" as const };
+    });
+    if (!closed) continue;
+    await tx.message.update({
+      where: { id: sheet.id },
+      data: { blocks: next as unknown as Prisma.InputJsonValue },
+    });
+    await appendEventInTransaction(tx, {
+      spaceId: run.spaceId,
+      threadId: run.threadId,
+      botId: run.botId,
+      type: "thread.message.updated",
+      runId: run.runId,
+      payload: { messageId: sheet.id, blocks: next },
+      terminal: true,
+    });
+  }
 }

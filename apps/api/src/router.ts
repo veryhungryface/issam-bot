@@ -132,6 +132,7 @@ import {
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { createAgentSkillsService } from "./agent-skills.js";
+import { pauseAgents, resumeAgents } from "./agents-pause.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { provisionComputerForBoot } from "./computer-boot.js";
 import {
@@ -563,6 +564,16 @@ export function createRouter(deps: RouterDeps) {
           },
         });
         return deploymentDto(deps.prisma, deps.env.sandboxProvider);
+      }),
+      setAgentsPaused: authed.deployment.setAgentsPaused.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        const outcome = input.paused
+          ? await pauseAgents(deps, context.actor.userId)
+          : await resumeAgents(deps, context.actor.userId);
+        return {
+          deployment: await deploymentDto(deps.prisma, deps.env.sandboxProvider),
+          ...outcome,
+        };
       }),
     },
     updater: {
@@ -4361,6 +4372,7 @@ async function deploymentDto(prisma: PrismaClient, sandboxProvider: string) {
     computerHost: computerHostFor(settings?.computerHost, sandboxProvider),
     canChooseHostComputer: sandboxProvider === "docker",
     sandboxProvider,
+    agentsPausedAt: settings?.agentsPausedAt?.toISOString() ?? null,
   };
 }
 
