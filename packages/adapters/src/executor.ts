@@ -38,6 +38,7 @@ import {
 } from "@rakazo/contracts";
 import {
   type ActionApprovalRule,
+  AGENTS_PAUSED_REFUSED_MESSAGE,
   appendTextSegment,
   appendToolCallSegment,
   applyJudgeDecision,
@@ -82,6 +83,7 @@ import {
 } from "@rakazo/core/node/approval-effect-key";
 import {
   appendEventInTransaction,
+  cancelRunForAgentsPause,
   createSpaceForMember,
   createThreadMessageInTransaction,
   effectiveMemoryScope,
@@ -94,8 +96,10 @@ import {
   type Prisma,
   type PrismaClient,
   parseComputerMode,
+  readAgentsPausedAt,
   SpaceLimitError,
   type ThreadEvents,
+  withTransactionRetry,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
 import { parse as parseShellCommand } from "shell-quote";
@@ -851,6 +855,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
             routine.timezone,
           );
       const previousLastRunAt = routine.lastRunAt;
+      // Move the schedule on and re-arm it; skipping one slot must not retire the routine.
+      const skipThisSlot = async (reason: string) => {
+        const advanced = await deps.prisma.routine.updateMany({
+          where: { id: routine.id, active: true, nextRunAt: scheduledAt },
+          data: { lastRunAt: new Date(), nextRunAt, ...(nextRunAt ? {} : { active: false }) },
+        });
+        if (advanced.count === 1 && nextRunAt) {
+          await deps.jobs.enqueue(routineWakeupJob(routine.id, nextRunAt));
+        }
+        getLogger().info("routine slot skipped", { routineId: routine.id, botId: bot.id, reason });
+      };
+      // Under the emergency stop a slot is skipped, not saved up: turning the stop off must not
+      // set off every routine that came due in the meantime.
+      if (await readAgentsPausedAt(deps.prisma)) {
+        await skipThisSlot("agents_paused");
+        return;
+      }
       /**
        * A check-in is the bot deciding whether to speak first, so most of them
        * must cost nothing at all: no model call, no chat message, and above all
@@ -901,15 +922,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           signals: situation.signals,
         });
         if (!decision.wake) {
-          // Move the schedule on and re-arm it; skipping a check must not retire it.
-          const advanced = await deps.prisma.routine.updateMany({
-            where: { id: routine.id, active: true, nextRunAt: scheduledAt },
-            data: { lastRunAt: now, nextRunAt, ...(nextRunAt ? {} : { active: false }) },
-          });
-          if (advanced.count === 1 && nextRunAt) {
-            await deps.jobs.enqueue(routineWakeupJob(routine.id, nextRunAt));
-          }
-          getLogger().info("check-in skipped", { botId: bot.id, reason: decision.reason });
+          await skipThisSlot(`check-in: ${decision.reason}`);
           return;
         }
         checkInPrompt = checkInRunPrompt(situation);
@@ -1006,6 +1019,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
       const run = await deps.prisma.run.findUnique({ where: { id: runId } });
       if (!run) return;
       if (isTerminal(run.status as RunStatus)) return;
+      if (await readAgentsPausedAt(deps.prisma)) {
+        await refuseRunWhileAgentsPaused(deps, run);
+        return;
+      }
       let { resumeCheckpoint, heldForTakeover, resumeHeldLease, takeoverResume } =
         takeoverContinuePlan(run);
 
@@ -4690,6 +4707,31 @@ async function notifyRun(
     .catch((error) => {
       getLogger().error("run notification", error);
     });
+}
+
+/**
+ * The emergency stop is on, so this run never starts. Every way work enters - a chat message,
+ * a messaging channel, a webhook, another bot - ends up here, which is why the gate is here
+ * and not at each of them. The thread says why instead of spinning.
+ */
+async function refuseRunWhileAgentsPaused(
+  deps: ExecutorDeps,
+  run: { id: string; threadId: string },
+): Promise<void> {
+  const refused = await withTransactionRetry(() =>
+    deps.prisma.$transaction((tx) =>
+      cancelRunForAgentsPause(tx, {
+        runId: run.id,
+        threadId: run.threadId,
+        message: AGENTS_PAUSED_REFUSED_MESSAGE,
+        now: new Date(),
+      }),
+    ),
+  );
+  if (!refused) return;
+  await deps.events.notify(run.threadId, refused.seq).catch((error) => {
+    getLogger().error("agents paused realtime notification", error);
+  });
 }
 
 async function renewRunLease(

@@ -54,7 +54,7 @@ msgstr "{0} MB"
 
 #. placeholder {0}: usage.runs
 #. placeholder {1}: usage.inputTokens + usage.outputTokens
-#: src/pages/AccountSettingsOverlay.tsx:210
+#: src/pages/AccountSettingsOverlay.tsx:211
 msgid "{0} runs · {1} tokens"
 msgstr "{0} runs · {1} tokens"
 
@@ -120,7 +120,7 @@ msgstr "@{0}"
 msgid "Access token (optional)"
 msgstr "Access token (optional)"
 
-#: src/pages/AccountSettingsOverlay.tsx:126
+#: src/pages/AccountSettingsOverlay.tsx:127
 msgid "Account"
 msgstr "Account"
 
@@ -247,7 +247,7 @@ msgstr "Added"
 msgid "Adding…"
 msgstr "Adding…"
 
-#: src/pages/AccountSettingsOverlay.tsx:241
+#: src/pages/AccountSettingsOverlay.tsx:244
 #: src/pages/McpServersOverlay.tsx:342
 #: src/pages/ModelSettingsOverlay.tsx:496
 #: src/pages/Onboarding.tsx:419
@@ -276,6 +276,10 @@ msgstr "Agents:"
 #: src/pages/PluginsOverlay.tsx:407
 msgid "All"
 msgstr "All"
+
+#: src/components/EmergencyStopSection.tsx:75
+msgid "All bots have been stopped since {since}."
+msgstr "All bots have been stopped since {since}."
 
 #. placeholder {0}: rule.matchValue
 #: src/components/ApprovalRulesSettings.tsx:21
@@ -361,8 +365,8 @@ msgstr "API key"
 msgid "API key header"
 msgstr "API key header"
 
-#: src/pages/AccountSettingsOverlay.tsx:150
-#: src/pages/AccountSettingsOverlay.tsx:396
+#: src/pages/AccountSettingsOverlay.tsx:151
+#: src/pages/AccountSettingsOverlay.tsx:399
 msgid "Appearance"
 msgstr "Appearance"
 
@@ -468,7 +472,7 @@ msgstr "Authorize"
 msgid "Available after the routine is saved"
 msgstr "Available after the routine is saved"
 
-#: src/pages/AccountSettingsOverlay.tsx:170
+#: src/pages/AccountSettingsOverlay.tsx:171
 msgid "Avatars"
 msgstr "Avatars"
 
@@ -504,12 +508,12 @@ msgstr "Booting up {botName}’s computer"
 msgid "bot"
 msgstr "bot"
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts:71
+#: src/pages/Shell.tsx:1700
 msgid "Bot"
 msgstr "Bot"
 
-#: src/pages/Shell.tsx:1700
+#. js-lingui-explicit-id
+#: src/lib/browser-notifications.ts:71
 msgid "Bot"
 msgstr "Bot"
 
@@ -550,6 +554,7 @@ msgstr "Can't reach the server."
 #: src/components/AskCard.tsx:35
 #: src/components/AskCard.tsx:186
 #: src/components/ComputerMaintenanceActions.tsx:96
+#: src/components/EmergencyStopSection.tsx:124
 #: src/components/teach/TeachComputerOverlay.tsx:254
 #: src/pages/KnowledgeSection.tsx:212
 #: src/pages/KnowledgeSection.tsx:437
@@ -583,11 +588,11 @@ msgstr "cancelled"
 msgid "Cancelled"
 msgstr "Cancelled"
 
-#: src/pages/AccountSettingsOverlay.tsx:345
+#: src/pages/AccountSettingsOverlay.tsx:348
 msgid "Change password"
 msgstr "Change password"
 
-#: src/pages/AccountSettingsOverlay.tsx:345
+#: src/pages/AccountSettingsOverlay.tsx:348
 msgid "Changing…"
 msgstr "Changing…"
 
@@ -603,7 +608,7 @@ msgstr "Chart failed to render: {error}"
 msgid "Chat apps"
 msgstr "Chat apps"
 
-#: src/pages/AccountSettingsOverlay.tsx:140
+#: src/pages/AccountSettingsOverlay.tsx:141
 msgid "Chat apps, group channels, and agent connections."
 msgstr "Chat apps, group channels, and agent connections."
 
@@ -724,7 +729,7 @@ msgstr "Close panel"
 msgid "Close preview"
 msgstr "Close preview"
 
-#: src/pages/AccountSettingsOverlay.tsx:117
+#: src/pages/AccountSettingsOverlay.tsx:118
 msgid "Close user settings"
 msgstr "Close user settings"
 
@@ -788,7 +793,7 @@ msgstr "Computer is asleep. Open it to wake."
 msgid "Computer is stopped"
 msgstr "Computer is stopped"
 
-#: src/pages/AccountSettingsOverlay.tsx:228
+#: src/pages/AccountSettingsOverlay.tsx:231
 msgid "Computers"
 msgstr "Computers"
 
@@ -809,7 +814,7 @@ msgstr "Configured servers"
 msgid "Confirm delete"
 msgstr "Confirm delete"
 
-#: src/pages/AccountSettingsOverlay.tsx:328
+#: src/pages/AccountSettingsOverlay.tsx:331
 #: src/pages/Auth.tsx:295
 msgid "Confirm password"
 msgstr "Confirm password"
@@ -921,7 +926,7 @@ msgstr "Could not approve this server"
 msgid "Could not authorize this app"
 msgstr "Could not authorize this app"
 
-#: src/pages/AccountSettingsOverlay.tsx:285
+#: src/pages/AccountSettingsOverlay.tsx:288
 msgid "Could not change password"
 msgstr "Could not change password"
 
@@ -1064,6 +1069,10 @@ msgstr "Could not load model settings"
 msgid "Could not load skill"
 msgstr "Could not load skill"
 
+#: src/components/EmergencyStopSection.tsx:30
+msgid "Could not load the emergency stop."
+msgstr "Could not load the emergency stop."
+
 #: src/pages/PeerMessagesOverlay.tsx:103
 msgid "Could not load this chat."
 msgstr "Could not load this chat."
@@ -1085,7 +1094,7 @@ msgstr "Could not load voice settings"
 msgid "Could not play a test clip"
 msgstr "Could not play a test clip"
 
-#: src/pages/AccountSettingsOverlay.tsx:293
+#: src/pages/AccountSettingsOverlay.tsx:296
 #: src/pages/Auth.tsx:109
 #: src/pages/Auth.tsx:268
 msgid "Could not reach the server"
@@ -1123,6 +1132,10 @@ msgstr "Could not render chart"
 #: src/pages/Auth.tsx:263
 msgid "Could not reset password"
 msgstr "Could not reset password"
+
+#: src/components/EmergencyStopSection.tsx:49
+msgid "Could not resume the bots."
+msgstr "Could not resume the bots."
 
 #: src/pages/PluginsOverlay.tsx:288
 msgid "Could not revoke connection"
@@ -1193,6 +1206,10 @@ msgstr "Could not start OAuth"
 msgid "Could not start teaching"
 msgstr "Could not start teaching"
 
+#: src/components/EmergencyStopSection.tsx:49
+msgid "Could not stop the bots."
+msgstr "Could not stop the bots."
+
 #: src/components/AskCard.tsx:79
 msgid "Could not submit this answer"
 msgstr "Could not submit this answer"
@@ -1225,7 +1242,7 @@ msgstr "Could not update the default memory scope"
 msgid "Couldn't load messaging settings"
 msgstr "Couldn't load messaging settings"
 
-#: src/pages/AccountSettingsOverlay.tsx:92
+#: src/pages/AccountSettingsOverlay.tsx:93
 msgid "Couldn't update avatars"
 msgstr "Couldn't update avatars"
 
@@ -1302,7 +1319,7 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron expression"
 
-#: src/pages/AccountSettingsOverlay.tsx:316
+#: src/pages/AccountSettingsOverlay.tsx:319
 msgid "Current password"
 msgstr "Current password"
 
@@ -1314,7 +1331,7 @@ msgstr "Custom connectors"
 msgid "Customer support"
 msgstr "Customer support"
 
-#: src/pages/AccountSettingsOverlay.tsx:391
+#: src/pages/AccountSettingsOverlay.tsx:394
 msgid "Dark"
 msgstr "Dark"
 
@@ -1503,6 +1520,10 @@ msgstr "Edit Profile"
 msgid "Email"
 msgstr "Email"
 
+#: src/components/EmergencyStopSection.tsx:70
+msgid "Emergency stop"
+msgstr "Emergency stop"
+
 #. placeholder {0}: oauth.verificationUri.replace(/^https:\/\//, "")
 #: src/pages/ModelSettingsOverlay.tsx:596
 #: src/pages/Onboarding.tsx:489
@@ -1634,6 +1655,10 @@ msgstr "Finishing MCP connection…"
 #: src/components/ApprovalRulesSettings.tsx:147
 msgid "Flag unexpected actions"
 msgstr "Flag unexpected actions"
+
+#: src/components/EmergencyStopSection.tsx:131
+msgid "For when something is going wrong or costing too much: stop every bot at once."
+msgstr "For when something is going wrong or costing too much: stop every bot at once."
 
 #: src/pages/Auth.tsx:190
 msgid "Forgot password?"
@@ -1830,9 +1855,9 @@ msgstr "Keys stay on the server. The app only learns whether a provider is confi
 msgid "Knowledge"
 msgstr "Knowledge"
 
-#: src/pages/AccountSettingsOverlay.tsx:163
-#: src/pages/AccountSettingsOverlay.tsx:512
-#: src/pages/AccountSettingsOverlay.tsx:529
+#: src/pages/AccountSettingsOverlay.tsx:164
+#: src/pages/AccountSettingsOverlay.tsx:515
+#: src/pages/AccountSettingsOverlay.tsx:532
 msgid "Language"
 msgstr "Language"
 
@@ -1840,7 +1865,7 @@ msgstr "Language"
 msgid "Leave"
 msgstr "Leave"
 
-#: src/pages/AccountSettingsOverlay.tsx:390
+#: src/pages/AccountSettingsOverlay.tsx:393
 msgid "Light"
 msgstr "Light"
 
@@ -1913,7 +1938,7 @@ msgstr "Low"
 msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 msgstr "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
 
-#: src/pages/AccountSettingsOverlay.tsx:143
+#: src/pages/AccountSettingsOverlay.tsx:144
 msgid "Manage messaging settings"
 msgstr "Manage messaging settings"
 
@@ -1964,13 +1989,13 @@ msgstr "Memory scope"
 msgid "Mentions"
 msgstr "Mentions"
 
-#. js-lingui-explicit-id
-#: src/lib/browser-notifications.ts:83
+#: src/pages/Shell.tsx:5330
+#: src/pages/Shell.tsx:5444
 msgid "Message"
 msgstr "Message"
 
-#: src/pages/Shell.tsx:5330
-#: src/pages/Shell.tsx:5444
+#. js-lingui-explicit-id
+#: src/lib/browser-notifications.ts:83
 msgid "Message"
 msgstr "Message"
 
@@ -1995,7 +2020,7 @@ msgstr "Message…"
 msgid "Messaged {peer}"
 msgstr "Messaged {peer}"
 
-#: src/pages/AccountSettingsOverlay.tsx:137
+#: src/pages/AccountSettingsOverlay.tsx:138
 #: src/pages/MessagingSettingsOverlay.tsx:92
 msgid "Messaging"
 msgstr "Messaging"
@@ -2048,7 +2073,7 @@ msgstr "Model options"
 msgid "Model providers"
 msgstr "Model providers"
 
-#: src/pages/AccountSettingsOverlay.tsx:216
+#: src/pages/AccountSettingsOverlay.tsx:217
 msgid "Model spend uses your provider keys."
 msgstr "Model spend uses your provider keys."
 
@@ -2133,11 +2158,15 @@ msgstr "New bot"
 msgid "New group"
 msgstr "New group"
 
+#: src/components/EmergencyStopSection.tsx:78
+msgid "New messages get a notice instead of an answer, and routines skip their turn. Nothing is replayed when you resume."
+msgstr "New messages get a notice instead of an answer, and routines skip their turn. Nothing is replayed when you resume."
+
 #: src/pages/ScratchpadSection.tsx:186
 msgid "New open-work item"
 msgstr "New open-work item"
 
-#: src/pages/AccountSettingsOverlay.tsx:322
+#: src/pages/AccountSettingsOverlay.tsx:325
 #: src/pages/Auth.tsx:289
 msgid "New password"
 msgstr "New password"
@@ -2349,7 +2378,7 @@ msgstr "Opening your Space…"
 msgid "Optional"
 msgstr "Optional"
 
-#: src/pages/AccountSettingsOverlay.tsx:244
+#: src/pages/AccountSettingsOverlay.tsx:247
 msgid "Optional controls most people never need"
 msgstr "Optional controls most people never need"
 
@@ -2365,7 +2394,7 @@ msgstr "Or connect an API key"
 msgid "Or paste an API key"
 msgstr "Or paste an API key"
 
-#: src/pages/AccountSettingsOverlay.tsx:188
+#: src/pages/AccountSettingsOverlay.tsx:189
 msgid "Organic"
 msgstr "Organic"
 
@@ -2388,7 +2417,7 @@ msgid "Park"
 msgstr "Park"
 
 #: src/components/AskCard.tsx:43
-#: src/pages/AccountSettingsOverlay.tsx:302
+#: src/pages/AccountSettingsOverlay.tsx:305
 #: src/pages/Auth.tsx:160
 #: src/pages/Auth.tsx:169
 msgid "Password"
@@ -2398,12 +2427,12 @@ msgstr "Password"
 msgid "Password recovery is not configured for this server"
 msgstr "Password recovery is not configured for this server"
 
-#: src/pages/AccountSettingsOverlay.tsx:347
+#: src/pages/AccountSettingsOverlay.tsx:350
 #: src/pages/Auth.tsx:279
 msgid "Password updated"
 msgstr "Password updated"
 
-#: src/pages/AccountSettingsOverlay.tsx:272
+#: src/pages/AccountSettingsOverlay.tsx:275
 #: src/pages/Auth.tsx:255
 msgid "Passwords do not match"
 msgstr "Passwords do not match"
@@ -2672,6 +2701,14 @@ msgstr "Restore the last saved workspace. Unsaved work on the computer is lost."
 msgid "Restoring your saved logins"
 msgstr "Restoring your saved logins"
 
+#: src/components/EmergencyStopSection.tsx:98
+msgid "Resume all bots"
+msgstr "Resume all bots"
+
+#: src/components/EmergencyStopSection.tsx:98
+msgid "Resuming…"
+msgstr "Resuming…"
+
 #: src/App.tsx:148
 msgid "Retry now"
 msgstr "Retry now"
@@ -2693,7 +2730,7 @@ msgstr "rev {0}"
 msgid "Revoke"
 msgstr "Revoke"
 
-#: src/pages/AccountSettingsOverlay.tsx:188
+#: src/pages/AccountSettingsOverlay.tsx:189
 msgid "Robot"
 msgstr "Robot"
 
@@ -2894,7 +2931,7 @@ msgstr "Server URL"
 msgid "Set up voice to call"
 msgstr "Set up voice to call"
 
-#: src/pages/AccountSettingsOverlay.tsx:114
+#: src/pages/AccountSettingsOverlay.tsx:115
 #: src/pages/Shell.tsx:3115
 #: src/pages/Shell.tsx:3123
 #: src/pages/Shell.tsx:3509
@@ -3087,6 +3124,14 @@ msgstr "Steps"
 msgid "Stop"
 msgstr "Stop"
 
+#: src/components/EmergencyStopSection.tsx:116
+msgid "Stop all bots now"
+msgstr "Stop all bots now"
+
+#: src/components/EmergencyStopSection.tsx:141
+msgid "Stop all bots…"
+msgstr "Stop all bots…"
+
 #: src/pages/Shell.tsx:5206
 msgid "Stop dictation"
 msgstr "Stop dictation"
@@ -3101,10 +3146,20 @@ msgstr "Stop speaking"
 msgid "Stop teaching"
 msgstr "Stop teaching"
 
+#. placeholder {0}: outcome.cancelledRuns
+#. placeholder {1}: outcome.sleepingComputers
+#: src/components/EmergencyStopSection.tsx:85
+msgid "Stopped {0} running tasks and shut down {1} browsers."
+msgstr "Stopped {0} running tasks and shut down {1} browsers."
+
 #. js-lingui-explicit-id
 #: src/lib/browser-notifications.ts:94
 msgid "Stopped."
 msgstr "Stopped."
+
+#: src/components/EmergencyStopSection.tsx:116
+msgid "Stopping…"
+msgstr "Stopping…"
 
 #: src/pages/McpServersOverlay.tsx:361
 msgid "Stored encrypted"
@@ -3132,7 +3187,7 @@ msgstr "Switch bot"
 msgid "Switching…"
 msgstr "Switching…"
 
-#: src/pages/AccountSettingsOverlay.tsx:389
+#: src/pages/AccountSettingsOverlay.tsx:392
 msgid "System"
 msgstr "System"
 
@@ -3192,6 +3247,10 @@ msgstr "This bot runs on this computer, not a Linux desktop. Shell and files use
 #: src/pages/Shell.tsx:4288
 msgid "This bot runs on this computer. There is no separate Linux desktop. Ask it to use the shell; working directories under your home folder are allowed."
 msgstr "This bot runs on this computer. There is no separate Linux desktop. Ask it to use the shell; working directories under your home folder are allowed."
+
+#: src/components/EmergencyStopSection.tsx:104
+msgid "This cancels everything bots are doing right now, for every user, and shuts their browsers down. Nothing starts again until you resume."
+msgstr "This cancels everything bots are doing right now, for every user, and shuts their browsers down. Nothing starts again until you resume."
 
 #: src/pages/shell/dialogs.tsx:276
 #: src/pages/shell/dialogs.tsx:329
@@ -3332,7 +3391,7 @@ msgstr "Updated"
 msgid "Updating…"
 msgstr "Updating…"
 
-#: src/pages/AccountSettingsOverlay.tsx:206
+#: src/pages/AccountSettingsOverlay.tsx:207
 #: src/pages/Shell.tsx:3173
 msgid "Usage"
 msgstr "Usage"

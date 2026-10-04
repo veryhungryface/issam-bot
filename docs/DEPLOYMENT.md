@@ -158,4 +158,7 @@ database before relying on the procedure in production.
 - Alert on queue depth, stuck running tasks, Browserbase usage, model failures, disk pressure, and
   backup age.
 - Rotate exposed credentials immediately and redeploy containers after rotation.
+- To stop every bot at once (runaway cost, misbehaving agent), use the owner's emergency stop:
+  Settings → 긴급 정지, or the SQL in [Emergency stop](COST_LIMITS.md#emergency-stop) if the web app
+  is down.
 - Upgrade Ubuntu 20.04 before a public beta and keep unattended security updates active.

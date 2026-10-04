@@ -960,48 +960,13 @@ export async function stopThreadRuns(
     });
     return ids;
   });
-  const computers = runIds.length
-    ? await deps.prisma.computer.findMany({
-        where: { executionRunId: { in: runIds } },
-        select: {
-          id: true,
-          homeKey: true,
-          kind: true,
-          providerRef: true,
-          executionBotId: true,
-          executionRunId: true,
-        },
-      })
-    : [];
   // Keep the DB lease until after teardown so a replacement run cannot claim the
   // screen while we still need the cancelled run's screenLeaseId to release it.
-  const leases = runIds.length
-    ? await deps.prisma.computerExecutionLease.findMany({
-        where: { runId: { in: runIds } },
-        select: { computerId: true, runId: true, fence: true },
-      })
-    : [];
-  const leaseByComputerId = new Map(leases.map((lease) => [lease.computerId, lease]));
-  await Promise.all(
-    computers.map(async (computer) => {
-      if (!computer.providerRef || !computer.executionBotId || !computer.executionRunId) return;
-      const lease = leaseByComputerId.get(computer.id) ?? null;
-      const context = {
-        operationId: "stop",
-        traceId: "stop",
-        spaceId: actor.spaceId,
-        userId: actor.userId,
-        botId: computer.executionBotId,
-        runId: computer.executionRunId,
-        screenLeaseId: screenLeaseIdForRun(lease, computer.executionRunId),
-        cancelRunWork: true,
-        signal: new AbortController().signal,
-      };
-      const ref = toComputerRef(computer);
-      await cancelComputerRunWork(deps.sandbox, ref, computer.id, computer.executionRunId, context);
-      await deps.sandbox.releaseScreen?.(ref, context).catch(() => undefined);
-    }),
-  );
+  const working = await readRunComputers(deps.prisma, runIds);
+  await stopRunComputers(deps.sandbox, working, () => ({
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+  }));
   await expireComputerExecutionLeases(deps.prisma, { runId: { in: runIds } });
   await deps.prisma.computer.updateMany({
     where: { executionRunId: { in: runIds } },
@@ -1017,6 +982,61 @@ export async function stopThreadRuns(
       runId: { in: runIds },
     },
   });
+}
+
+export type RunComputers = Awaited<ReturnType<typeof readRunComputers>>;
+
+/** The computers these runs are working on, with the leases their teardown needs. */
+export async function readRunComputers(prisma: PrismaClient, runIds: readonly string[]) {
+  if (runIds.length === 0) return { computers: [], leases: [] };
+  const [computers, leases] = await Promise.all([
+    prisma.computer.findMany({
+      where: { executionRunId: { in: [...runIds] } },
+      select: {
+        id: true,
+        spaceId: true,
+        userId: true,
+        homeKey: true,
+        kind: true,
+        providerRef: true,
+        executionBotId: true,
+        executionRunId: true,
+      },
+    }),
+    prisma.computerExecutionLease.findMany({
+      where: { runId: { in: [...runIds] } },
+      select: { computerId: true, runId: true, fence: true },
+    }),
+  ]);
+  return { computers, leases };
+}
+
+/** Stop whatever a cancelled run left going on its computer, and hand the screen back. */
+export async function stopRunComputers(
+  sandbox: import("@rakazo/adapter-kit").SandboxProvider,
+  { computers, leases }: RunComputers,
+  identity: (computer: RunComputers["computers"][number]) => { spaceId: string; userId: string },
+) {
+  const leaseByComputerId = new Map(leases.map((lease) => [lease.computerId, lease]));
+  await Promise.all(
+    computers.map(async (computer) => {
+      if (!computer.providerRef || !computer.executionBotId || !computer.executionRunId) return;
+      const lease = leaseByComputerId.get(computer.id) ?? null;
+      const context = {
+        operationId: "stop",
+        traceId: "stop",
+        ...identity(computer),
+        botId: computer.executionBotId,
+        runId: computer.executionRunId,
+        screenLeaseId: screenLeaseIdForRun(lease, computer.executionRunId),
+        cancelRunWork: true,
+        signal: new AbortController().signal,
+      };
+      const ref = toComputerRef(computer);
+      await cancelComputerRunWork(sandbox, ref, computer.id, computer.executionRunId, context);
+      await sandbox.releaseScreen?.(ref, context).catch(() => undefined);
+    }),
+  );
 }
 
 export async function setThreadUnreadState(

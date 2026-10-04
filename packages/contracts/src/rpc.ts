@@ -7,6 +7,7 @@ import {
   ActionAutoReviewSettingsSchema,
   AgentSkillCatalogEntrySchema,
   AgentSkillSchema,
+  AgentsPauseResultSchema,
   AppBootstrapSchema,
   ArtifactSchema,
   ArtifactWithContentSchema,
@@ -145,6 +146,11 @@ export const appContract = {
         }),
       )
       .output(DeploymentSettingsSchema),
+    /**
+     * Owner-only emergency stop. On: cancel every active run, put awake computers to sleep, and
+     * refuse new runs until it is turned off. Off: work may start again; nothing is replayed.
+     */
+    setAgentsPaused: oc.input(z.object({ paused: z.boolean() })).output(AgentsPauseResultSchema),
   },
   /**
    * Deployment-owner product updates. When the Compose updater sidecar is reachable, these proxy
