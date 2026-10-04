@@ -171,6 +171,7 @@ import {
   checkInRunPrompt,
   checkInTimeZone,
   loadCheckInSituation,
+  syncBotCheckInRoutine,
 } from "./check-in.js";
 import { archiveSpawnedBot, spawnBot } from "./child-bots.js";
 import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-factory.js";
@@ -861,6 +862,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
       let checkInPrompt: string | undefined;
       if (routine.kind === CHECK_IN_ROUTINE_KIND) {
         const timeZone = checkInTimeZone();
+        if (routine.timezone !== timeZone) {
+          // The deployment's zone changed under a stored schedule, so its five
+          // slots are on someone else's clock. Re-spread them in the current zone
+          // instead of waking the user at night; this one check is given up.
+          await syncBotCheckInRoutine(
+            { prisma: deps.prisma, jobs: deps.jobs },
+            {
+              id: bot.id,
+              spaceId: routine.spaceId,
+              userId: routine.userId,
+              checkInsEnabled: bot.checkInsEnabled,
+              checkInQuietStartHour: bot.checkInQuietStartHour,
+              checkInQuietEndHour: bot.checkInQuietEndHour,
+            },
+          );
+          getLogger().info("check-in schedule re-zoned", {
+            botId: bot.id,
+            from: routine.timezone,
+            to: timeZone,
+          });
+          return;
+        }
         const now = new Date();
         const situation = await loadCheckInSituation(deps.prisma, {
           spaceId: routine.spaceId,

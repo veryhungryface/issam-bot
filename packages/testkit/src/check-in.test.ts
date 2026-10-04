@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { checkInTimeZone } from "@rakazo/adapters";
 import { CHECK_IN_ROUTINE_KIND, checkInCrons, checkInRoutineId } from "@rakazo/core";
 import { createThreadMessage } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,6 +15,9 @@ const describeIntegration = hasDb ? describe : describe.skip;
 
 /** Long enough that the check-in gate does not read the thread as still live. */
 const STALE_CONVERSATION_MS = 3 * 24 * 60 * 60_000;
+
+/** Past the follow-up threshold, well short of the question going stale. */
+const UNANSWERED_FOR_MS = 5 * 60 * 60_000;
 
 describeIntegration("bot check-ins", () => {
   let handles: Awaited<ReturnType<typeof import("../../../apps/api/src/app.ts")["createApp"]>>;
@@ -111,6 +115,67 @@ describeIntegration("bot check-ins", () => {
     expect(routine.nextRunAt?.getTime()).toBeGreaterThan(seeded.scheduledFor.getTime());
   });
 
+  it("follows up once on a question the user walked away from", async () => {
+    const seeded = await seedCheckIn("follow-up", "Find me a flat in Sydney.", {
+      scratchpad: false,
+      botQuestion: "Which suburb should I search first?",
+    });
+
+    await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
+    const finished = await settledCheckInRun(seeded.routineId);
+
+    const posted = await handles.prisma.message.findMany({
+      where: { threadId: seeded.threadId, runId: finished.id },
+    });
+    expect(finished.status).toBe("completed");
+    // The scripted judgment only speaks when the prompt carried the question.
+    expect(posted.map((message) => message.blocks)).toEqual([
+      [{ kind: "text", text: "Still need one answer from you before I go on." }],
+    ]);
+
+    // The same unanswered question does not earn a second wake, even after the
+    // speak gap: the check-in already judged it.
+    const again = await rearm(seeded.routineId);
+    await handles.prisma.message.updateMany({
+      where: {
+        threadId: seeded.threadId,
+        createdAt: { gt: new Date(Date.now() - UNANSWERED_FOR_MS) },
+      },
+      data: { createdAt: new Date(Date.now() - UNANSWERED_FOR_MS) },
+    });
+    await handles.executor.wakeRoutine(seeded.routineId, again.toISOString());
+    await noNewCheckInRun(seeded.routineId, finished.id);
+  });
+
+  it("takes one look when the user went quiet on something it remembers", async () => {
+    const seeded = await seedCheckIn("quiet-user", "Let's plan the school trip.", {
+      scratchpad: false,
+      memory: "# Trip\n\n- The user is planning a school trip to Gyeongju for late October.\n",
+    });
+
+    await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
+    const finished = await settledCheckInRun(seeded.routineId);
+    expect(finished.status).toBe("completed");
+
+    const again = await rearm(seeded.routineId);
+    await handles.executor.wakeRoutine(seeded.routineId, again.toISOString());
+    await noNewCheckInRun(seeded.routineId, finished.id);
+  });
+
+  it("re-spreads a schedule left on another zone instead of firing on it", async () => {
+    const seeded = await seedCheckIn("re-zone", "Anything new?", { timezone: "Pacific/Auckland" });
+
+    await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
+
+    await noCheckInRun(seeded.routineId);
+    const routine = await handles.prisma.routine.findUniqueOrThrow({
+      where: { id: seeded.routineId },
+    });
+    expect(routine.timezone).toBe(checkInTimeZone());
+    expect(routine.active).toBe(true);
+    expect(routine.nextRunAt?.getTime()).toBeGreaterThan(Date.now());
+  });
+
   it("keeps the five-a-day schedule out of the user's routine list", async () => {
     const seeded = await seedCheckIn("hidden", "Anything new?");
     const listed = await rpc<Array<{ id: string }>>(seeded.cookie, "routines/list", {
@@ -140,6 +205,24 @@ describeIntegration("bot check-ins", () => {
     throw new Error("timeout waiting for the check-in run to settle");
   }
 
+  /** Make the schedule due again right now, as the next slot would. */
+  async function rearm(routineId: string) {
+    const due = new Date(Date.now() - 1_000);
+    await handles.prisma.routine.update({
+      where: { id: routineId },
+      data: { active: true, nextRunAt: due },
+    });
+    return due;
+  }
+
+  async function noNewCheckInRun(routineId: string, previousRunId: string) {
+    const deadline = Date.now() + 1_000;
+    while (Date.now() < deadline) {
+      expect((await latestCheckInRun(routineId))?.id).toBe(previousRunId);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
   /** A skipped check-in creates nothing, so give the queue a moment to prove it. */
   async function noCheckInRun(routineId: string) {
     const deadline = Date.now() + 1_000;
@@ -152,7 +235,14 @@ describeIntegration("bot check-ins", () => {
   async function seedCheckIn(
     label: string,
     lastUserMessage: string,
-    options: { quietStartHour?: number; quietEndHour?: number; scratchpad?: boolean } = {},
+    options: {
+      quietStartHour?: number;
+      quietEndHour?: number;
+      scratchpad?: boolean;
+      botQuestion?: string;
+      memory?: string;
+      timezone?: string;
+    } = {},
   ) {
     // Equal quiet bounds mean no quiet hours, so these cases do not depend on
     // what time of day CI happens to run.
@@ -184,6 +274,24 @@ describeIntegration("bot check-ins", () => {
       where: { threadId: thread.id },
       data: { createdAt: new Date(Date.now() - STALE_CONVERSATION_MS) },
     });
+    if (options.botQuestion) {
+      const question = await createThreadMessage(handles.prisma, {
+        threadId: thread.id,
+        role: "bot",
+        botId: bot.id,
+        blocks: [{ kind: "text", text: options.botQuestion }],
+      });
+      await handles.prisma.message.update({
+        where: { id: question.id },
+        data: { createdAt: new Date(Date.now() - UNANSWERED_FOR_MS) },
+      });
+    }
+    if (options.memory) {
+      await handles.prisma.memoryDocument.updateMany({
+        where: { spaceId: me.spaceId, botId: bot.id, scope: "bot" },
+        data: { content: options.memory },
+      });
+    }
     if (options.scratchpad !== false) {
       await handles.prisma.scratchpadItem.create({
         data: {
@@ -202,7 +310,7 @@ describeIntegration("bot check-ins", () => {
       data: {
         kind: CHECK_IN_ROUTINE_KIND,
         crons: checkInCrons(quietStartHour, quietEndHour),
-        timezone: "UTC",
+        timezone: options.timezone ?? checkInTimeZone(),
         active: true,
         nextRunAt: scheduledFor,
       },

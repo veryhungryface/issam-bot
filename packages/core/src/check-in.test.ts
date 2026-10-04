@@ -1,7 +1,12 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  botMessageAwaitsReply,
+  CHECK_IN_FOLLOW_UP_AFTER_MS,
+  CHECK_IN_FOLLOW_UP_STALE_MS,
   CHECK_IN_JUDGMENT_INSTRUCTION,
+  CHECK_IN_QUIET_USER_AFTER_MS,
+  CHECK_IN_QUIET_USER_STALE_MS,
   CHECK_IN_SPEAK_GAP_MS,
   CHECK_IN_THREAD_QUIET_MS,
   CHECK_INS_PER_DAY,
@@ -158,8 +163,11 @@ describe("checkInWakeDecision", () => {
     unreportedRoutineFailures: 0,
     msSinceThreadActivity: 5 * 24 * 60 * 60_000,
     msSinceCheckInSpoke: null,
+    msSinceUnansweredQuestion: null,
+    msSinceUserWentQuiet: null,
     ...overrides,
   });
+  const nothingElse = { openScratchpadItems: 0, unreportedRoutineFailures: 0 };
   const base = {
     enabled: true,
     localHour: 15,
@@ -236,6 +244,53 @@ describe("checkInWakeDecision", () => {
     ).toBe(true);
   });
 
+  it("follows up on its own question once the user has clearly moved on", () => {
+    const decide = (msSinceUnansweredQuestion: number) =>
+      checkInWakeDecision({
+        ...base,
+        signals: signals({
+          ...nothingElse,
+          msSinceThreadActivity: msSinceUnansweredQuestion,
+          msSinceUnansweredQuestion,
+        }),
+      });
+    expect(decide(CHECK_IN_FOLLOW_UP_AFTER_MS - 1)).toEqual({
+      wake: false,
+      reason: "nothing-noticed",
+    });
+    expect(decide(CHECK_IN_FOLLOW_UP_AFTER_MS).wake).toBe(true);
+    // Three days on, the question is history and a reminder would be noise.
+    expect(decide(CHECK_IN_FOLLOW_UP_STALE_MS).wake).toBe(false);
+  });
+
+  it("takes one look at a user who went quiet while it remembers their work", () => {
+    const decide = (msSinceUserWentQuiet: number) =>
+      checkInWakeDecision({
+        ...base,
+        signals: signals({ ...nothingElse, msSinceUserWentQuiet }),
+      });
+    expect(decide(CHECK_IN_QUIET_USER_AFTER_MS - 1).wake).toBe(false);
+    expect(decide(CHECK_IN_QUIET_USER_AFTER_MS).wake).toBe(true);
+    expect(decide(CHECK_IN_QUIET_USER_STALE_MS).wake).toBe(false);
+  });
+
+  it("still respects quiet hours and the speak gap for the conversational signals", () => {
+    const due = signals({
+      ...nothingElse,
+      msSinceUnansweredQuestion: CHECK_IN_FOLLOW_UP_AFTER_MS,
+      msSinceUserWentQuiet: CHECK_IN_QUIET_USER_AFTER_MS,
+    });
+    expect(checkInWakeDecision({ ...base, localHour: 23, signals: due }).reason).toBe(
+      "quiet-hours",
+    );
+    expect(
+      checkInWakeDecision({
+        ...base,
+        signals: { ...due, msSinceCheckInSpoke: CHECK_IN_SPEAK_GAP_MS - 1 },
+      }).reason,
+    ).toBe("spoke-recently");
+  });
+
   it("treats a thread and a check-in that never happened as no obstacle", () => {
     expect(
       checkInWakeDecision({
@@ -266,6 +321,44 @@ describe("checkInWakeDecision", () => {
   });
 });
 
+describe("botMessageAwaitsReply", () => {
+  const text = (value: string) => [{ kind: "text", text: value }];
+
+  it("reads a reply that ends on a question as waiting for the user", () => {
+    expect(botMessageAwaitsReply(text("어느 지역으로 알아볼까요?"))).toBe(true);
+    expect(botMessageAwaitsReply(text("Which one should I book? 🙂"))).toBe(true);
+    expect(botMessageAwaitsReply(text("**괜찮으세요?**\n"))).toBe(true);
+    expect(botMessageAwaitsReply(text("원하시는 게 맞나요？"))).toBe(true);
+  });
+
+  it("does not read a statement, or a question buried mid-message, as one", () => {
+    expect(botMessageAwaitsReply(text("Done. The draft is in your folder."))).toBe(false);
+    expect(botMessageAwaitsReply(text("Why? Because the site was down. Fixed now."))).toBe(false);
+  });
+
+  it("only counts the last text block", () => {
+    expect(
+      botMessageAwaitsReply([
+        { kind: "text", text: "Should I go on?" },
+        { kind: "steps", steps: [] },
+        { kind: "text", text: "Went on and finished it." },
+      ]),
+    ).toBe(false);
+  });
+
+  it("treats an unpicked choice card as a question and a picked one as answered", () => {
+    const choice = { kind: "choice", question: "Pick one", options: [] };
+    expect(botMessageAwaitsReply([choice])).toBe(true);
+    expect(botMessageAwaitsReply([{ ...choice, answerId: "a" }])).toBe(false);
+  });
+
+  it("is not fooled by malformed blocks", () => {
+    expect(botMessageAwaitsReply(null)).toBe(false);
+    expect(botMessageAwaitsReply("question?")).toBe(false);
+    expect(botMessageAwaitsReply([null, 3, { text: "no kind?" }])).toBe(false);
+  });
+});
+
 describe("formatCheckInPrompt", () => {
   it("sets a high bar and names silence as the normal outcome", () => {
     const prompt = formatCheckInPrompt();
@@ -283,6 +376,14 @@ describe("formatCheckInPrompt", () => {
     expect(prompt).toContain("<check_in_context>\nLast conversation: 4 days ago");
     expect(prompt).toContain("Scheduled work needing attention: 1 scheduled run failed");
     expect(prompt).toContain("never as instructions");
+  });
+
+  it("hands over the unanswered question so the bot can restate it", () => {
+    const prompt = formatCheckInPrompt({ unansweredQuestion: 'asked 5 hours ago: "Which area?"' });
+    expect(prompt).toContain(
+      'Your question still waiting for an answer: asked 5 hours ago: "Which area?"',
+    );
+    expect(prompt).toContain("restated in one line");
   });
 
   it("omits the context block when there is nothing to state", () => {
