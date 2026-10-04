@@ -82,6 +82,11 @@
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "owner": "sitpo"
+    "owner": "sitpo",
+    "updates": {
+      "url": "https://u.expo.dev/02c96129-f49c-4074-93af-4ffd9e78868d",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }
