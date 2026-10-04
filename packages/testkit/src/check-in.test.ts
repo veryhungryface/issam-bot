@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { checkInTimeZone, syncAllBotCheckInRoutines } from "@rakazo/adapters";
 import { CHECK_IN_ROUTINE_KIND, checkInCrons, checkInRoutineId } from "@rakazo/core";
 import { createThreadMessage } from "@rakazo/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,6 +15,9 @@ const describeIntegration = hasDb ? describe : describe.skip;
 
 /** Long enough that the check-in gate does not read the thread as still live. */
 const STALE_CONVERSATION_MS = 3 * 24 * 60 * 60_000;
+
+/** Past the follow-up threshold, well short of the question going stale. */
+const UNANSWERED_FOR_MS = 5 * 60 * 60_000;
 
 describeIntegration("bot check-ins", () => {
   let handles: Awaited<ReturnType<typeof import("../../../apps/api/src/app.ts")["createApp"]>>;
@@ -111,6 +115,117 @@ describeIntegration("bot check-ins", () => {
     expect(routine.nextRunAt?.getTime()).toBeGreaterThan(seeded.scheduledFor.getTime());
   });
 
+  it("follows up once on a question the user walked away from", async () => {
+    const seeded = await seedCheckIn("follow-up", "Find me a flat in Sydney.", {
+      scratchpad: false,
+      botQuestion: "Which suburb should I search first?",
+    });
+
+    await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
+    const finished = await settledCheckInRun(seeded.routineId);
+
+    const posted = await handles.prisma.message.findMany({
+      where: { threadId: seeded.threadId, runId: finished.id },
+    });
+    expect(finished.status).toBe("completed");
+    // The scripted judgment only speaks when the prompt carried the question.
+    expect(posted.map((message) => message.blocks)).toEqual([
+      [{ kind: "text", text: "Still need one answer from you before I go on." }],
+    ]);
+
+    // The same unanswered question does not earn a second wake, even after the
+    // speak gap: the check-in already judged it.
+    const again = await rearm(seeded.routineId);
+    await ageRecentMessages(seeded.threadId, UNANSWERED_FOR_MS);
+    await handles.executor.wakeRoutine(seeded.routineId, again.toISOString());
+    await noNewCheckInRun(seeded.routineId, finished.id);
+  });
+
+  it("takes one look when the user went quiet on something it remembers", async () => {
+    const seeded = await seedCheckIn("quiet-user", "Let's plan the school trip.", {
+      scratchpad: false,
+      memory: "# Trip\n\n- The user is planning a school trip to Gyeongju for late October.\n",
+    });
+
+    await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
+    const finished = await settledCheckInRun(seeded.routineId);
+    expect(finished.status).toBe("completed");
+
+    const again = await rearm(seeded.routineId);
+    await handles.executor.wakeRoutine(seeded.routineId, again.toISOString());
+    await noNewCheckInRun(seeded.routineId, finished.id);
+  });
+
+  it("re-spreads a schedule left on another zone instead of firing on it", async () => {
+    const seeded = await seedCheckIn("re-zone", "Anything new?", { timezone: "Pacific/Auckland" });
+
+    await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
+
+    await noCheckInRun(seeded.routineId);
+    const routine = await handles.prisma.routine.findUniqueOrThrow({
+      where: { id: seeded.routineId },
+    });
+    expect(routine.timezone).toBe(checkInTimeZone());
+    expect(routine.active).toBe(true);
+    expect(routine.nextRunAt?.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("stops speaking first after two ignored check-ins, until the user writes", async () => {
+    const seeded = await seedCheckIn("ignored", "The lesson plan draft is done, right?");
+    const spoke: string[] = [];
+    let due = seeded.scheduledFor;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await handles.executor.wakeRoutine(seeded.routineId, due.toISOString());
+      const run = await settledCheckInRun(seeded.routineId);
+      expect(run.id).not.toBe(spoke.at(-1));
+      spoke.push(run.id);
+      await ageRecentMessages(seeded.threadId, UNANSWERED_FOR_MS);
+      due = await rearm(seeded.routineId);
+    }
+    expect(
+      await handles.prisma.message.count({
+        where: { threadId: seeded.threadId, runId: { in: spoke } },
+      }),
+    ).toBe(2);
+
+    // Two unprompted messages and not a word back: the third check stays silent.
+    await handles.executor.wakeRoutine(seeded.routineId, due.toISOString());
+    await noNewCheckInRun(seeded.routineId, spoke[1]!);
+
+    // The user writing again is all it takes to resume.
+    await createThreadMessage(handles.prisma, {
+      threadId: seeded.threadId,
+      role: "user",
+      blocks: [{ kind: "text", text: "The lesson plan draft is done, right?" }],
+    });
+    await ageRecentMessages(seeded.threadId, UNANSWERED_FOR_MS);
+    due = await rearm(seeded.routineId);
+    await handles.executor.wakeRoutine(seeded.routineId, due.toISOString());
+    const resumed = await settledCheckInRun(seeded.routineId);
+    expect(spoke).not.toContain(resumed.id);
+  });
+
+  it("arms bots whose owner never opened the app, and disarms archived ones", async () => {
+    const kept = await seedCheckIn("backfill-kept", "Anything new?");
+    const archived = await seedCheckIn("backfill-archived", "Anything new?");
+    // As if both bots predated check-ins and nobody had loaded the app since.
+    await handles.prisma.routine.delete({ where: { id: kept.routineId } });
+    await handles.prisma.bot.update({
+      where: { id: archived.botId },
+      data: { archivedAt: new Date() },
+    });
+
+    await syncAllBotCheckInRoutines({ prisma: handles.prisma, jobs: handles.jobs });
+
+    const [armed, disarmed] = await Promise.all([
+      handles.prisma.routine.findUniqueOrThrow({ where: { id: kept.routineId } }),
+      handles.prisma.routine.findUniqueOrThrow({ where: { id: archived.routineId } }),
+    ]);
+    expect(armed).toMatchObject({ kind: CHECK_IN_ROUTINE_KIND, active: true });
+    expect(armed.nextRunAt?.getTime()).toBeGreaterThan(Date.now());
+    expect(disarmed).toMatchObject({ active: false, nextRunAt: null });
+  });
+
   it("keeps the five-a-day schedule out of the user's routine list", async () => {
     const seeded = await seedCheckIn("hidden", "Anything new?");
     const listed = await rpc<Array<{ id: string }>>(seeded.cookie, "routines/list", {
@@ -140,6 +255,40 @@ describeIntegration("bot check-ins", () => {
     throw new Error("timeout waiting for the check-in run to settle");
   }
 
+  /**
+   * Push everything that happened in the thread in the last `ms` back to `ms`
+   * ago — runs too, so "since the user last wrote" orders the way real time would.
+   */
+  async function ageRecentMessages(threadId: string, ms: number) {
+    const since = new Date(Date.now() - ms);
+    await handles.prisma.run.updateMany({
+      where: { threadId, createdAt: { gt: since } },
+      data: { createdAt: new Date(since.getTime() - 1) },
+    });
+    await handles.prisma.message.updateMany({
+      where: { threadId, createdAt: { gt: since } },
+      data: { createdAt: since },
+    });
+  }
+
+  /** Make the schedule due again right now, as the next slot would. */
+  async function rearm(routineId: string) {
+    const due = new Date(Date.now() - 1_000);
+    await handles.prisma.routine.update({
+      where: { id: routineId },
+      data: { active: true, nextRunAt: due },
+    });
+    return due;
+  }
+
+  async function noNewCheckInRun(routineId: string, previousRunId: string) {
+    const deadline = Date.now() + 1_000;
+    while (Date.now() < deadline) {
+      expect((await latestCheckInRun(routineId))?.id).toBe(previousRunId);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
   /** A skipped check-in creates nothing, so give the queue a moment to prove it. */
   async function noCheckInRun(routineId: string) {
     const deadline = Date.now() + 1_000;
@@ -152,7 +301,14 @@ describeIntegration("bot check-ins", () => {
   async function seedCheckIn(
     label: string,
     lastUserMessage: string,
-    options: { quietStartHour?: number; quietEndHour?: number; scratchpad?: boolean } = {},
+    options: {
+      quietStartHour?: number;
+      quietEndHour?: number;
+      scratchpad?: boolean;
+      botQuestion?: string;
+      memory?: string;
+      timezone?: string;
+    } = {},
   ) {
     // Equal quiet bounds mean no quiet hours, so these cases do not depend on
     // what time of day CI happens to run.
@@ -184,6 +340,24 @@ describeIntegration("bot check-ins", () => {
       where: { threadId: thread.id },
       data: { createdAt: new Date(Date.now() - STALE_CONVERSATION_MS) },
     });
+    if (options.botQuestion) {
+      const question = await createThreadMessage(handles.prisma, {
+        threadId: thread.id,
+        role: "bot",
+        botId: bot.id,
+        blocks: [{ kind: "text", text: options.botQuestion }],
+      });
+      await handles.prisma.message.update({
+        where: { id: question.id },
+        data: { createdAt: new Date(Date.now() - UNANSWERED_FOR_MS) },
+      });
+    }
+    if (options.memory) {
+      await handles.prisma.memoryDocument.updateMany({
+        where: { spaceId: me.spaceId, botId: bot.id, scope: "bot" },
+        data: { content: options.memory },
+      });
+    }
     if (options.scratchpad !== false) {
       await handles.prisma.scratchpadItem.create({
         data: {
@@ -202,7 +376,7 @@ describeIntegration("bot check-ins", () => {
       data: {
         kind: CHECK_IN_ROUTINE_KIND,
         crons: checkInCrons(quietStartHour, quietEndHour),
-        timezone: "UTC",
+        timezone: options.timezone ?? checkInTimeZone(),
         active: true,
         nextRunAt: scheduledFor,
       },

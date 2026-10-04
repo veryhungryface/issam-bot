@@ -64,6 +64,9 @@ OPENAI_MODEL_ID=gpt-5.6-luna
 DATA_DIR=/data
 WAKEUP_DRIVER=graphile
 AGENT_RUNTIME=pi
+# Required: bot check-ins and the prompt clock run on this zone. Unset means UTC,
+# which puts the five daily check-ins in the middle of the Korean night.
+DEPLOYMENT_TIME_ZONE=Asia/Seoul
 ```
 
 Apply permissions and validate the rendered Compose model:

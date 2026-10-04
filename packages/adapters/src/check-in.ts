@@ -1,5 +1,6 @@
 import { type JobPublisher, routineJobKey, routineWakeupJob } from "@rakazo/adapter-kit";
 import {
+  botMessageAwaitsReply,
   CHECK_IN_ROUTINE_KIND,
   CHECK_IN_ROUTINE_NAME,
   type CheckInSignals,
@@ -27,6 +28,12 @@ const CHECK_IN_SPOKE_RUN_WINDOW = 5;
 
 /** How much of the user's last message to quote back as recency context. */
 const LAST_MESSAGE_EXCERPT_CHARS = 200;
+
+/**
+ * A fresh bot's memory is just its "# Name" heading. Less real text than this
+ * is not something the bot could follow up on.
+ */
+const MEMORY_WORTH_FOLLOWING_UP_CHARS = 20;
 
 export type CheckInBotSettings = {
   id: string;
@@ -147,10 +154,47 @@ export async function syncBotCheckInRoutines(
   }
 }
 
+/**
+ * Arm every bot, not only the ones whose owner happened to open the app since
+ * check-ins shipped — a bot that speaks first matters most to the user who is
+ * not looking. Archived bots are disarmed. Runs at worker start; a schedule
+ * that already matches is one read and is left alone.
+ */
+export async function syncAllBotCheckInRoutines(deps: {
+  prisma: PrismaClient;
+  jobs: JobPublisher;
+}): Promise<void> {
+  const bots = await deps.prisma.bot.findMany({
+    where: {
+      OR: [
+        { archivedAt: null },
+        { routines: { some: { kind: CHECK_IN_ROUTINE_KIND, active: true } } },
+      ],
+    },
+    select: {
+      id: true,
+      spaceId: true,
+      userId: true,
+      archivedAt: true,
+      checkInsEnabled: true,
+      checkInQuietStartHour: true,
+      checkInQuietEndHour: true,
+    },
+  });
+  await syncBotCheckInRoutines(
+    deps,
+    bots.map(({ archivedAt, ...bot }) => ({
+      ...bot,
+      checkInsEnabled: bot.checkInsEnabled && archivedAt === null,
+    })),
+  );
+}
+
 export type CheckInSituation = {
   signals: CheckInSignals;
   lastConversation?: string;
   routineTrouble?: string;
+  unansweredQuestion?: string;
 };
 
 /**
@@ -163,7 +207,7 @@ export async function loadCheckInSituation(
   input: { spaceId: string; botId: string; threadId: string; routineId: string; now: Date },
 ): Promise<CheckInSituation> {
   const failureSince = new Date(input.now.getTime() - ROUTINE_FAILURE_LOOKBACK_MS);
-  const [openScratchpadItems, failures, lastMessage, lastUserMessage, spokeRuns] =
+  const [openScratchpadItems, failures, lastMessage, lastUserMessage, checkInRuns, botMemory] =
     await Promise.all([
       prisma.scratchpadItem.count({
         where: { spaceId: input.spaceId, botId: input.botId, status: { not: "done" } },
@@ -181,7 +225,7 @@ export async function loadCheckInSituation(
       prisma.message.findFirst({
         where: { threadId: input.threadId },
         orderBy: { seq: "desc" },
-        select: { createdAt: true },
+        select: { createdAt: true, role: true, blocks: true, runId: true },
       }),
       prisma.message.findFirst({
         where: { threadId: input.threadId, role: "user" },
@@ -192,20 +236,24 @@ export async function loadCheckInSituation(
         where: { spaceId: input.spaceId, routineId: input.routineId },
         orderBy: { createdAt: "desc" },
         take: CHECK_IN_SPOKE_RUN_WINDOW,
-        select: { id: true },
+        select: { id: true, createdAt: true },
+      }),
+      prisma.memoryDocument.findMany({
+        where: { spaceId: input.spaceId, botId: input.botId, scope: "bot" },
+        select: { content: true },
       }),
     ]);
 
   // Messages carry no relation back to Run, so "did a check-in ever speak" is a
   // lookup of this routine's own recent runs against the thread's bot messages.
   const spokeAt =
-    spokeRuns.length === 0
+    checkInRuns.length === 0
       ? null
       : await prisma.message.findFirst({
           where: {
             threadId: input.threadId,
             role: "bot",
-            runId: { in: spokeRuns.map((run) => run.id) },
+            runId: { in: checkInRuns.map((run) => run.id) },
           },
           orderBy: { seq: "desc" },
           select: { createdAt: true },
@@ -214,15 +262,67 @@ export async function loadCheckInSituation(
   const elapsed = (at: Date | null | undefined): number | null =>
     at ? Math.max(0, input.now.getTime() - at.getTime()) : null;
 
+  // A check-in that woke after something happened has already judged it,
+  // whether it spoke or stayed silent. Judging the same situation again five
+  // times a day would only buy more chances to say the same thing.
+  const lastCheckInAt = checkInRuns[0]?.createdAt ?? null;
+  const notJudgedSince = (at: Date) => lastCheckInAt === null || lastCheckInAt < at;
+
+  const lastMessageFromCheckIn =
+    lastMessage?.runId != null &&
+    (await prisma.run.count({ where: { id: lastMessage.runId, routineId: input.routineId } })) > 0;
+  const openQuestion =
+    lastMessage?.role === "bot" &&
+    !lastMessageFromCheckIn &&
+    botMessageAwaitsReply(lastMessage.blocks) &&
+    notJudgedSince(lastMessage.createdAt)
+      ? lastMessage
+      : null;
+
+  const remembersSomething = botMemory.some(
+    (document) => meaningfulMemoryChars(document.content) >= MEMORY_WORTH_FOLLOWING_UP_CHARS,
+  );
+  const quietUser =
+    lastUserMessage && remembersSomething && notJudgedSince(lastUserMessage.createdAt)
+      ? lastUserMessage
+      : null;
+
+  // Every check-in message since the user last wrote is one they let pass.
+  // Counted over all of this routine's runs since then, not the recent window
+  // above: silent runs in between must not make an ignored message disappear.
+  const checkInRunsSinceUser = await prisma.run.findMany({
+    where: {
+      spaceId: input.spaceId,
+      routineId: input.routineId,
+      ...(lastUserMessage ? { createdAt: { gt: lastUserMessage.createdAt } } : {}),
+    },
+    select: { id: true },
+  });
+  const unansweredCheckIns =
+    checkInRunsSinceUser.length === 0
+      ? 0
+      : await prisma.message.count({
+          where: {
+            threadId: input.threadId,
+            role: "bot",
+            runId: { in: checkInRunsSinceUser.map((run) => run.id) },
+          },
+        });
+
   const signals: CheckInSignals = {
     openScratchpadItems,
     unreportedRoutineFailures: failures,
     msSinceThreadActivity: elapsed(lastMessage?.createdAt),
     msSinceCheckInSpoke: elapsed(spokeAt?.createdAt),
+    msSinceUnansweredQuestion: elapsed(openQuestion?.createdAt),
+    msSinceUserWentQuiet: elapsed(quietUser?.createdAt),
+    unansweredCheckIns,
   };
 
   const sinceUserSpoke = elapsed(lastUserMessage?.createdAt);
   const excerpt = lastUserMessage ? excerptBlocks(lastUserMessage.blocks) : "";
+  const questionExcerpt = openQuestion ? questionBlocksExcerpt(openQuestion.blocks) : "";
+  const sinceAsked = elapsed(openQuestion?.createdAt);
   return {
     signals,
     lastConversation:
@@ -233,6 +333,10 @@ export async function loadCheckInSituation(
       failures > 0
         ? `${failures} scheduled run${failures === 1 ? "" : "s"} failed in the last day and the user has not been told`
         : undefined,
+    unansweredQuestion:
+      questionExcerpt && sinceAsked !== null
+        ? `asked ${formatCheckInRecency(sinceAsked)}: "${questionExcerpt}"`
+        : undefined,
   };
 }
 
@@ -241,12 +345,13 @@ export function checkInRunPrompt(situation: CheckInSituation): string {
   return formatCheckInPrompt({
     lastConversation: situation.lastConversation,
     routineTrouble: situation.routineTrouble,
+    unansweredQuestion: situation.unansweredQuestion,
   });
 }
 
-function excerptBlocks(blocks: unknown): string {
+function textOf(blocks: unknown): string {
   if (!Array.isArray(blocks)) return "";
-  const text = blocks
+  return blocks
     .filter(
       (block): block is { kind: string; text: string } =>
         typeof block === "object" &&
@@ -258,12 +363,54 @@ function excerptBlocks(blocks: unknown): string {
     .join(" ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function excerptBlocks(blocks: unknown): string {
+  const text = textOf(blocks);
   if (!text) return "";
   const clipped =
     text.length > LAST_MESSAGE_EXCERPT_CHARS
       ? `${text.slice(0, LAST_MESSAGE_EXCERPT_CHARS - 1)}…`
       : text;
-  // The user's own words reach the model as quoted data; keep them from closing
-  // the surrounding block or opening one of their own.
-  return clipped.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return escapeQuoted(clipped);
+}
+
+/**
+ * The question itself, not the message around it: a choice card's question,
+ * else the end of the text, where a reply that asks something puts the ask.
+ */
+function questionBlocksExcerpt(blocks: unknown): string {
+  const choice = Array.isArray(blocks)
+    ? blocks.find(
+        (block): block is { kind: "choice"; question: string } =>
+          typeof block === "object" &&
+          block !== null &&
+          (block as { kind?: unknown }).kind === "choice" &&
+          typeof (block as { question?: unknown }).question === "string",
+      )
+    : undefined;
+  const text = choice?.question.replace(/\s+/g, " ").trim() || textOf(blocks);
+  if (!text) return "";
+  const clipped =
+    text.length > LAST_MESSAGE_EXCERPT_CHARS
+      ? `…${text.slice(text.length - (LAST_MESSAGE_EXCERPT_CHARS - 1))}`
+      : text;
+  return escapeQuoted(clipped);
+}
+
+/**
+ * Message text reaches the model as quoted data; keep it from closing the
+ * surrounding block or opening one of its own.
+ */
+function escapeQuoted(text: string): string {
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/** Memory text that is not a heading — what the bot actually knows. */
+function meaningfulMemoryChars(content: string): number {
+  return content
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("")
+    .replace(/\s+/g, "").length;
 }

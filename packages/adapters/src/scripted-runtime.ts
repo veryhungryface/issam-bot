@@ -155,6 +155,9 @@ export function inferScript(
   // emulated judgment keeps the real one's shape — silence unless the situation
   // it was handed names something finished.
   if (lower.includes("this is an unprompted check-in")) {
+    if (lower.includes("your question still waiting for an answer:")) {
+      return [{ assistant: "Still need one answer from you before I go on.", complete: true }];
+    }
     return lower.includes("the lesson plan draft is done")
       ? [
           {
