@@ -155,6 +155,17 @@ export function inferScript(
   // emulated judgment keeps the real one's shape — silence unless the situation
   // it was handed names something finished.
   if (lower.includes("this is an unprompted check-in")) {
+    if (
+      lower.includes("recent conversation, oldest first:") &&
+      lower.includes("shortlisted two flats")
+    ) {
+      return [
+        {
+          assistant: "Want me to compare the two shortlisted flats on commute time next?",
+          complete: true,
+        },
+      ];
+    }
     if (lower.includes("your question still waiting for an answer:")) {
       return [{ assistant: "Still need one answer from you before I go on.", complete: true }];
     }

@@ -30,6 +30,14 @@ const CHECK_IN_SPOKE_RUN_WINDOW = 5;
 const LAST_MESSAGE_EXCERPT_CHARS = 200;
 
 /**
+ * Routine runs start with no history, so the turns a follow-up is about are
+ * handed over here: enough to see what was being worked on, clipped per turn
+ * so one long report cannot crowd out the rest.
+ */
+const RECENT_CONVERSATION_TURNS = 10;
+const RECENT_TURN_EXCERPT_CHARS = 300;
+
+/**
  * A fresh bot's memory is just its "# Name" heading. Less real text than this
  * is not something the bot could follow up on.
  */
@@ -195,6 +203,7 @@ export type CheckInSituation = {
   lastConversation?: string;
   routineTrouble?: string;
   unansweredQuestion?: string;
+  recentConversation?: string[];
 };
 
 /**
@@ -309,6 +318,25 @@ export async function loadCheckInSituation(
           },
         });
 
+  const recentTurns = await prisma.message.findMany({
+    where: { threadId: input.threadId, role: { in: ["user", "bot"] } },
+    orderBy: { seq: "desc" },
+    take: RECENT_CONVERSATION_TURNS,
+    select: { role: true, blocks: true },
+  });
+  const recentConversation = recentTurns
+    .reverse()
+    .map((turn) => {
+      const text = textOf(turn.blocks);
+      if (!text) return null;
+      const clipped =
+        text.length > RECENT_TURN_EXCERPT_CHARS
+          ? `${text.slice(0, RECENT_TURN_EXCERPT_CHARS - 1)}…`
+          : text;
+      return `${turn.role === "user" ? "User" : "You"}: ${escapeQuoted(clipped)}`;
+    })
+    .filter((line): line is string => line !== null);
+
   const signals: CheckInSignals = {
     openScratchpadItems,
     unreportedRoutineFailures: failures,
@@ -317,6 +345,8 @@ export async function loadCheckInSituation(
     msSinceUnansweredQuestion: elapsed(openQuestion?.createdAt),
     msSinceUserWentQuiet: elapsed(quietUser?.createdAt),
     unansweredCheckIns,
+    msSinceUserSpoke: elapsed(lastUserMessage?.createdAt),
+    msSinceLastCheckIn: elapsed(lastCheckInAt),
   };
 
   const sinceUserSpoke = elapsed(lastUserMessage?.createdAt);
@@ -337,6 +367,7 @@ export async function loadCheckInSituation(
       questionExcerpt && sinceAsked !== null
         ? `asked ${formatCheckInRecency(sinceAsked)}: "${questionExcerpt}"`
         : undefined,
+    recentConversation: recentConversation.length > 0 ? recentConversation : undefined,
   };
 }
 
@@ -346,6 +377,7 @@ export function checkInRunPrompt(situation: CheckInSituation): string {
     lastConversation: situation.lastConversation,
     routineTrouble: situation.routineTrouble,
     unansweredQuestion: situation.unansweredQuestion,
+    recentConversation: situation.recentConversation,
   });
 }
 
