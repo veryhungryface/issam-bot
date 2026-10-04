@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isShellUrl, shellHomeUrl, shellNotificationUrl } from "./shell-url";
+import {
+  isLightColor,
+  isShellUrl,
+  parseShellMessage,
+  shellHomeUrl,
+  shellNotificationUrl,
+} from "./shell-url";
 
 const ORIGIN = "https://issam-bot.vercel.app";
 
@@ -33,5 +39,33 @@ describe("shell urls", () => {
     expect(isShellUrl(ORIGIN, `${ORIGIN}/app/bot-1`)).toBe(true);
     expect(isShellUrl(ORIGIN, "https://portal.example/login")).toBe(false);
     expect(isShellUrl(ORIGIN, "not a url")).toBe(false);
+  });
+});
+describe("shell messages", () => {
+  it("reads the page's theme colour", () => {
+    expect(parseShellMessage(JSON.stringify({ type: "theme", color: "#fafaf8" }))).toEqual({
+      themeColor: "#fafaf8",
+    });
+  });
+
+  it("ignores anything that is not a colour we can paint with", () => {
+    for (const raw of [
+      "not json",
+      JSON.stringify({ type: "theme" }),
+      JSON.stringify({ type: "theme", color: "rebeccapurple" }),
+      JSON.stringify({ type: "theme", color: "javascript:alert(1)" }),
+      JSON.stringify({ type: "other", color: "#fff" }),
+      JSON.stringify(null),
+    ]) {
+      expect(parseShellMessage(raw)).toBeNull();
+    }
+  });
+
+  it("picks the status-bar style the page can be read against", () => {
+    expect(isLightColor("#fafaf8")).toBe(true);
+    expect(isLightColor("#fff")).toBe(true);
+    expect(isLightColor("#0d0d0e")).toBe(false);
+    expect(isLightColor("#2965EC")).toBe(false);
+    expect(isLightColor("zzz")).toBe(false);
   });
 });

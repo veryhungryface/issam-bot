@@ -48,3 +48,38 @@ function readId(data: Record<string, unknown> | null | undefined, key: string): 
   }
   return null;
 }
+/**
+ * The page's own background colour, read off the `theme-color` meta tag it keeps in step
+ * with the user's light or dark choice. The shell paints the status-bar and navigation-bar
+ * strips with it, so the inset areas belong to the page instead of framing it in a colour
+ * from a different theme.
+ */
+export function parseShellMessage(raw: string): { themeColor: string } | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const message = parsed as { type?: unknown; color?: unknown };
+    if (message.type !== "theme" || typeof message.color !== "string") return null;
+    const color = message.color.trim();
+    return /^#[0-9a-f]{3,8}$/i.test(color) ? { themeColor: color } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether black or white text sits legibly on the page's background. */
+export function isLightColor(color: string): boolean {
+  const hex = color.replace("#", "");
+  const full =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : hex.slice(0, 6);
+  const value = Number.parseInt(full, 16);
+  if (!Number.isFinite(value)) return false;
+  const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  // Rec. 601 luma: close enough to decide between two status-bar styles.
+  return (r * 299 + g * 587 + b * 114) / 1000 > 140;
+}

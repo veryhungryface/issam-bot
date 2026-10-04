@@ -218,5 +218,12 @@ describe("Android mobile platform contract", () => {
     expect(entry).toContain("clearDeliveredNotifications");
     // Android's back button walks the page history before it leaves the app.
     expect(entry).toContain("hardwareBackPress");
+    // Android draws a web view under the system bars; iOS insets one itself, which is why
+    // only Android showed the header under the clock and the composer under the gesture bar.
+    expect(entry).toContain("useSafeAreaInsets");
+    expect(entry).toContain("paddingTop: insets.top");
+    expect(entry).toContain("paddingBottom: insets.bottom");
+    // The strips behind those bars take the page's own colour, not another theme's.
+    expect(entry).toContain("theme-color");
   });
 });

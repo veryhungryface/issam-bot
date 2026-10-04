@@ -1,13 +1,21 @@
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
+import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, AppState, BackHandler, Platform, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import { loadApiBase } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { clearDeliveredNotifications, obtainPushToken } from "../lib/shell-push";
-import { isShellUrl, shellHomeUrl, shellNotificationUrl } from "../lib/shell-url";
+import {
+  isLightColor,
+  isShellUrl,
+  parseShellMessage,
+  shellHomeUrl,
+  shellNotificationUrl,
+} from "../lib/shell-url";
 
 /**
  * The phone app is the web app, in a shell.
@@ -25,8 +33,35 @@ import { isShellUrl, shellHomeUrl, shellNotificationUrl } from "../lib/shell-url
 /** Long enough for a cold permission prompt, short enough not to feel like a hang. */
 const TOKEN_WAIT_MS = 8_000;
 
+/**
+ * Tells the shell what colour the page is, so the strips behind the status bar and the
+ * navigation bar belong to the page rather than framing it in another theme's colour. The
+ * web app keeps `theme-color` in step with the light or dark choice, so watching it is
+ * enough; the observer catches a change made while the app is open.
+ */
+const WATCH_THEME_COLOR = `(function () {
+  var send = function () {
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta || !window.ReactNativeWebView) return;
+    window.ReactNativeWebView.postMessage(
+      JSON.stringify({ type: "theme", color: meta.getAttribute("content") })
+    );
+  };
+  send();
+  new MutationObserver(send).observe(document.head, {
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["content"],
+  });
+})(); true;`;
+
 export default function Shell() {
   const tokens = mobileTokens();
+  // Android draws the web view under the status and navigation bars, so without this the
+  // header sits beneath the clock and the composer beneath the gesture bar. iOS insets a
+  // web view itself, which is why this only looked broken on one of them.
+  const insets = useSafeAreaInsets();
+  const [pageColor, setPageColor] = useState<string | null>(null);
   const webView = useRef<WebView>(null);
   const canGoBack = useRef(false);
   const [origin, setOrigin] = useState<string | null>(null);
@@ -112,6 +147,11 @@ export default function Shell() {
     canGoBack.current = event.canGoBack;
   }, []);
 
+  const onMessage = useCallback((event: { nativeEvent: { data: string } }) => {
+    const message = parseShellMessage(event.nativeEvent.data);
+    if (message) setPageColor(message.themeColor);
+  }, []);
+
   // A bot works on other people's websites. Their links belong in the phone's browser.
   const onRequest = useCallback(
     (request: { url: string }) => {
@@ -122,20 +162,36 @@ export default function Shell() {
     [origin],
   );
 
+  const background = pageColor ?? tokens.background;
+
   if (!uri) {
     return (
-      <View style={[styles.center, { backgroundColor: tokens.background }]}>
+      <View style={[styles.center, { backgroundColor: background }]}>
         <ActivityIndicator color={tokens.foreground} />
       </View>
     );
   }
 
   return (
-    <View style={[styles.fill, { backgroundColor: tokens.background }]}>
+    <View
+      style={[
+        styles.fill,
+        {
+          backgroundColor: background,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+        },
+      ]}
+    >
+      <StatusBar style={isLightColor(background) ? "dark" : "light"} />
       <WebView
+        onMessage={onMessage}
+        injectedJavaScript={WATCH_THEME_COLOR}
         ref={webView}
         source={{ uri }}
-        style={[styles.fill, { backgroundColor: tokens.background }]}
+        style={[styles.fill, { backgroundColor: background }]}
         injectedJavaScriptBeforeContentLoaded={injected}
         onNavigationStateChange={onNavigation}
         onShouldStartLoadWithRequest={onRequest}
@@ -150,7 +206,7 @@ export default function Shell() {
         allowsInlineMediaPlayback
         startInLoadingState
         renderLoading={() => (
-          <View style={[styles.center, { backgroundColor: tokens.background }]}>
+          <View style={[styles.center, { backgroundColor: background }]}>
             <ActivityIndicator color={tokens.foreground} />
           </View>
         )}
