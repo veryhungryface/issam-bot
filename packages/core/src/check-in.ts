@@ -46,6 +46,13 @@ export const CHECK_IN_QUIET_USER_AFTER_MS = 2 * 24 * 60 * 60_000;
 export const CHECK_IN_QUIET_USER_STALE_MS = 30 * 24 * 60 * 60_000;
 
 /**
+ * Unprompted messages the user has let pass without a word. Two ignored in a
+ * row is the user's answer: the bot stops speaking first until they write
+ * again, and starts again on its own the moment they do.
+ */
+export const CHECK_IN_MAX_UNANSWERED = 2;
+
+/**
  * One check-in row per bot, with an id derived from the bot so the sync is an
  * idempotent upsert and two concurrent syncs cannot leave two schedules behind.
  */
@@ -168,10 +175,13 @@ export type CheckInSignals = {
    * something about them and no check-in has looked at this silence yet.
    */
   msSinceUserWentQuiet: number | null;
+  /** Check-in messages posted since the user last wrote anything. */
+  unansweredCheckIns: number;
 };
 
 export type CheckInSkipReason =
   | "disabled"
+  | "ignored"
   | "quiet-hours"
   | "thread-active"
   | "spoke-recently"
@@ -193,6 +203,9 @@ export function checkInWakeDecision(input: {
   signals: CheckInSignals;
 }): CheckInWakeDecision {
   if (!input.enabled) return { wake: false, reason: "disabled" };
+  if (input.signals.unansweredCheckIns >= CHECK_IN_MAX_UNANSWERED) {
+    return { wake: false, reason: "ignored" };
+  }
   if (isCheckInQuietHour(input.localHour, input.quietStartHour, input.quietEndHour)) {
     return { wake: false, reason: "quiet-hours" };
   }

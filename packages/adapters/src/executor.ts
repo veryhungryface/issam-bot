@@ -893,7 +893,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           now,
         });
         const decision = checkInWakeDecision({
-          enabled: bot.checkInsEnabled,
+          // An archived bot is gone from the user's list; it must not speak.
+          enabled: bot.checkInsEnabled && bot.archivedAt === null,
           localHour: checkInLocalHour(now, timeZone),
           quietStartHour: bot.checkInQuietStartHour,
           quietEndHour: bot.checkInQuietEndHour,

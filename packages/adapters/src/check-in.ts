@@ -154,6 +154,42 @@ export async function syncBotCheckInRoutines(
   }
 }
 
+/**
+ * Arm every bot, not only the ones whose owner happened to open the app since
+ * check-ins shipped — a bot that speaks first matters most to the user who is
+ * not looking. Archived bots are disarmed. Runs at worker start; a schedule
+ * that already matches is one read and is left alone.
+ */
+export async function syncAllBotCheckInRoutines(deps: {
+  prisma: PrismaClient;
+  jobs: JobPublisher;
+}): Promise<void> {
+  const bots = await deps.prisma.bot.findMany({
+    where: {
+      OR: [
+        { archivedAt: null },
+        { routines: { some: { kind: CHECK_IN_ROUTINE_KIND, active: true } } },
+      ],
+    },
+    select: {
+      id: true,
+      spaceId: true,
+      userId: true,
+      archivedAt: true,
+      checkInsEnabled: true,
+      checkInQuietStartHour: true,
+      checkInQuietEndHour: true,
+    },
+  });
+  await syncBotCheckInRoutines(
+    deps,
+    bots.map(({ archivedAt, ...bot }) => ({
+      ...bot,
+      checkInsEnabled: bot.checkInsEnabled && archivedAt === null,
+    })),
+  );
+}
+
 export type CheckInSituation = {
   signals: CheckInSignals;
   lastConversation?: string;
@@ -251,6 +287,28 @@ export async function loadCheckInSituation(
       ? lastUserMessage
       : null;
 
+  // Every check-in message since the user last wrote is one they let pass.
+  // Counted over all of this routine's runs since then, not the recent window
+  // above: silent runs in between must not make an ignored message disappear.
+  const checkInRunsSinceUser = await prisma.run.findMany({
+    where: {
+      spaceId: input.spaceId,
+      routineId: input.routineId,
+      ...(lastUserMessage ? { createdAt: { gt: lastUserMessage.createdAt } } : {}),
+    },
+    select: { id: true },
+  });
+  const unansweredCheckIns =
+    checkInRunsSinceUser.length === 0
+      ? 0
+      : await prisma.message.count({
+          where: {
+            threadId: input.threadId,
+            role: "bot",
+            runId: { in: checkInRunsSinceUser.map((run) => run.id) },
+          },
+        });
+
   const signals: CheckInSignals = {
     openScratchpadItems,
     unreportedRoutineFailures: failures,
@@ -258,6 +316,7 @@ export async function loadCheckInSituation(
     msSinceCheckInSpoke: elapsed(spokeAt?.createdAt),
     msSinceUnansweredQuestion: elapsed(openQuestion?.createdAt),
     msSinceUserWentQuiet: elapsed(quietUser?.createdAt),
+    unansweredCheckIns,
   };
 
   const sinceUserSpoke = elapsed(lastUserMessage?.createdAt);

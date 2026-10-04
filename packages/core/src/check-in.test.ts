@@ -5,6 +5,7 @@ import {
   CHECK_IN_FOLLOW_UP_AFTER_MS,
   CHECK_IN_FOLLOW_UP_STALE_MS,
   CHECK_IN_JUDGMENT_INSTRUCTION,
+  CHECK_IN_MAX_UNANSWERED,
   CHECK_IN_QUIET_USER_AFTER_MS,
   CHECK_IN_QUIET_USER_STALE_MS,
   CHECK_IN_SPEAK_GAP_MS,
@@ -165,6 +166,7 @@ describe("checkInWakeDecision", () => {
     msSinceCheckInSpoke: null,
     msSinceUnansweredQuestion: null,
     msSinceUserWentQuiet: null,
+    unansweredCheckIns: 0,
     ...overrides,
   });
   const nothingElse = { openScratchpadItems: 0, unreportedRoutineFailures: 0 };
@@ -289,6 +291,22 @@ describe("checkInWakeDecision", () => {
         signals: { ...due, msSinceCheckInSpoke: CHECK_IN_SPEAK_GAP_MS - 1 },
       }).reason,
     ).toBe("spoke-recently");
+  });
+
+  it("stops speaking first once the user has let two check-ins pass", () => {
+    const decide = (unansweredCheckIns: number) =>
+      checkInWakeDecision({
+        ...base,
+        signals: signals({
+          unansweredCheckIns,
+          msSinceUnansweredQuestion: CHECK_IN_FOLLOW_UP_AFTER_MS,
+          msSinceUserWentQuiet: CHECK_IN_QUIET_USER_AFTER_MS,
+        }),
+      });
+    expect(decide(CHECK_IN_MAX_UNANSWERED - 1).wake).toBe(true);
+    // Whatever else is pending, two ignored messages are the user's answer.
+    expect(decide(CHECK_IN_MAX_UNANSWERED)).toEqual({ wake: false, reason: "ignored" });
+    expect(decide(CHECK_IN_MAX_UNANSWERED + 3).reason).toBe("ignored");
   });
 
   it("treats a thread and a check-in that never happened as no obstacle", () => {

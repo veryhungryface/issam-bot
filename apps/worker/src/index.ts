@@ -41,6 +41,7 @@ import {
   resolveSandboxProvider,
   ScriptedAgentRuntime,
   SpaceMemoryProviderResolver,
+  syncAllBotCheckInRoutines,
 } from "@rakazo/adapters";
 import { resolveEncryptionKey, resolveSupervisorToken } from "@rakazo/core";
 import {
@@ -238,6 +239,11 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
   });
   reconciler.start();
+  // Arm check-ins for bots whose owner has not opened the app since they shipped,
+  // and disarm archived ones. Off the startup path: a slow pass must not hold up jobs.
+  void syncAllBotCheckInRoutines({ prisma, jobs }).catch((error) => {
+    logger.error("check-in schedule backfill", error);
+  });
 
   let stopping = false;
   const stop = async () => {
