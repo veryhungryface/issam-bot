@@ -16,6 +16,9 @@ const describeIntegration = hasDb ? describe : describe.skip;
 /** Long enough that the check-in gate does not read the thread as still live. */
 const STALE_CONVERSATION_MS = 3 * 24 * 60 * 60_000;
 
+/** Past the one-week window in which a paused conversation gets a follow-up. */
+const COLD_CONVERSATION_MS = 8 * 24 * 60 * 60_000;
+
 /** Past the follow-up threshold, well short of the question going stale. */
 const UNANSWERED_FOR_MS = 5 * 60 * 60_000;
 
@@ -104,7 +107,11 @@ describeIntegration("bot check-ins", () => {
   });
 
   it("skips the run when the bot has noticed nothing at all", async () => {
-    const seeded = await seedCheckIn("nothing", "Anything new?", { scratchpad: false });
+    // Older than a week: not a recent conversation to follow up on either.
+    const seeded = await seedCheckIn("nothing", "Anything new?", {
+      scratchpad: false,
+      conversationAgeMs: COLD_CONVERSATION_MS,
+    });
 
     await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
 
@@ -137,6 +144,35 @@ describeIntegration("bot check-ins", () => {
     // speak gap: the check-in already judged it.
     const again = await rearm(seeded.routineId);
     await ageRecentMessages(seeded.threadId, UNANSWERED_FOR_MS);
+    await handles.executor.wakeRoutine(seeded.routineId, again.toISOString());
+    await noNewCheckInRun(seeded.routineId, finished.id);
+  });
+
+  it("follows up once a day on a conversation that paused", async () => {
+    const seeded = await seedCheckIn("paused", "I shortlisted two flats, thanks.", {
+      scratchpad: false,
+      conversationAgeMs: UNANSWERED_FOR_MS,
+    });
+
+    await handles.executor.wakeRoutine(seeded.routineId, seeded.scheduledFor.toISOString());
+    const finished = await settledCheckInRun(seeded.routineId);
+
+    const posted = await handles.prisma.message.findMany({
+      where: { threadId: seeded.threadId, runId: finished.id },
+    });
+    // The scripted judgment only offers the next step when it was handed the turns.
+    expect(posted.map((message) => message.blocks)).toEqual([
+      [
+        {
+          kind: "text",
+          text: "Want me to compare the two shortlisted flats on commute time next?",
+        },
+      ],
+    ]);
+
+    // Not twice in one day, however many slots are left.
+    await ageRecentMessages(seeded.threadId, UNANSWERED_FOR_MS);
+    const again = await rearm(seeded.routineId);
     await handles.executor.wakeRoutine(seeded.routineId, again.toISOString());
     await noNewCheckInRun(seeded.routineId, finished.id);
   });
@@ -308,6 +344,7 @@ describeIntegration("bot check-ins", () => {
       botQuestion?: string;
       memory?: string;
       timezone?: string;
+      conversationAgeMs?: number;
     } = {},
   ) {
     // Equal quiet bounds mean no quiet hours, so these cases do not depend on
@@ -338,7 +375,9 @@ describeIntegration("bot check-ins", () => {
     // Age the conversation past the gate's "do not interrupt a live chat" window.
     await handles.prisma.message.updateMany({
       where: { threadId: thread.id },
-      data: { createdAt: new Date(Date.now() - STALE_CONVERSATION_MS) },
+      data: {
+        createdAt: new Date(Date.now() - (options.conversationAgeMs ?? STALE_CONVERSATION_MS)),
+      },
     });
     if (options.botQuestion) {
       const question = await createThreadMessage(handles.prisma, {

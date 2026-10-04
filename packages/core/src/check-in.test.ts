@@ -2,12 +2,15 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   botMessageAwaitsReply,
+  CHECK_IN_DAILY_GAP_MS,
   CHECK_IN_FOLLOW_UP_AFTER_MS,
+  CHECK_IN_FOLLOW_UP_PAUSE_MS,
   CHECK_IN_FOLLOW_UP_STALE_MS,
   CHECK_IN_JUDGMENT_INSTRUCTION,
   CHECK_IN_MAX_UNANSWERED,
   CHECK_IN_QUIET_USER_AFTER_MS,
   CHECK_IN_QUIET_USER_STALE_MS,
+  CHECK_IN_RECENT_CONVERSATION_MS,
   CHECK_IN_SPEAK_GAP_MS,
   CHECK_IN_THREAD_QUIET_MS,
   CHECK_INS_PER_DAY,
@@ -167,6 +170,8 @@ describe("checkInWakeDecision", () => {
     msSinceUnansweredQuestion: null,
     msSinceUserWentQuiet: null,
     unansweredCheckIns: 0,
+    msSinceUserSpoke: null,
+    msSinceLastCheckIn: null,
     ...overrides,
   });
   const nothingElse = { openScratchpadItems: 0, unreportedRoutineFailures: 0 };
@@ -293,6 +298,33 @@ describe("checkInWakeDecision", () => {
     ).toBe("spoke-recently");
   });
 
+  it("looks at a paused conversation from the last week once a day", () => {
+    const paused = (overrides: Partial<CheckInSignals> = {}) =>
+      checkInWakeDecision({
+        ...base,
+        signals: signals({
+          ...nothingElse,
+          msSinceUserSpoke: CHECK_IN_FOLLOW_UP_PAUSE_MS,
+          msSinceThreadActivity: CHECK_IN_FOLLOW_UP_PAUSE_MS,
+          ...overrides,
+        }),
+      });
+    expect(paused()).toEqual({ wake: true, reason: null });
+    // Still mid-exchange: give the user a few hours before following up.
+    expect(paused({ msSinceThreadActivity: CHECK_IN_FOLLOW_UP_PAUSE_MS - 1 }).wake).toBe(false);
+    // Once a day: a check-in already looked at this bot today.
+    expect(paused({ msSinceLastCheckIn: CHECK_IN_DAILY_GAP_MS - 1 }).wake).toBe(false);
+    expect(paused({ msSinceLastCheckIn: CHECK_IN_DAILY_GAP_MS }).wake).toBe(true);
+    // A week-old conversation is cold; one the user never started has nothing to follow.
+    expect(
+      paused({
+        msSinceUserSpoke: CHECK_IN_RECENT_CONVERSATION_MS,
+        msSinceThreadActivity: CHECK_IN_RECENT_CONVERSATION_MS,
+      }).wake,
+    ).toBe(false);
+    expect(paused({ msSinceUserSpoke: null }).wake).toBe(false);
+  });
+
   it("stops speaking first once the user has let two check-ins pass", () => {
     const decide = (unansweredCheckIns: number) =>
       checkInWakeDecision({
@@ -382,8 +414,10 @@ describe("formatCheckInPrompt", () => {
     const prompt = formatCheckInPrompt();
     expect(prompt).toBe(CHECK_IN_JUDGMENT_INSTRUCTION);
     expect(prompt).toContain("NO_RESPONSE");
-    expect(prompt).toContain("the normal answer is no");
-    expect(prompt).toContain("Do not speak to greet");
+    expect(prompt).toContain("Saying nothing is fine");
+    expect(prompt).toContain("natural next step");
+    expect(prompt).toContain("Do not speak only to greet");
+    expect(prompt).toContain("If the only thing you could say is generic");
   });
 
   it("states conversation recency the routine run has no history for", () => {
@@ -402,6 +436,18 @@ describe("formatCheckInPrompt", () => {
       'Your question still waiting for an answer: asked 5 hours ago: "Which area?"',
     );
     expect(prompt).toContain("restated in one line");
+  });
+
+  it("hands over the recent turns a routine run would otherwise not see", () => {
+    const prompt = formatCheckInPrompt({
+      recentConversation: [
+        "User: find flats under 1.2M",
+        "You: Found three. Compare commute next?",
+      ],
+    });
+    expect(prompt).toContain(
+      "Recent conversation, oldest first:\nUser: find flats under 1.2M\nYou: Found three. Compare commute next?",
+    );
   });
 
   it("omits the context block when there is nothing to state", () => {
