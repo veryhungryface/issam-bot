@@ -221,7 +221,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           if [[ -z "$EXPO_TOKEN" ]]; then
-            echo "Add an EXPO_TOKEN repository secret with access to the inbox-zero/rakazo Expo project." >&2
+            echo "Add an EXPO_TOKEN repository secret with access to the @sitpo/issam-bot Expo project." >&2
             exit 1
           fi
 
@@ -263,6 +263,10 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # Both channels: the phone runs an internal build from the preview profile, and a
+          # store build would listen on production. Publishing to only one leaves whichever
+          # build is actually installed without updates.
+          eas update --platform all --channel preview --environment preview --message "$GITHUB_SHA" --non-interactive
           eas update --platform all --channel production --environment production --message "$GITHUB_SHA" --non-interactive
 
   deploy-production:

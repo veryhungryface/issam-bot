@@ -54,6 +54,31 @@ server then pushes for the things it already notifies about: a run finishing whe
 `notifyOnFinish` is on, a sign-in sheet or takeover waiting on you, the four-hour
 stuck-work reminder, and a check-in that decides it has something to say.
 
+## Updates without reinstalling
+
+The app is a web view, so **anything on the web ships by deploying the web** — the phone
+loads it the next time it opens, with no new build and nothing to install.
+
+The shell around it is JavaScript too, and EAS Update carries it over the air: the app looks
+for an update on launch and installs it on the next one, so a cold start is never held up by
+the network. CI publishes on every push to main that touches the mobile app or the packages
+it bundles, to both the `preview` and `production` channels — the phone runs an internal
+`preview` build and a store build would listen on `production`, so publishing to one only
+would leave whichever is installed behind.
+
+That needs an **`EXPO_TOKEN` repository secret**: an access token from
+<https://expo.dev/accounts/sitpo/settings/access-tokens>, added under the repository's
+Settings → Secrets and variables → Actions. Without it the publish job fails on every push
+to main. Updates can also be published by hand:
+
+```bash
+cd apps/mobile
+npx eas update --channel preview --message "what changed"
+```
+
+A rebuild is only needed when something native changes: the app name or icon, a permission,
+the Firebase config, or a dependency that ships native code.
+
 ## Language
 
 The app is Korean on a Korean phone with nothing to choose: `resolveUiLocale` reads the
