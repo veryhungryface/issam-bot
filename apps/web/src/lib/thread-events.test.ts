@@ -1379,8 +1379,11 @@ describe("computer event reduction", () => {
     // The bot opens the browser when a tool needs one; a panel boot would only collide.
     expect(computerPanelAutoBoot("stopped", null, true)).toBe("wait");
     expect(computerPanelAutoBoot(undefined, null, true)).toBe("wait");
-    // A live screen is still reconnected while the bot works.
-    expect(computerPanelAutoBoot("running", null, true)).toBe("recover-screen");
+    // Recovering the screen posts computer.boot too, so a running computer whose screen
+    // URL has not arrived yet also waits; a computer status event brings the URL in.
+    expect(computerPanelAutoBoot("running", null, true)).toBe("wait");
+    expect(computerPanelAutoBoot("running", "https://screen.example", true)).toBe("wait");
+    expect(computerPanelAutoBoot("booting", null, true)).toBe("wait");
   });
 
   it("maps recover-screen to computer.boot, not computer.recover", () => {

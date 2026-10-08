@@ -30,6 +30,42 @@ export const CHECK_IN_THREAD_QUIET_MS = 90 * 60_000;
 export const CHECK_IN_SPEAK_GAP_MS = 4 * 60 * 60_000;
 
 /**
+ * A question the bot asked and the user walked away from. Three hours is long
+ * enough that the user has clearly moved on, short enough that the answer still
+ * matters; after three days the question is history and a reminder is noise.
+ */
+export const CHECK_IN_FOLLOW_UP_AFTER_MS = 3 * 60 * 60_000;
+export const CHECK_IN_FOLLOW_UP_STALE_MS = 3 * 24 * 60 * 60_000;
+
+/**
+ * A conversation from the last week that has paused. Once a day the bot reads
+ * it back and offers the natural next step, if there is one. Three hours lets
+ * the user step away from a live exchange first; a week on, the thread is cold.
+ */
+export const CHECK_IN_FOLLOW_UP_PAUSE_MS = 3 * 60 * 60_000;
+export const CHECK_IN_RECENT_CONVERSATION_MS = 7 * 24 * 60 * 60_000;
+/**
+ * "Once a day" between two check-in runs. A little under 24h, so a slot that
+ * fires a few minutes late does not push the next look to the day after.
+ */
+export const CHECK_IN_DAILY_GAP_MS = 20 * 60 * 60_000;
+
+/**
+ * A user who has gone quiet while the bot still remembers what they were
+ * working on. Two days is a gap worth one look; after a month the bot reaching
+ * out of nowhere is more surprising than useful.
+ */
+export const CHECK_IN_QUIET_USER_AFTER_MS = 2 * 24 * 60 * 60_000;
+export const CHECK_IN_QUIET_USER_STALE_MS = 30 * 24 * 60 * 60_000;
+
+/**
+ * Unprompted messages the user has let pass without a word. Two ignored in a
+ * row is the user's answer: the bot stops speaking first until they write
+ * again, and starts again on its own the moment they do.
+ */
+export const CHECK_IN_MAX_UNANSWERED = 2;
+
+/**
  * One check-in row per bot, with an id derived from the bot so the sync is an
  * idempotent upsert and two concurrent syncs cannot leave two schedules behind.
  */
@@ -142,10 +178,27 @@ export type CheckInSignals = {
   msSinceThreadActivity: number | null;
   /** Time since a check-in last actually spoke; null when it never has. */
   msSinceCheckInSpoke: number | null;
+  /**
+   * How long the bot's own question has sat unanswered as the thread's last
+   * word; null when there is no such question, or a check-in already looked at it.
+   */
+  msSinceUnansweredQuestion: number | null;
+  /**
+   * How long the user has been silent, counted only while the bot remembers
+   * something about them and no check-in has looked at this silence yet.
+   */
+  msSinceUserWentQuiet: number | null;
+  /** Check-in messages posted since the user last wrote anything. */
+  unansweredCheckIns: number;
+  /** Time since the user last wrote anything; null when they never have. */
+  msSinceUserSpoke: number | null;
+  /** Time since any check-in run started, spoken or silent; null when never. */
+  msSinceLastCheckIn: number | null;
 };
 
 export type CheckInSkipReason =
   | "disabled"
+  | "ignored"
   | "quiet-hours"
   | "thread-active"
   | "spoke-recently"
@@ -167,6 +220,9 @@ export function checkInWakeDecision(input: {
   signals: CheckInSignals;
 }): CheckInWakeDecision {
   if (!input.enabled) return { wake: false, reason: "disabled" };
+  if (input.signals.unansweredCheckIns >= CHECK_IN_MAX_UNANSWERED) {
+    return { wake: false, reason: "ignored" };
+  }
   if (isCheckInQuietHour(input.localHour, input.quietStartHour, input.quietEndHour)) {
     return { wake: false, reason: "quiet-hours" };
   }
@@ -180,24 +236,76 @@ export function checkInWakeDecision(input: {
   if (signals.msSinceCheckInSpoke !== null && signals.msSinceCheckInSpoke < CHECK_IN_SPEAK_GAP_MS) {
     return { wake: false, reason: "spoke-recently" };
   }
-  if (signals.openScratchpadItems <= 0 && signals.unreportedRoutineFailures <= 0) {
+  if (
+    signals.openScratchpadItems <= 0 &&
+    signals.unreportedRoutineFailures <= 0 &&
+    !recentConversationPaused(signals) &&
+    !withinWindow(
+      signals.msSinceUnansweredQuestion,
+      CHECK_IN_FOLLOW_UP_AFTER_MS,
+      CHECK_IN_FOLLOW_UP_STALE_MS,
+    ) &&
+    !withinWindow(
+      signals.msSinceUserWentQuiet,
+      CHECK_IN_QUIET_USER_AFTER_MS,
+      CHECK_IN_QUIET_USER_STALE_MS,
+    )
+  ) {
     return { wake: false, reason: "nothing-noticed" };
   }
   return { wake: true, reason: null };
 }
 
 /**
- * The bar for speaking. Written as a prohibition list because the failure mode
- * of a proactive bot is not silence, it is "just checking in!" five times a day.
+ * A conversation from the last week has paused, and no check-in has looked at
+ * this bot today. Whether it has a next step worth offering is the model's call.
+ */
+function recentConversationPaused(signals: CheckInSignals): boolean {
+  return (
+    signals.msSinceUserSpoke !== null &&
+    signals.msSinceUserSpoke < CHECK_IN_RECENT_CONVERSATION_MS &&
+    signals.msSinceThreadActivity !== null &&
+    signals.msSinceThreadActivity >= CHECK_IN_FOLLOW_UP_PAUSE_MS &&
+    (signals.msSinceLastCheckIn === null || signals.msSinceLastCheckIn >= CHECK_IN_DAILY_GAP_MS)
+  );
+}
+
+function withinWindow(elapsedMs: number | null, afterMs: number, staleMs: number): boolean {
+  return elapsedMs !== null && elapsedMs >= afterMs && elapsedMs < staleMs;
+}
+
+/**
+ * Whether a bot message leaves the user something to answer: a choice they
+ * never picked, or text that ends on a question. Messages are untyped JSON at
+ * this layer, so anything unrecognised counts as not a question.
+ */
+export function botMessageAwaitsReply(blocks: unknown): boolean {
+  if (!Array.isArray(blocks)) return false;
+  const typed = blocks.filter(
+    (block): block is { kind: string } & Record<string, unknown> =>
+      typeof block === "object" &&
+      block !== null &&
+      typeof (block as { kind?: unknown }).kind === "string",
+  );
+  if (typed.some((block) => block.kind === "choice" && block.answerId === undefined)) return true;
+  const lastText = typed.filter((block) => block.kind === "text").at(-1)?.text;
+  if (typeof lastText !== "string") return false;
+  // Closing quotes, brackets, markdown emphasis and emoji can trail the "?".
+  return /[?？](?:[\s)"'”’*_]|\p{Extended_Pictographic}|\uFE0F)*$/u.test(lastText);
+}
+
+/**
+ * The bar for speaking. A follow-up on real, recent work is welcome; what is
+ * banned is the empty kind — "just checking in!" five times a day.
  */
 export const CHECK_IN_JUDGMENT_INSTRUCTION = [
-  "This is an unprompted check-in, not a reply. Nobody asked you anything and nobody is waiting. Your job is to decide whether there is something worth saying, and the normal answer is no.",
-  "Do exactly one of two things. Either make your entire final reply the single token NO_RESPONSE, with nothing around it — no explanation, no all-clear, no note that you are staying quiet. Or send one short opening message, one or two sentences, that stands on its own without the user having to ask what you mean.",
-  "Speak only when you have one of these: work you actually finished or moved forward, with the result in the message; something you noticed that changes what the user should do next; a dated deadline visible in your own notes that is close and not handled; or one specific question you genuinely cannot continue without.",
-  "Do not speak to greet, to say hello, to ask how things are going, to offer help, to say you are available, or to report that you checked and found nothing. Do not repeat anything already said in the conversation or already in your memory. Do not read your own open items back to the user as a status list. Do not invent work, progress, or deadlines you cannot point to.",
-  "If you are unsure whether it clears the bar, it does not. Answer NO_RESPONSE.",
+  "This is an unprompted check-in, not a reply. The user has not written; you are deciding whether to open the conversation yourself. Saying nothing is fine, but a useful follow-up on what you and the user were recently working on is welcome.",
+  "Do exactly one of two things. Either make your entire final reply the single token NO_RESPONSE, with nothing around it — no explanation, no all-clear, no note that you are staying quiet. Or send one short opening message, one to three sentences, that stands on its own without the user having to ask what you mean.",
+  'Good reasons to speak: the natural next step on what you were just working on together, offered concretely ("Want me to compare the two flats you shortlisted on commute time next?"); work you finished or moved forward, with the result; something that changes what the user should do next; a close, dated deadline from the conversation or your notes; a question of yours the user left unanswered that still blocks something they wanted, restated in one line; or a concrete next step on something your memory shows the user is in the middle of.',
+  "Do not speak only to greet, to ask how things are going, to say you are available, or to offer help in general. Every message must be about something specific from the conversation or your notes. Do not repeat what was already said, except to restate your own unanswered question once. Do not invent work, progress, or deadlines you cannot point to.",
+  "If the only thing you could say is generic, answer NO_RESPONSE.",
   "Deciding costs nothing. Do not open a browser, run a search, or call any tool to manufacture something to say — judge from what is already in front of you. Use a tool only when you have already decided there is real work to finish.",
-  "Write any message in the language the user writes in.",
+  "Write any message in the language the user writes in, in the same tone the conversation already uses.",
 ].join("\n\n");
 
 export type CheckInContext = {
@@ -205,6 +313,10 @@ export type CheckInContext = {
   lastConversation?: string;
   /** Routine work that failed or never reported back. */
   routineTrouble?: string;
+  /** The bot's own question the user never answered, with how long ago. */
+  unansweredQuestion?: string;
+  /** The last few turns, oldest first, already escaped as quoted data. */
+  recentConversation?: string[];
 };
 
 /**
@@ -217,6 +329,12 @@ export function formatCheckInPrompt(context: CheckInContext = {}): string {
     context.lastConversation ? `Last conversation: ${context.lastConversation}` : undefined,
     context.routineTrouble
       ? `Scheduled work needing attention: ${context.routineTrouble}`
+      : undefined,
+    context.unansweredQuestion
+      ? `Your question still waiting for an answer: ${context.unansweredQuestion}`
+      : undefined,
+    context.recentConversation?.length
+      ? `Recent conversation, oldest first:\n${context.recentConversation.join("\n")}`
       : undefined,
   ].filter((line): line is string => Boolean(line));
   const block =
