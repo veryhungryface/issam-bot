@@ -33,7 +33,8 @@ under *our* account.
    but receives no push.
 4. **An Apple Developer Program membership** ($99/year) for iOS. A free Apple ID cannot get
    the push entitlement, so iOS push needs it; EAS then generates the APNs key and the
-   provisioning profile for you.
+   provisioning profile for you. Done: the App Store Connect app is `6820551643`, recorded
+   as `submit.production.ios.ascAppId`, so a submit no longer asks which app it is.
 
 ## Build and install
 
@@ -43,10 +44,16 @@ cd apps/mobile
 # Android, no store needed: an installable build you download from the EAS link.
 EXPO_PUBLIC_API_URL=https://<domain> npx eas build --platform android --profile preview
 
-# iOS, once the Apple account exists (TestFlight):
-EXPO_PUBLIC_API_URL=https://<domain> npx eas build --platform ios --profile production
-npx eas submit --platform ios --latest
+# iOS (TestFlight). The profile carries EXPO_PUBLIC_API_URL, so neither needs a prefix.
+npx eas-cli build --platform ios --profile production
+npx eas-cli submit --platform ios --latest
 ```
+
+A fresh iOS build asks to create the distribution certificate, the provisioning profile and
+the **push notification key** — say yes to all three; without the last one the app installs
+and runs but no push arrives. The build reaches a phone through TestFlight: App Store
+Connect holds it for ten to thirty minutes of processing, then it goes to an internal
+testing group, which Apple does not review.
 
 After installing, sign in with the same account the web app uses, and allow notifications
 when asked — that is when `registerPushToken()` stores the token against your user. The
