@@ -34,6 +34,36 @@ body {
   }
 }
 
+/* The small things that otherwise give a phone app away as a web page: a grey box flashing
+   under every tap, a long press on a button offering to copy it, and text the browser
+   decides to enlarge by itself. Words stay selectable — copying a message is the point. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+label,
+summary,
+[role="button"],
+[role="tab"],
+[role="menuitem"] {
+  -webkit-touch-callout: none;
+}
+
+/* iOS zooms the whole page when a control it focuses sets text under 16px, so tapping the
+   composer made the app lurch. Only touch devices need the floor; everywhere else the
+   typography stays exactly as designed. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
 .rk-scroll::-webkit-scrollbar {
   width: 6px;
 }
