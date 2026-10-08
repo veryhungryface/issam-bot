@@ -500,11 +500,12 @@ export function computerPanelAutoBoot(
   screenUrl?: string | null,
   busy?: boolean,
 ): "boot" | "recover-screen" | "wait" {
+  // A working bot opens the browser itself when a tool needs one, and holds the computer
+  // meanwhile. Booting or recovering the screen from here would only collide with its
+  // lease ("Computer is busy"); the run's own status events bring the screen in.
+  if (busy) return "wait";
   if (state === "booting" || state === "suspended") return "wait";
   if (state === "running") return screenUrl ? "wait" : "recover-screen";
-  // A working bot opens the browser itself when a tool needs one, and holds the computer
-  // meanwhile. Booting from here would only collide with its lease ("Computer is busy").
-  if (busy) return "wait";
   return "boot";
 }
 
