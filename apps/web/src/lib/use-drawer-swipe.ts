@@ -9,7 +9,6 @@ import {
   dragAxis,
   drawerOffsetPx,
   drawerProgress,
-  drawerTravelPx,
   openingDistance,
   settlesOpen,
   startsAtEdge,
@@ -34,6 +33,11 @@ export interface DrawerSwipeOptions {
   measure: () => number;
   /** Where the drawer should end up, called once as the finger lifts. */
   onSettle: (open: boolean) => void;
+  /**
+   * Called once, when a drag turns out to be the drawer's. A drawer whose contents are
+   * only mounted while it is open uses this to fill itself before it is on screen.
+   */
+  onStart?: () => void;
   /** Off entirely: on a desktop layout these panes are not drawers. */
   enabled: boolean;
   /**
@@ -52,11 +56,6 @@ export interface DrawerSwipe {
    * no layout.
    */
   offsetPx: number | null;
-  /**
-   * How far the drawer has come out of the edge, in CSS pixels, or null at rest. The
-   * content behind it is pushed by exactly this much, so the two move as one surface.
-   */
-  travelPx: number | null;
   handlers: Pick<
     DOMAttributes<Element>,
     "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel"
@@ -86,13 +85,31 @@ function isRtl(): boolean {
   return typeof document !== "undefined" && document.documentElement.dir === "rtl";
 }
 
+/**
+ * Put two drawers on one element. Each ignores a gesture that is not its own — they take
+ * opposite edges — so the element can carry both without either having to know about the
+ * other.
+ */
+export function mergeDrawerSwipes(...swipes: DrawerSwipe[]): DrawerSwipe["handlers"] {
+  return {
+    onPointerDown: (event) => {
+      for (const swipe of swipes) swipe.handlers.onPointerDown?.(event);
+    },
+    onPointerMove: (event) => {
+      for (const swipe of swipes) swipe.handlers.onPointerMove?.(event);
+    },
+    onPointerUp: (event) => {
+      for (const swipe of swipes) swipe.handlers.onPointerUp?.(event);
+    },
+    onPointerCancel: (event) => {
+      for (const swipe of swipes) swipe.handlers.onPointerCancel?.(event);
+    },
+  };
+}
+
 export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
   const drag = useRef<Drag | null>(null);
-  const [moved, setMoved] = useState<{
-    progress: number;
-    offsetPx: number;
-    travelPx: number;
-  } | null>(null);
+  const [moved, setMoved] = useState<{ progress: number; offsetPx: number } | null>(null);
 
   function end(settle: boolean) {
     const active = drag.current;
@@ -146,6 +163,7 @@ export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
       // Follow the pointer even once it leaves the element it started on — without this a
       // drag that reaches the edge of the screen simply stops.
       event.currentTarget.setPointerCapture?.(active.pointerId);
+      options.onStart?.();
     }
 
     const elapsed = event.timeStamp - active.lastAt;
@@ -162,16 +180,14 @@ export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
       edge: options.edge,
       rtl: active.rtl,
     });
-    const placement = {
-      progress: active.progress,
-      width: active.width,
-      edge: options.edge,
-      rtl: active.rtl,
-    };
     setMoved({
       progress: active.progress,
-      offsetPx: drawerOffsetPx(placement),
-      travelPx: drawerTravelPx(placement),
+      offsetPx: drawerOffsetPx({
+        progress: active.progress,
+        width: active.width,
+        edge: options.edge,
+        rtl: active.rtl,
+      }),
     });
   }
 
@@ -189,7 +205,6 @@ export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
   return {
     progress: moved?.progress ?? null,
     offsetPx: moved?.offsetPx ?? null,
-    travelPx: moved?.travelPx ?? null,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
   };
 }

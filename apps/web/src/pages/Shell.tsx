@@ -186,7 +186,7 @@ import {
   transcriptMovedDown,
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
-import { useDrawerSwipe } from "../lib/use-drawer-swipe";
+import { mergeDrawerSwipes, useDrawerSwipe } from "../lib/use-drawer-swipe";
 import { NARRATION_STEP_MS, workingNarration } from "../lib/working-narration";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
@@ -641,11 +641,21 @@ export function ShellPage() {
     measure: () => botsSidebarRef.current?.getBoundingClientRect().width ?? 0,
     onSettle: setMobileSidebarOpen,
   });
+  // The right edge opens the bot's computer, the way the left edge opens the bot list.
+  // A group has no computer, so there it is only a way to put the panel away.
+  const canSwipeOpenComputer = Boolean(!inGroup && active);
   const sidePanelSwipe = useDrawerSwipe({
     open: sidePanelOpen,
     edge: "end",
-    enabled: !desktopLayout && sidePanelOpen,
+    enabled: !desktopLayout && (sidePanelOpen || canSwipeOpenComputer),
+    // While the bot list is out the gesture belongs to it, whichever edge it started on.
+    openFromEdge: !mobileSidebarOpen,
     measure: () => sidePanelRef.current?.getBoundingClientRect().width ?? 0,
+    // Fill the panel as the drag is claimed, so what comes out from under the thumb is
+    // the computer rather than an empty sheet that fills in once it lands.
+    onStart: () => {
+      if (!sidePanelOpen) setPanel("computer");
+    },
     onSettle: (stayOpen) => {
       if (!stayOpen) setPanel(null);
     },
@@ -2683,7 +2693,7 @@ export function ShellPage() {
       data-testid="shell-root"
       data-ready={shellReady}
       className="relative flex h-full min-w-0 overflow-hidden bg-background text-foreground/90"
-      {...sidebarSwipe.handlers}
+      {...mergeDrawerSwipes(sidebarSwipe, sidePanelSwipe)}
     >
       {dropZoneActive ? (
         <div
@@ -3315,17 +3325,7 @@ export function ShellPage() {
         data-testid="conversation"
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        // The conversation goes with the drawer rather than being slid over, so the two
-        // read as one surface. While a finger is on it that is the exact distance dragged;
-        // at rest the stylesheet holds it aside at the drawer's own width.
-        style={
-          sidebarSwipe.travelPx === null
-            ? undefined
-            : { transform: `translateX(${sidebarSwipe.travelPx}px)`, transition: "none" }
-        }
-        className={`flex min-w-0 flex-1 flex-col bg-background transition-transform ${
-          mobileSidebarOpen ? "rk-drawer-pushed" : ""
-        }`}
+        className="flex min-w-0 flex-1 flex-col bg-background"
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">
@@ -3524,7 +3524,9 @@ export function ShellPage() {
           type="button"
           aria-label={t`Close panel`}
           onClick={() => setPanel(null)}
-          {...sidePanelSwipe.handlers}
+          style={
+            sidePanelSwipe.progress === null ? undefined : { opacity: sidePanelSwipe.progress }
+          }
           className="absolute inset-y-0 start-0 end-[min(calc(100%-48px),384px)] z-10 bg-overlay md:hidden"
         />
       ) : null}
@@ -3533,13 +3535,15 @@ export function ShellPage() {
         data-testid="side-panel"
         data-panel={panel ?? "closed"}
         data-dragging={sidePanelSwipe.progress === null ? undefined : "true"}
-        {...sidePanelSwipe.handlers}
-        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-background md:relative ${
-          panelDragActive ? "" : "transition-[width] duration-150 ease-out"
+        // A shut panel keeps its width and sits off the edge instead of collapsing to
+        // nothing, so a drag that pulls it out has a width to measure from the first move.
+        // A desktop column still opens and closes by width, which is what can be resized.
+        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 w-[calc(100%-48px)] max-w-[384px] shrink-0 flex-col overflow-hidden border-s border-sidebar-border bg-background md:relative md:max-w-none ${
+          panelDragActive ? "" : "transition-[width,transform] duration-150 ease-out"
         } ${
           sidePanelOpen
-            ? "w-[calc(100%-48px)] max-w-[384px] border-s border-sidebar-border md:w-(--side-panel-width) md:max-w-none"
-            : "pointer-events-none w-0"
+            ? "md:w-(--side-panel-width)"
+            : "pointer-events-none max-md:translate-x-full max-md:rtl:-translate-x-full md:w-0 md:border-s-0"
         }`}
         style={
           {
