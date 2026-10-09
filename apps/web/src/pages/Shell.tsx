@@ -186,6 +186,7 @@ import {
   transcriptMovedDown,
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
+import { useDrawerSwipe } from "../lib/use-drawer-swipe";
 import { NARRATION_STEP_MS, workingNarration } from "../lib/working-narration";
 import { ActivityList } from "./ActivityList";
 import type { ContextMenuPosition } from "./BotContextMenu";
@@ -498,14 +499,20 @@ export function ShellPage() {
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
+  // Drawers exist only on the phone layout: the same panes are columns on a desktop, where
+  // dragging them would mean nothing. One query answers both questions.
+  const [desktopLayout, setDesktopLayout] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches,
+  );
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 768px)");
-    function closeMobileSidebar() {
+    function applyLayout() {
+      setDesktopLayout(desktop.matches);
       if (desktop.matches) setMobileSidebarOpen(false);
     }
-    closeMobileSidebar();
-    desktop.addEventListener("change", closeMobileSidebar);
-    return () => desktop.removeEventListener("change", closeMobileSidebar);
+    applyLayout();
+    desktop.addEventListener("change", applyLayout);
+    return () => desktop.removeEventListener("change", applyLayout);
   }, []);
   const [activityMode, setActivityMode] = useState(readActivityMode);
   const toggleActivityMode = useCallback(() => {
@@ -618,6 +625,32 @@ export function ShellPage() {
   const inGroup = Boolean(groupId);
   const active = inGroup ? undefined : (bots.find((b) => b.id === botId) ?? bots[0]);
   const activeGroup = groups.find((group) => group.id === groupId);
+
+  // Both phone panes are drawers, and a drawer you can only dismiss with a button reads as
+  // a web page. Each follows the thumb and settles where the thumb was heading; the
+  // conversation stays reachable with one hand.
+  const sidePanelOpen = Boolean(panel && (active || activeGroup));
+  const botsSidebarRef = useRef<HTMLElement | null>(null);
+  const sidePanelRef = useRef<HTMLElement | null>(null);
+  const sidebarSwipe = useDrawerSwipe({
+    open: mobileSidebarOpen,
+    edge: "start",
+    enabled: !desktopLayout,
+    // While the side panel is up it owns the screen, so an edge drag belongs to it.
+    openFromEdge: !sidePanelOpen,
+    measure: () => botsSidebarRef.current?.getBoundingClientRect().width ?? 0,
+    onSettle: setMobileSidebarOpen,
+  });
+  const sidePanelSwipe = useDrawerSwipe({
+    open: sidePanelOpen,
+    edge: "end",
+    enabled: !desktopLayout && sidePanelOpen,
+    measure: () => sidePanelRef.current?.getBoundingClientRect().width ?? 0,
+    onSettle: (stayOpen) => {
+      if (!stayOpen) setPanel(null);
+    },
+  });
+
   const activePendingAttachments = useMemo(
     () => attachmentsForThread(pendingAttachments, inGroup ? groupId : active?.id),
     [active?.id, groupId, inGroup, pendingAttachments],
@@ -2650,6 +2683,7 @@ export function ShellPage() {
       data-testid="shell-root"
       data-ready={shellReady}
       className="relative flex h-full min-w-0 overflow-hidden bg-background text-foreground/90"
+      {...sidebarSwipe.handlers}
     >
       {dropZoneActive ? (
         <div
@@ -2664,18 +2698,29 @@ export function ShellPage() {
       {bootstrapMe !== undefined ? (
         <HostComputerPrompt initialMe={bootstrapMe ?? undefined} />
       ) : null}
-      {mobileSidebarOpen ? (
+      {mobileSidebarOpen || sidebarSwipe.progress !== null ? (
         <button
           type="button"
           aria-label={t`Close navigation`}
           onClick={() => setMobileSidebarOpen(false)}
+          // The dimming tracks the drawer, so a half-open drawer looks half-open.
+          style={sidebarSwipe.progress === null ? undefined : { opacity: sidebarSwipe.progress }}
           className="absolute inset-y-0 end-0 start-[min(calc(100%-48px),316px)] z-30 bg-overlay md:hidden"
         />
       ) : null}
       <aside
+        ref={botsSidebarRef}
         data-testid="bots-sidebar"
         data-collapsed={botsSidebarCollapsed ? "true" : "false"}
+        data-dragging={sidebarSwipe.progress === null ? undefined : "true"}
         inert={botsSidebarCollapsed && !mobileSidebarOpen ? true : undefined}
+        // While a finger is on it the drawer is wherever the finger put it, and animating
+        // towards that would only lag behind the hand.
+        style={
+          sidebarSwipe.offsetPx === null
+            ? undefined
+            : { transform: `translateX(${sidebarSwipe.offsetPx}px)`, transition: "none" }
+        }
         className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,width,opacity] md:static md:z-auto md:translate-x-0 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
         } ${
@@ -3461,17 +3506,41 @@ export function ShellPage() {
         />
       </main>
 
+      {sidePanelOpen ? (
+        // A phone panel leaves a strip of the conversation showing, so there is something
+        // to tap to dismiss it — the same escape the navigation drawer already gives.
+        <button
+          type="button"
+          aria-label={t`Close panel`}
+          onClick={() => setPanel(null)}
+          {...sidePanelSwipe.handlers}
+          className="absolute inset-y-0 start-0 end-[min(calc(100%-48px),384px)] z-10 bg-overlay md:hidden"
+        />
+      ) : null}
       <aside
+        ref={sidePanelRef}
         data-testid="side-panel"
         data-panel={panel ?? "closed"}
+        data-dragging={sidePanelSwipe.progress === null ? undefined : "true"}
+        {...sidePanelSwipe.handlers}
         className={`absolute inset-y-0 end-0 z-20 flex min-h-0 shrink-0 flex-col overflow-hidden bg-background md:relative ${
           panelDragActive ? "" : "transition-[width] duration-150 ease-out"
         } ${
-          panel && (active || activeGroup)
-            ? "w-full max-w-[384px] border-s border-sidebar-border md:w-(--side-panel-width) md:max-w-none"
+          sidePanelOpen
+            ? "w-[calc(100%-48px)] max-w-[384px] border-s border-sidebar-border md:w-(--side-panel-width) md:max-w-none"
             : "pointer-events-none w-0"
         }`}
-        style={{ "--side-panel-width": `${panelWidth}px` } as React.CSSProperties}
+        style={
+          {
+            "--side-panel-width": `${panelWidth}px`,
+            ...(sidePanelSwipe.offsetPx === null
+              ? {}
+              : {
+                  transform: `translateX(${sidePanelSwipe.offsetPx}px)`,
+                  transition: "none",
+                }),
+          } as React.CSSProperties
+        }
       >
         {panel && (active || activeGroup) ? (
           // biome-ignore lint/a11y/useSemanticElements: a drag handle between panes has no semantic HTML element; ARIA window-splitter is the pattern.
