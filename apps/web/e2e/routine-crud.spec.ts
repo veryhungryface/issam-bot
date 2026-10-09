@@ -28,14 +28,22 @@ test("routine active switch keeps its thumb inside the track", async ({ page }, 
   const toggle = page.getByRole("switch", { name: "Active" });
   const thumb = toggle.locator("span");
   async function expectThumbInsets(left: number, right: number) {
-    await thumb.evaluate((element) =>
-      Promise.all(element.getAnimations().map(({ finished }) => finished)),
-    );
-    const [trackBox, thumbBox] = await Promise.all([toggle.boundingBox(), thumb.boundingBox()]);
-    expect(trackBox).not.toBeNull();
-    expect(thumbBox).not.toBeNull();
-    expect(thumbBox!.x - trackBox!.x).toBeCloseTo(left, 1);
-    expect(trackBox!.x + trackBox!.width - thumbBox!.x - thumbBox!.width).toBeCloseTo(right, 1);
+    // Both rectangles come back from one pass. Two boundingBox calls are two round trips,
+    // and the panel around the switch animates its width when the viewport changes, so
+    // the thumb was being measured after the track had already moved a pixel or two.
+    const insets = await thumb.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map(({ finished }) => finished));
+      const track = element.parentElement;
+      if (!track) throw new Error("switch thumb has no track");
+      const trackBox = track.getBoundingClientRect();
+      const thumbBox = element.getBoundingClientRect();
+      return {
+        left: thumbBox.x - trackBox.x,
+        right: trackBox.x + trackBox.width - thumbBox.x - thumbBox.width,
+      };
+    });
+    expect(insets.left).toBeCloseTo(left, 1);
+    expect(insets.right).toBeCloseTo(right, 1);
   }
 
   await expect(toggle).toHaveAttribute("aria-checked", "true");
