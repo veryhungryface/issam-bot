@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
 
 async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshotPath = testInfo.outputPath(`${name}.png`);
@@ -17,6 +17,28 @@ async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
     return;
   }
   await testInfo.attach(name, { contentType: "image/png", path: screenshotPath });
+}
+
+/**
+ * Open the Get started dialog, asking again if the first press does not land.
+ *
+ * The suite runs against `astro dev`, which reloads the page by itself once it has
+ * finished building. A reload between the readiness check and the press leaves the press
+ * hitting a page whose script has not run again yet, and the dialog stays shut — the
+ * homepage is fine, the dev server simply moved underneath the test. Opening is
+ * idempotent: the handler returns early when the dialog is already open.
+ */
+async function openGetStartedDialog(page: Page, trigger: Locator): Promise<Locator> {
+  const dialog = page.locator("[data-get-started-dialog]");
+  await expect(async () => {
+    if (await dialog.isVisible()) return;
+    await expect(page.locator("html")).toHaveAttribute("data-get-started-ready", "", {
+      timeout: 5_000,
+    });
+    await trigger.click();
+    await expect(dialog).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+  return dialog;
 }
 
 test.describe("marketing homepage", () => {
@@ -48,10 +70,10 @@ test.describe("marketing homepage", () => {
     }).toPass({ timeout: 15_000 });
     await captureScreenshot(page, testInfo, "01-marketing-homepage-selfhost");
 
-    await expect(page.locator("html")).toHaveAttribute("data-get-started-ready", "");
-    await selfHost.getByRole("button", { name: /Get started/i }).click();
-    const dialog = page.locator("[data-get-started-dialog]");
-    await expect(dialog).toBeVisible();
+    const dialog = await openGetStartedDialog(
+      page,
+      selfHost.getByRole("button", { name: /Get started/i }),
+    );
     await expect(dialog.getByRole("heading")).toBeVisible();
     await expect(dialog).not.toContainText(
       /openssl|docker-compose\.images|POSTGRES_PASSWORD|BETTER_AUTH_SECRET|mkdir rakazo/i,
@@ -81,10 +103,10 @@ test.describe("marketing homepage", () => {
     }).toPass({ timeout: 15_000 });
     await captureScreenshot(page, testInfo, "03-marketing-homepage-zh-selfhost");
 
-    await expect(page.locator("html")).toHaveAttribute("data-get-started-ready", "");
-    await selfHost.getByRole("button", { name: "开始使用" }).click();
-    const dialog = page.locator("[data-get-started-dialog]");
-    await expect(dialog).toBeVisible();
+    const dialog = await openGetStartedDialog(
+      page,
+      selfHost.getByRole("button", { name: "开始使用" }),
+    );
     await expect(dialog.getByRole("heading")).toHaveText("你想如何开始？");
     await expect(dialog).not.toContainText(
       /openssl|docker-compose\.images|POSTGRES_PASSWORD|BETTER_AUTH_SECRET|mkdir rakazo/i,
