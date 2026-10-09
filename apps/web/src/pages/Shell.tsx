@@ -3312,9 +3312,20 @@ export function ShellPage() {
       />
 
       <main
+        data-testid="conversation"
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className="flex min-w-0 flex-1 flex-col bg-background"
+        // The conversation goes with the drawer rather than being slid over, so the two
+        // read as one surface. While a finger is on it that is the exact distance dragged;
+        // at rest the stylesheet holds it aside at the drawer's own width.
+        style={
+          sidebarSwipe.travelPx === null
+            ? undefined
+            : { transform: `translateX(${sidebarSwipe.travelPx}px)`, transition: "none" }
+        }
+        className={`flex min-w-0 flex-1 flex-col bg-background transition-transform ${
+          mobileSidebarOpen ? "rk-drawer-pushed" : ""
+        }`}
       >
         <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
           <div className="flex min-w-0 items-center gap-2">

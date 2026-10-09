@@ -104,18 +104,29 @@ export function settlesOpen(input: {
   return input.progress >= SETTLE_AT;
 }
 
-/**
- * How far to shift the drawer from its resting open position, in CSS pixels.
- *
- * The drawer's own stylesheet already places it open or closed; this is the offset that
- * makes it follow the finger in between, so it is always "open position minus the part
- * still outside the screen".
- */
-export function drawerOffsetPx(input: {
+export interface DrawerPlacement {
   progress: number;
   width: number;
   edge: DrawerEdge;
   rtl: boolean;
-}): number {
-  return (clamp(input.progress, 0, 1) - 1) * input.width * openingSign(input.edge, input.rtl);
+}
+
+/**
+ * How far the drawer has come out of the edge, in CSS pixels, signed for the layout
+ * direction. This is also how far the content behind it has been pushed: a drawer that
+ * slides over a page that did not notice reads as a sheet, not as a phone app.
+ */
+export function drawerTravelPx(input: DrawerPlacement): number {
+  return clamp(input.progress, 0, 1) * input.width * openingSign(input.edge, input.rtl);
+}
+
+/**
+ * How far to shift the drawer from its resting open position, in CSS pixels.
+ *
+ * The drawer's own stylesheet already places it open or closed; this is the offset that
+ * makes it follow the finger in between, so it is always "how far out it is, less the
+ * whole width it has when open".
+ */
+export function drawerOffsetPx(input: DrawerPlacement): number {
+  return drawerTravelPx(input) - input.width * openingSign(input.edge, input.rtl);
 }
