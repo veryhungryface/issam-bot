@@ -82,19 +82,28 @@ function readId(data: Record<string, unknown> | null | undefined, key: string): 
   return null;
 }
 /**
- * The page's own background colour, read off the `theme-color` meta tag it keeps in step
- * with the user's light or dark choice. The shell paints the status-bar and navigation-bar
- * strips with it, so the inset areas belong to the page instead of framing it in a colour
- * from a different theme.
+ * What the page tells the shell.
+ *
+ * `theme` carries the page's own background colour, read off the `theme-color` meta tag
+ * it keeps in step with the user's light or dark choice: the shell paints the status-bar
+ * and navigation-bar strips with it, so the inset areas belong to the page instead of
+ * framing it in a colour from a different theme.
+ *
+ * `painted` says the page has something to show, which is when the launch animation can
+ * go. Nothing else can be trusted for that — a page is "loaded" long before it has
+ * finished deciding what it is.
  */
-export function parseShellMessage(raw: string): { themeColor: string } | null {
+export type ShellMessage = { type: "theme"; themeColor: string } | { type: "painted" };
+
+export function parseShellMessage(raw: string): ShellMessage | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return null;
     const message = parsed as { type?: unknown; color?: unknown };
+    if (message.type === "painted") return { type: "painted" };
     if (message.type !== "theme" || typeof message.color !== "string") return null;
     const color = message.color.trim();
-    return /^#[0-9a-f]{3,8}$/i.test(color) ? { themeColor: color } : null;
+    return /^#[0-9a-f]{3,8}$/i.test(color) ? { type: "theme", themeColor: color } : null;
   } catch {
     return null;
   }

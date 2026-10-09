@@ -79,6 +79,7 @@ describe("leaving for the phone's browser", () => {
 describe("shell messages", () => {
   it("reads the page's theme colour", () => {
     expect(parseShellMessage(JSON.stringify({ type: "theme", color: "#fafaf8" }))).toEqual({
+      type: "theme",
       themeColor: "#fafaf8",
     });
   });
@@ -94,6 +95,12 @@ describe("shell messages", () => {
     ]) {
       expect(parseShellMessage(raw)).toBeNull();
     }
+  });
+
+  it("hears the page say it has something to show", () => {
+    expect(parseShellMessage(JSON.stringify({ type: "painted" }))).toEqual({ type: "painted" });
+    // A word it does not know is not a reason to take the launch animation away.
+    expect(parseShellMessage(JSON.stringify({ type: "ready" }))).toBeNull();
   });
 
   it("picks the status-bar style the page can be read against", () => {

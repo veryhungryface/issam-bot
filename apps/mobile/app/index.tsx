@@ -3,11 +3,13 @@ import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, AppState, BackHandler, Platform, StyleSheet, View } from "react-native";
+import { AppState, BackHandler, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewNavigation } from "react-native-webview";
+import { LaunchSplash } from "../components/LaunchSplash";
 import { loadApiBase } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
+import { splashHoldMs } from "../lib/launch-splash";
 import { clearDeliveredNotifications, obtainPushToken } from "../lib/shell-push";
 import {
   isLightColor,
@@ -67,6 +69,12 @@ export default function Shell() {
   const [origin, setOrigin] = useState<string | null>(null);
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [uri, setUri] = useState<string | null>(null);
+  // The greeting outlives the page load: `painted` is the page saying it has something to
+  // show, and `splashUp` stays true through the fade so nothing flashes underneath it.
+  const [pagePainted, setPagePainted] = useState(false);
+  const [splashShowing, setSplashShowing] = useState(true);
+  const [splashUp, setSplashUp] = useState(true);
+  const splashSince = useRef(Date.now());
 
   // Resolve the server and the push token before the first page load, so the page can
   // register the token in the same breath as it finds the session.
@@ -149,8 +157,19 @@ export default function Shell() {
 
   const onMessage = useCallback((event: { nativeEvent: { data: string } }) => {
     const message = parseShellMessage(event.nativeEvent.data);
-    if (message) setPageColor(message.themeColor);
+    if (!message) return;
+    if (message.type === "painted") setPagePainted(true);
+    else setPageColor(message.themeColor);
   }, []);
+
+  useEffect(() => {
+    if (!splashShowing) return;
+    const timer = setTimeout(
+      () => setSplashShowing(false),
+      splashHoldMs({ shownForMs: Date.now() - splashSince.current, pageReady: pagePainted }),
+    );
+    return () => clearTimeout(timer);
+  }, [pagePainted, splashShowing]);
 
   // A bot works on other people's websites. Their links belong in the phone's browser —
   // but only when the user actually went there, never when the page embeds them.
@@ -167,70 +186,52 @@ export default function Shell() {
 
   const background = pageColor ?? tokens.background;
 
-  if (!uri) {
-    return (
-      <View style={[styles.center, { backgroundColor: background }]}>
-        <ActivityIndicator color={tokens.foreground} />
-      </View>
-    );
-  }
-
   return (
-    <View
-      style={[
-        styles.fill,
-        {
-          backgroundColor: background,
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom,
-          paddingLeft: insets.left,
-          paddingRight: insets.right,
-        },
-      ]}
-    >
+    <View style={[styles.fill, { backgroundColor: background }]}>
       <StatusBar style={isLightColor(background) ? "dark" : "light"} />
-      <WebView
-        onMessage={onMessage}
-        injectedJavaScript={WATCH_THEME_COLOR}
-        ref={webView}
-        source={{ uri }}
-        style={[styles.fill, { backgroundColor: background }]}
-        injectedJavaScriptBeforeContentLoaded={injected}
-        onNavigationStateChange={onNavigation}
-        onShouldStartLoadWithRequest={onRequest}
-        // The session is a cookie this view owns; without these it is dropped on relaunch.
-        sharedCookiesEnabled
-        thirdPartyCookiesEnabled
-        domStorageEnabled
-        javaScriptEnabled
-        // The left edge belongs to the bot list, which swipes out from there. iOS would
-        // otherwise read that as its own back gesture and leave the conversation instead.
-        allowsBackForwardNavigationGestures={false}
-        // The page never scrolls as a page, so a rubber-band pull only showed the frame
-        // the app is sitting in, and let go of a reload nobody asked for.
-        bounces={false}
-        mediaPlaybackRequiresUserAction={false}
-        allowsInlineMediaPlayback
-        startInLoadingState
-        renderLoading={() => (
-          <View style={[styles.center, { backgroundColor: background }]}>
-            <ActivityIndicator color={tokens.foreground} />
-          </View>
-        )}
-      />
+      <View
+        style={[
+          styles.fill,
+          {
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
+        ]}
+      >
+        {uri ? (
+          <WebView
+            onMessage={onMessage}
+            injectedJavaScript={WATCH_THEME_COLOR}
+            ref={webView}
+            source={{ uri }}
+            style={[styles.fill, { backgroundColor: background }]}
+            injectedJavaScriptBeforeContentLoaded={injected}
+            onNavigationStateChange={onNavigation}
+            onShouldStartLoadWithRequest={onRequest}
+            // The session is a cookie this view owns; without these it is dropped on relaunch.
+            sharedCookiesEnabled
+            thirdPartyCookiesEnabled
+            domStorageEnabled
+            javaScriptEnabled
+            // The left edge belongs to the bot list, which swipes out from there. iOS
+            // would otherwise read that as its own back gesture and leave the
+            // conversation instead.
+            allowsBackForwardNavigationGestures={false}
+            // The page never scrolls as a page, so a rubber-band pull only showed the
+            // frame the app is sitting in, and let go of a reload nobody asked for.
+            bounces={false}
+            mediaPlaybackRequiresUserAction={false}
+            allowsInlineMediaPlayback
+          />
+        ) : null}
+      </View>
+      {splashUp ? <LaunchSplash visible={splashShowing} onGone={() => setSplashUp(false)} /> : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
-  center: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 });
