@@ -5,6 +5,8 @@
  * placeholders (an API key shape, a sample URL, a model id) stay as they are.
  */
 export const KO_MESSAGES: Record<string, string> = {
+  Start: "시작",
+  "Tap to start": "화면을 탭하세요",
   "Cloud agent": "클라우드 에이전트",
   "Pull request": "풀 리퀘스트",
   running: "실행 중",

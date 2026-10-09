@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, BackHandler, Platform, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewNavigation } from "react-native-webview";
-import { LaunchSplash } from "../components/LaunchSplash";
+import { LaunchIntro } from "../components/LaunchIntro";
 import { loadApiBase } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
-import { splashHoldMs } from "../lib/launch-splash";
+import { coverHoldMs } from "../lib/launch-intro";
 import { clearDeliveredNotifications, obtainPushToken } from "../lib/shell-push";
 import {
   isLightColor,
@@ -69,12 +69,13 @@ export default function Shell() {
   const [origin, setOrigin] = useState<string | null>(null);
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [uri, setUri] = useState<string | null>(null);
-  // The greeting outlives the page load: `painted` is the page saying it has something to
-  // show, and `splashUp` stays true through the fade so nothing flashes underneath it.
+  // The intro plays once and then waits to be tapped. The cover under it outlives the
+  // tap: `painted` is the page saying it has something to show, and until it does, what
+  // would come through is the loading screen of the project this app is forked from.
   const [pagePainted, setPagePainted] = useState(false);
-  const [splashShowing, setSplashShowing] = useState(true);
-  const [splashUp, setSplashUp] = useState(true);
-  const splashSince = useRef(Date.now());
+  const [introUp, setIntroUp] = useState(true);
+  const [coverUp, setCoverUp] = useState(true);
+  const coverSince = useRef(Date.now());
 
   // Resolve the server and the push token before the first page load, so the page can
   // register the token in the same breath as it finds the session.
@@ -116,6 +117,9 @@ export default function Shell() {
     let cancelled = false;
     const open = (data: Record<string, unknown> | null | undefined) => {
       if (cancelled) return;
+      // Someone who tapped a notification is on their way to a message. An opening
+      // sequence between them and it is in the way, however good it is.
+      setIntroUp(false);
       setUri(shellNotificationUrl(origin, data));
       void clearDeliveredNotifications();
     };
@@ -162,14 +166,16 @@ export default function Shell() {
     else setPageColor(message.themeColor);
   }, []);
 
+  // Once the intro is gone the cover goes as soon as the page has something to show, and
+  // at the ceiling regardless, so a silent page cannot strand anyone behind a blank screen.
   useEffect(() => {
-    if (!splashShowing) return;
+    if (!coverUp || introUp) return;
     const timer = setTimeout(
-      () => setSplashShowing(false),
-      splashHoldMs({ shownForMs: Date.now() - splashSince.current, pageReady: pagePainted }),
+      () => setCoverUp(false),
+      coverHoldMs({ heldForMs: Date.now() - coverSince.current, pagePainted }),
     );
     return () => clearTimeout(timer);
-  }, [pagePainted, splashShowing]);
+  }, [coverUp, introUp, pagePainted]);
 
   // A bot works on other people's websites. Their links belong in the phone's browser —
   // but only when the user actually went there, never when the page embeds them.
@@ -227,11 +233,16 @@ export default function Shell() {
           />
         ) : null}
       </View>
-      {splashUp ? <LaunchSplash visible={splashShowing} onGone={() => setSplashUp(false)} /> : null}
+      {coverUp ? (
+        <View style={[styles.cover, { backgroundColor: tokens.background }]}>
+          {introUp ? <LaunchIntro onDismiss={() => setIntroUp(false)} /> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  cover: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
 });
