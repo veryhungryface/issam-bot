@@ -19,6 +19,45 @@ function shell(): NativeShell | undefined {
   return value && typeof value === "object" ? (value as NativeShell) : undefined;
 }
 
+type NativeBridge = { postMessage: (data: string) => void };
+
+function bridge(): NativeBridge | undefined {
+  if (typeof window === "undefined") return undefined;
+  const value = (window as unknown as Record<string, unknown>).ReactNativeWebView;
+  return value && typeof (value as NativeBridge).postMessage === "function"
+    ? (value as NativeBridge)
+    : undefined;
+}
+
+let toldShell = false;
+
+/**
+ * Tell the shell the app has something to show.
+ *
+ * The shell holds its launch animation over this page until it hears this, because
+ * nothing it can observe by itself means the same thing — a web view reports a page
+ * "loaded" long before the app behind it has decided what to draw, and what showed
+ * through in that gap was the loading screen of the project this one is forked from.
+ *
+ * Said once per page: a later route change is navigation, not a launch.
+ */
+export function notifyNativeShellPainted(): void {
+  if (toldShell) return;
+  const native = bridge();
+  if (!native) return;
+  toldShell = true;
+  try {
+    native.postMessage(JSON.stringify({ type: "painted" }));
+  } catch {
+    // A shell that cannot hear this falls back to its own timeout.
+  }
+}
+
+/** Only for tests: forget that the shell has already been told. */
+export function resetNativeShellPaintedForTest(): void {
+  toldShell = false;
+}
+
 /** True when this page is running inside the phone app rather than a browser. */
 export function inNativeShell(): boolean {
   return shell() !== undefined;

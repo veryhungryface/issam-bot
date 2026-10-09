@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { inNativeShell, nativePushToken, registerNativePushToken } from "./native-shell";
+import {
+  inNativeShell,
+  nativePushToken,
+  notifyNativeShellPainted,
+  registerNativePushToken,
+  resetNativeShellPaintedForTest,
+} from "./native-shell";
 
 const KEY = "__ISSAM_NATIVE__";
 
 // The suite runs in node; this module only ever reads one property off window.
 beforeEach(() => {
   vi.stubGlobal("window", {});
+  resetNativeShellPaintedForTest();
 });
 
 afterEach(() => {
@@ -69,5 +76,35 @@ describe("registerNativePushToken", () => {
       throw new Error("offline");
     });
     expect(result).toBe("failed");
+  });
+});
+
+describe("telling the shell the app has something to show", () => {
+  function listen() {
+    const posted: string[] = [];
+    (globalThis.window as unknown as Record<string, unknown>).ReactNativeWebView = {
+      postMessage: (data: string) => posted.push(data),
+    };
+    return posted;
+  }
+
+  it("says it once, however often it is asked", () => {
+    const posted = listen();
+    notifyNativeShellPainted();
+    notifyNativeShellPainted();
+    expect(posted).toEqual([JSON.stringify({ type: "painted" })]);
+  });
+
+  it("does nothing in a plain browser", () => {
+    expect(() => notifyNativeShellPainted()).not.toThrow();
+  });
+
+  it("leaves a shell that throws to its own timeout", () => {
+    (globalThis.window as unknown as Record<string, unknown>).ReactNativeWebView = {
+      postMessage: () => {
+        throw new Error("bridge gone");
+      },
+    };
+    expect(() => notifyNativeShellPainted()).not.toThrow();
   });
 });

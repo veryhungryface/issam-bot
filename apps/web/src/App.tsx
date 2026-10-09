@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "re
 import { Navigate, Route, Routes } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
 import { authClient } from "./lib/auth";
+import { notifyNativeShellPainted } from "./lib/native-shell";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import {
   holdUnreachableGate,
@@ -39,6 +40,15 @@ export function App() {
     markOnce("rk:renderer:session-committed");
     markAfterPaint("rk:renderer:session-painted");
   }, [session.isPending]);
+
+  // The phone app holds its launch animation until the app says it has something to show.
+  // The shell says so itself once a conversation is on screen; everywhere else — signed
+  // out, onboarding, a reset link — the session resolving is as far as it gets.
+  useEffect(() => {
+    if (gate === "loading") return;
+    if (window.location.pathname.startsWith("/app")) return;
+    notifyNativeShellPainted();
+  }, [gate]);
 
   if (showSessionUnavailable(gate, nextHolding)) {
     return <SessionUnavailable refetch={session.refetch} />;

@@ -158,7 +158,7 @@ import { screenIframeSandbox as liveViewIframeSandbox } from "../lib/live-view";
 import { localTimezone } from "../lib/local-timezone";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
-import { registerNativePushToken } from "../lib/native-shell";
+import { notifyNativeShellPainted, registerNativePushToken } from "../lib/native-shell";
 import { isFileDrag, revokePendingAttachmentPreviews } from "../lib/pending-attachments";
 import { markAfterPaint, markOnce } from "../lib/performance";
 import { clearSpaceSelection, rpc, selectedSpaceId, selectSpace } from "../lib/rpc";
@@ -1867,6 +1867,8 @@ export function ShellPage() {
     if (shellReady) {
       markOnce("rk:renderer:shell-ready");
       markAfterPaint("rk:renderer:shell-painted");
+      // The phone app holds its launch animation until this.
+      notifyNativeShellPainted();
     }
   }, [active, initialBotsLoaded, shellReady, snapshot?.botId]);
 
