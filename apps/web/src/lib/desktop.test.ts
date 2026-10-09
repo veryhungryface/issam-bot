@@ -61,14 +61,27 @@ describe("window chrome", () => {
   });
 
   it("keeps conversation header controls clickable", () => {
+    // The header is a drag region on the desktop app, so anything clickable inside it has
+    // to opt out or pressing it moves the window instead. Asserted as that rule rather
+    // than as the exact classes, which changed the first time the header was restyled and
+    // took this test with them while the rule itself still held.
     const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "../pages");
     const shell = readFileSync(path.join(root, "Shell.tsx"), "utf8");
-    expect(shell).toContain(
-      'className="app-drag flex items-center justify-between border-b border-sidebar-border',
-    );
-    expect(shell).toContain('className="app-no-drag grid h-8 w-8');
-    expect(shell).toContain('className="app-no-drag flex min-w-0 items-center gap-3"');
-    expect(shell.match(/className="app-no-drag grid h-\[30px\] w-\[34px\]/g)).toHaveLength(2);
+
+    const sharedButton = shell.match(/const HEADER_BUTTON =\s*"([^"]+)"/);
+    expect(sharedButton?.[1]).toContain("app-no-drag");
+
+    const start = shell.indexOf('<div className="app-drag relative flex items-start');
+    expect(start).toBeGreaterThan(-1);
+    const header = shell.slice(start, shell.indexOf("<Transcript", start));
+    const controls = header.split("<button").slice(1);
+    expect(controls.length).toBeGreaterThan(1);
+    for (const control of controls) {
+      // Read the className itself rather than "everything up to the first >", because an
+      // arrow function in an onClick closes that early and hides the attribute.
+      const className = control.match(/className=(\{[^}]*\}|"[^"]*")/)?.[1] ?? "";
+      expect(className).toMatch(/app-no-drag|HEADER_BUTTON/);
+    }
   });
 });
 

@@ -307,6 +307,10 @@ function readCollapsedSidebarSections(userId: string | null | undefined): Set<st
   }
 }
 
+/** Every control in the floating header: a circle that reads on top of a message. */
+const HEADER_BUTTON =
+  "app-no-drag pointer-events-auto grid size-9 shrink-0 place-items-center rounded-full border border-border/60 bg-card/75 text-foreground/80 backdrop-blur-sm hover:bg-accent hover:text-foreground data-active:bg-accent data-active:text-foreground";
+
 export function ShellPage() {
   const { t } = useLingui();
   const { botId, groupId } = useParams();
@@ -3213,6 +3217,26 @@ export function ShellPage() {
                 </span>
                 <Trans>Memory</Trans>
               </Button>
+              {!inGroup && active ? (
+                // Calling moved here when the conversation header lost its bar. It is a
+                // whole mode, not a glance at a panel, so it belongs with the settings
+                // rather than as a third circle over the messages.
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start font-normal"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    if (!voiceStatus?.ready) {
+                      setVoiceOpen(true);
+                      return;
+                    }
+                    setCallOpen(true);
+                  }}
+                >
+                  <Phone size={16} strokeWidth={1.7} className="text-muted-foreground" />
+                  <Trans>Call</Trans>
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 className="w-full justify-start font-normal"
@@ -3327,101 +3351,95 @@ export function ShellPage() {
         data-testid="conversation"
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
-        className="flex min-w-0 flex-1 flex-col bg-background"
+        className="relative flex min-w-0 flex-1 flex-col bg-background"
       >
-        <div className="app-drag flex items-center justify-between border-b border-sidebar-border px-3 py-[17px] md:px-[22px]">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              aria-label={t`Open navigation`}
-              onClick={() => setMobileSidebarOpen(true)}
-              className="app-no-drag grid h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:hidden"
-            >
-              <Menu size={19} strokeWidth={1.7} />
-            </button>
-            {botsSidebarCollapsed ? (
-              // Minimizing hides the sidebar's own toggle, so the only way back used to be
-              // an invisible edge handle. Keep a real control on screen while collapsed.
+        {/* The bot floats over its own conversation instead of sitting on a bar. The
+            messages run underneath, dimmed by the scrim, so the only thing pinned to the
+            top of the screen is who you are talking to. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-linear-to-b from-background via-background/92 to-transparent"
+          />
+          <div className="app-drag relative flex items-start justify-between gap-2 px-3 pt-3 pb-10 md:px-5">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                aria-label={t`Show bots`}
-                title={t`Show bots`}
-                data-testid="restore-bots-sidebar"
-                onClick={() => setBotsSidebarCollapsedPref(false)}
-                className="app-no-drag hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:grid"
+                aria-label={t`Open navigation`}
+                onClick={() => setMobileSidebarOpen(true)}
+                className={`${HEADER_BUTTON} md:hidden`}
               >
-                <PanelLeftOpen size={18} strokeWidth={1.7} aria-hidden="true" />
+                <Menu size={19} strokeWidth={1.7} />
               </button>
-            ) : null}
+              {botsSidebarCollapsed ? (
+                // Minimizing hides the sidebar's own toggle, so the only way back used to
+                // be an invisible edge handle. Keep a real control on screen while collapsed.
+                <button
+                  type="button"
+                  aria-label={t`Show bots`}
+                  title={t`Show bots`}
+                  data-testid="restore-bots-sidebar"
+                  onClick={() => setBotsSidebarCollapsedPref(false)}
+                  className={`${HEADER_BUTTON} hidden md:grid`}
+                >
+                  <PanelLeftOpen size={18} strokeWidth={1.7} aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+
             <button
               type="button"
               data-testid="bot-settings-trigger"
               onClick={() => setPanel(inGroup ? "group-settings" : "settings")}
-              className="app-no-drag flex min-w-0 items-center gap-3"
+              className="app-no-drag pointer-events-auto absolute left-1/2 top-2 flex max-w-[58%] -translate-x-1/2 flex-col items-center gap-1.5"
             >
               {inGroup ? (
                 <GroupAvatar
                   members={activeSnapshot?.members ?? activeGroup?.members ?? []}
-                  size={26}
+                  size={52}
                 />
               ) : active ? (
                 <BotAvatar
                   color={active.color}
                   identity={active.id}
-                  size={26}
+                  size={52}
                   status={active.status}
                 />
               ) : null}
-              <span className="min-w-0">
-                <span className="block truncate text-[16px] font-medium text-foreground" dir="auto">
-                  {inGroup
-                    ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
-                    : (active?.name ?? t`Select a bot`)}
-                </span>
+              <span
+                className="max-w-full truncate rounded-full bg-card/80 px-3 py-1 text-[13.5px] font-medium text-foreground backdrop-blur-sm"
+                dir="auto"
+              >
+                {inGroup
+                  ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
+                  : (active?.name ?? t`Select a bot`)}
               </span>
             </button>
-          </div>
-          <div className="flex items-center gap-1">
-            {!inGroup && active ? (
-              <button
-                type="button"
-                title={voiceStatus?.ready ? t`Call` : t`Set up voice to call`}
-                aria-label={t`Call`}
-                onClick={() => {
-                  if (!voiceStatus?.ready) {
-                    setVoiceOpen(true);
-                    return;
-                  }
-                  setCallOpen(true);
-                }}
-                data-active={callOpen ? "" : undefined}
-                className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
-              >
-                <Phone size={16} strokeWidth={1.6} className="text-foreground/75" />
-              </button>
-            ) : null}
-            {!inGroup ? (
-              <button
-                type="button"
-                title={t`Agent computer`}
-                onClick={() => {
-                  // A panel the run auto-opened is adopted (not closed) by the
-                  // first explicit press — the user is asking to see it.
-                  const adopted = panel === "computer" && panelAutoOpened.current;
-                  panelAutoOpened.current = false;
-                  const next = panel === "computer" && !adopted ? null : "computer";
-                  setPanel(next);
-                  if (next === "computer" && active) {
-                    // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
-                    void refreshThread(active.id).catch(() => undefined);
-                  }
-                }}
-                data-active={panel ? "" : undefined}
-                className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
-              >
-                <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
-              </button>
-            ) : null}
+
+            <div className="flex items-center gap-1.5">
+              {!inGroup ? (
+                <button
+                  type="button"
+                  title={t`Agent computer`}
+                  onClick={() => {
+                    // A panel the run auto-opened is adopted (not closed) by the
+                    // first explicit press — the user is asking to see it.
+                    const adopted = panel === "computer" && panelAutoOpened.current;
+                    panelAutoOpened.current = false;
+                    const next = panel === "computer" && !adopted ? null : "computer";
+                    setPanel(next);
+                    if (next === "computer" && active) {
+                      // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
+                      void refreshThread(active.id).catch(() => undefined);
+                    }
+                  }}
+                  data-active={panel ? "" : undefined}
+                  className={HEADER_BUTTON}
+                >
+                  <Monitor size={18} strokeWidth={1.6} />
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
         <Transcript
@@ -4679,7 +4697,7 @@ const Transcript = memo(function Transcript({
             following.current = false;
           }
         }}
-        className="rk-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-2.5 py-5 sm:px-4 md:px-7 md:py-6"
+        className="rk-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-2.5 pt-[118px] pb-5 sm:px-4 md:px-7 md:pt-[122px] md:pb-6"
       >
         {olderCursor != null ? (
           <button
