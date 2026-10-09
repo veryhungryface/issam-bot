@@ -11,7 +11,7 @@ import { mobileTokens } from "../lib/appearance";
 import { clearDeliveredNotifications, obtainPushToken } from "../lib/shell-push";
 import {
   isLightColor,
-  isShellUrl,
+  opensOutsideShell,
   parseShellMessage,
   shellHomeUrl,
   shellNotificationUrl,
@@ -152,10 +152,13 @@ export default function Shell() {
     if (message) setPageColor(message.themeColor);
   }, []);
 
-  // A bot works on other people's websites. Their links belong in the phone's browser.
+  // A bot works on other people's websites. Their links belong in the phone's browser —
+  // but only when the user actually went there, never when the page embeds them.
   const onRequest = useCallback(
-    (request: { url: string }) => {
-      if (!origin || isShellUrl(origin, request.url)) return true;
+    (request: { url: string; isTopFrame: boolean }) => {
+      if (!opensOutsideShell({ origin, url: request.url, isTopFrame: request.isTopFrame })) {
+        return true;
+      }
       void Linking.openURL(request.url).catch(() => undefined);
       return false;
     },
@@ -200,8 +203,12 @@ export default function Shell() {
         thirdPartyCookiesEnabled
         domStorageEnabled
         javaScriptEnabled
-        allowsBackForwardNavigationGestures
-        pullToRefreshEnabled
+        // The left edge belongs to the bot list, which swipes out from there. iOS would
+        // otherwise read that as its own back gesture and leave the conversation instead.
+        allowsBackForwardNavigationGestures={false}
+        // The page never scrolls as a page, so a rubber-band pull only showed the frame
+        // the app is sitting in, and let go of a reload nobody asked for.
+        bounces={false}
         mediaPlaybackRequiresUserAction={false}
         allowsInlineMediaPlayback
         startInLoadingState

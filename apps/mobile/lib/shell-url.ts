@@ -36,6 +36,39 @@ export function isShellUrl(origin: string, url: string): boolean {
   }
 }
 
+/**
+ * Schemes the phone, not the web view, should deal with. Everything else a page reaches
+ * for — `about:blank` in a frame it is building, a `blob:` it just made — belongs here.
+ */
+const PHONE_SCHEMES = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+/**
+ * Whether a navigation should leave the app for the phone's browser.
+ *
+ * Two things must stay inside that the origin check alone would throw out. An embedded
+ * frame is never a navigation the user asked for: the computer's live screen is a frame
+ * pointing at the provider, and handing it to the browser took the user out of the app to
+ * look at a page that was already on screen. And a URL the phone has no app for — the
+ * blank frame a page builds, the blob it just made — is not a link either.
+ */
+export function opensOutsideShell(input: {
+  origin: string | null | undefined;
+  url: string;
+  /** False for an iframe. iOS asks about those too; Android only asks about the page. */
+  isTopFrame: boolean;
+}): boolean {
+  if (!input.isTopFrame) return false;
+  if (!input.origin) return false;
+  let scheme: string;
+  try {
+    scheme = new URL(input.url).protocol;
+  } catch {
+    return false;
+  }
+  if (!PHONE_SCHEMES.has(scheme)) return false;
+  return !isShellUrl(input.origin, input.url);
+}
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }

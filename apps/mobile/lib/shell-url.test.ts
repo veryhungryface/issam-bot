@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isLightColor,
   isShellUrl,
+  opensOutsideShell,
   parseShellMessage,
   shellHomeUrl,
   shellNotificationUrl,
@@ -39,6 +40,40 @@ describe("shell urls", () => {
     expect(isShellUrl(ORIGIN, `${ORIGIN}/app/bot-1`)).toBe(true);
     expect(isShellUrl(ORIGIN, "https://portal.example/login")).toBe(false);
     expect(isShellUrl(ORIGIN, "not a url")).toBe(false);
+  });
+});
+
+describe("leaving for the phone's browser", () => {
+  const outside = (url: string, isTopFrame = true) =>
+    opensOutsideShell({ origin: ORIGIN, url, isTopFrame });
+
+  it("hands over a link the user tapped to somewhere else", () => {
+    expect(outside("https://portal.example/login")).toBe(true);
+    expect(outside("mailto:teacher@example.com")).toBe(true);
+    expect(outside("tel:+8210000000")).toBe(true);
+  });
+
+  it("keeps our own pages", () => {
+    expect(outside(`${ORIGIN}/app/bot-1`)).toBe(false);
+  });
+
+  it("keeps an embedded frame, however foreign it is", () => {
+    // The computer's live screen is a frame pointing at the provider. Sending it to the
+    // browser took the user out of the app to see a page that was already on screen.
+    expect(outside("https://live.browserbase.example/session/abc", false)).toBe(false);
+    expect(outside(`${ORIGIN}/app/bot-1`, false)).toBe(false);
+  });
+
+  it("keeps what the phone has no app for", () => {
+    for (const url of ["about:blank", "blob:https://x/y", "data:text/html,hi", "not a url"]) {
+      expect(outside(url)).toBe(false);
+    }
+  });
+
+  it("keeps everything until it knows which origin is ours", () => {
+    expect(
+      opensOutsideShell({ origin: null, url: "https://portal.example", isTopFrame: true }),
+    ).toBe(false);
   });
 });
 describe("shell messages", () => {
