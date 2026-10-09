@@ -4,6 +4,7 @@ import {
   dragAxis,
   drawerOffsetPx,
   drawerProgress,
+  drawerTravelPx,
   openingDistance,
   openingSign,
   settlesOpen,
@@ -126,6 +127,37 @@ describe("settlesOpen", () => {
   it("ignores a drift too slow to be a flick", () => {
     expect(settlesOpen({ progress: 0.2, velocity: 0.2 })).toBe(false);
     expect(settlesOpen({ progress: 0.8, velocity: -0.2 })).toBe(true);
+  });
+});
+
+describe("drawerTravelPx", () => {
+  const width = 300;
+
+  it("measures how far out the drawer is, which is how far the content is pushed", () => {
+    expect(drawerTravelPx({ progress: 0, width, edge: "start", rtl: false })).toBe(0);
+    expect(drawerTravelPx({ progress: 0.5, width, edge: "start", rtl: false })).toBe(150);
+    expect(drawerTravelPx({ progress: 1, width, edge: "start", rtl: false })).toBe(300);
+  });
+
+  it("pushes the other way for the other edge and the other writing direction", () => {
+    expect(drawerTravelPx({ progress: 1, width, edge: "start", rtl: true })).toBe(-300);
+    expect(drawerTravelPx({ progress: 1, width, edge: "end", rtl: false })).toBe(-300);
+    expect(drawerTravelPx({ progress: 1, width, edge: "end", rtl: true })).toBe(300);
+  });
+
+  it("stays a whole width apart from the drawer's own offset", () => {
+    // The pair is one measurement seen from two ends: the drawer sits a full width behind
+    // the content it has pushed, whatever the direction.
+    for (const edge of ["start", "end"] as const) {
+      for (const rtl of [false, true]) {
+        for (const progress of [0, 0.3, 1]) {
+          const placement = { progress, width, edge, rtl };
+          expect(drawerTravelPx(placement) - drawerOffsetPx(placement)).toBeCloseTo(
+            width * (edge === "start" ? (rtl ? -1 : 1) : rtl ? 1 : -1),
+          );
+        }
+      }
+    }
   });
 });
 
