@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  Start: "开始",
+  "Tap to start": "轻触屏幕开始",
   "Cloud agent": "云端智能体",
   "Pull request": "拉取请求",
   running: "运行中",
