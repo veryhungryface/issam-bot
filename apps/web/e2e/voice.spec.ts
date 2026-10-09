@@ -7,7 +7,11 @@ test("voice settings connect a key, speak a reply, and open a call", async ({ pa
   await signup(page, `voice-${stamp}@rakazo.test`, "password12", userName);
   await completeOnboarding(page);
 
-  await page.getByRole("button", { name: "Call" }).click();
+  // Calling lives in the menu now; the conversation header is the bot, not a toolbar.
+  const openMenu = () => page.getByRole("button", { name: new RegExp(userName) }).click();
+
+  await openMenu();
+  await page.getByRole("button", { name: "Call", exact: true }).click();
   await expect(page.getByTestId("voice-settings")).toBeVisible();
   await expect(page.getByText("Not configured")).toBeVisible();
   await page.getByRole("button", { name: "Close voice settings" }).click();
@@ -18,7 +22,7 @@ test("voice settings connect a key, speak a reply, and open a call", async ({ pa
   });
   expect(preparedOff.ready).toBe(false);
 
-  await page.getByRole("button", { name: new RegExp(userName) }).click();
+  await openMenu();
   await page.getByRole("button", { name: "Voice", exact: true }).click();
   await expect(page.getByTestId("voice-settings")).toBeVisible();
   await page.getByRole("button", { name: /Scripted/ }).click();
@@ -61,7 +65,8 @@ test("voice settings connect a key, speak a reply, and open a call", async ({ pa
   await speakReply.click();
   await replySpoken;
 
-  await page.getByRole("button", { name: "Call" }).click();
+  await openMenu();
+  await page.getByRole("button", { name: "Call", exact: true }).click();
   await expect(page.getByTestId("call-view")).toBeVisible();
   await expect(page.getByRole("button", { name: "Hang up" })).toBeVisible();
   await page.getByRole("button", { name: "Hang up" }).click();
