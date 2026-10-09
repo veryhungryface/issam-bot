@@ -123,7 +123,7 @@ To rebuild after new artwork, from the repository root:
 
 ```bash
 node scripts/build-icons.mjs apps/mobile/assets/source/mascot.png /tmp/icons
-cp /tmp/icons/{icon,adaptive-icon,splash-icon,notification-icon,monochrome-icon}.png apps/mobile/assets/
+cp /tmp/icons/{icon,adaptive-icon,notification-icon,monochrome-icon}.png apps/mobile/assets/
 cp /tmp/icons/{icon-192,icon-512,apple-touch-icon,favicon-32x32,favicon-16x16}.png apps/web/public/
 ```
 

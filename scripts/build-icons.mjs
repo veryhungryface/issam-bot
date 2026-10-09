@@ -62,19 +62,6 @@ async function card(size, scale, { alpha = false } = {}) {
     .toBuffer();
 }
 
-/** Rounded white card with transparent corners, for the dark splash screen. */
-async function roundedCard(size, scale) {
-  const base = await card(size, scale, { alpha: true });
-  const r = Math.round(size * 0.22);
-  const mask = Buffer.from(
-    `<svg width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${r}" ry="${r}" fill="#fff"/></svg>`,
-  );
-  return sharp(base)
-    .composite([{ input: mask, blend: "dest-in" }])
-    .png()
-    .toBuffer();
-}
-
 /**
  * White silhouette on transparent: what Android tints for the status bar and the themed
  * icon. Drawn rather than traced - at 24dp the mascot's outline (mitts crossing the arms,
@@ -102,7 +89,6 @@ const assets = {
   "icon.png": await card(1024, 0.78),
   // Android adaptive: the outer third can be cropped, so the character stays well inside.
   "adaptive-icon.png": await card(1024, 0.6),
-  "splash-icon.png": await roundedCard(1024, 0.72),
   "notification-icon.png": await silhouette(96, 0.8),
   "monochrome-icon.png": await silhouette(1024, 0.52),
   "icon-512.png": await card(512, 0.78),
