@@ -64,19 +64,6 @@ summary,
   }
 }
 
-/* A phone drawer takes the conversation with it. The distance is the drawer's own width —
-   the same expression its class uses, against the same containing block — so the two edges
-   stay together instead of one sliding over the other. */
-@media (width < 48rem) {
-  .rk-drawer-pushed {
-    transform: translateX(min(calc(100% - 48px), 316px));
-  }
-
-  [dir="rtl"] .rk-drawer-pushed {
-    transform: translateX(calc(-1 * min(calc(100% - 48px), 316px)));
-  }
-}
-
 .rk-scroll::-webkit-scrollbar {
   width: 6px;
 }

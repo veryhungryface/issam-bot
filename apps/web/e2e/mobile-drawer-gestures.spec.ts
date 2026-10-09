@@ -2,10 +2,11 @@ import { expect, type Page, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 /**
- * On a phone both side panes are drawers, and a drawer that only closes through a button
- * is the clearest sign an app is a web page in a frame. Each one follows the thumb, settles
- * where the thumb was heading, and the panel can also be dismissed by tapping the strip of
- * conversation it leaves showing.
+ * On a phone both side panes are drawers, and a drawer that only opens and closes through
+ * a button is the clearest sign an app is a web page in a frame. Each edge owns one: the
+ * left the bot list, the right the bot's computer. They follow the thumb and settle where
+ * the thumb was heading, the conversation stays where it is underneath, and the panel can
+ * also be dismissed by tapping the strip of conversation it leaves showing.
  */
 
 const PHONE = { width: 390, height: 844 };
@@ -24,11 +25,6 @@ async function drag(page: Page, from: { x: number; y: number }, toX: number) {
 async function sidebarLeft(page: Page) {
   const box = await page.getByTestId("bots-sidebar").boundingBox();
   return box?.x ?? Number.NaN;
-}
-
-async function sidebarWidth(page: Page) {
-  const box = await page.getByTestId("bots-sidebar").boundingBox();
-  return box?.width ?? Number.NaN;
 }
 
 async function conversationLeft(page: Page) {
@@ -50,16 +46,13 @@ test("the navigation drawer opens and closes under the thumb", async ({ page }, 
   await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
   await captureScreenshot(page, testInfo, "70-drawer-opened-by-swipe");
 
-  // The conversation went with it: the drawer's own width, edges together, so the two
-  // read as one surface instead of a sheet over a page that did not notice.
-  await expect
-    .poll(async () => Math.round((await conversationLeft(page)) - (await sidebarWidth(page))))
-    .toBe(0);
+  // The conversation stays where it is. The drawer passes over it.
+  expect(Math.round(await conversationLeft(page))).toBe(0);
 
-  // A drag back across the drawer puts it away again, and the conversation comes back.
+  // A drag back across the drawer puts it away again.
   await drag(page, { x: 240, y: 420 }, 10);
   await expect.poll(async () => (await sidebarLeft(page)) < 0).toBe(true);
-  await expect.poll(async () => Math.round(await conversationLeft(page))).toBe(0);
+  expect(Math.round(await conversationLeft(page))).toBe(0);
 
   // A drag that starts in the middle of the conversation is not a drawer gesture.
   await drag(page, { x: 200, y: 420 }, 360);
@@ -68,6 +61,31 @@ test("the navigation drawer opens and closes under the thumb", async ({ page }, 
   // The button still works, because a gesture is an addition, not a replacement.
   await page.getByRole("button", { name: "Open navigation" }).click();
   await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
+});
+
+test("the right edge opens and closes the bot's computer", async ({ page }, testInfo) => {
+  await page.setViewportSize(PHONE);
+  const stamp = Date.now();
+  await signup(page, `panel-swipe-${stamp}@rakazo.test`, "password12", "Panel Swipe");
+  await completeOnboarding(page);
+
+  const panel = page.getByTestId("side-panel");
+  await expect(panel).toHaveAttribute("data-panel", "closed");
+
+  // Pulled out from the right edge, it is the computer — not an empty sheet that fills in
+  // once it lands.
+  await drag(page, { x: PHONE.width - 3, y: 420 }, 60);
+  await expect(panel).toHaveAttribute("data-panel", "computer");
+  await expect.poll(async () => Math.round((await panel.boundingBox())?.x ?? -1)).toBe(48);
+  await captureScreenshot(page, testInfo, "72-computer-opened-by-swipe");
+
+  // Pushed back off its own edge, it goes away.
+  await drag(page, { x: 200, y: 420 }, PHONE.width - 2);
+  await expect(panel).toHaveAttribute("data-panel", "closed");
+
+  // A drag that starts in the middle of the conversation is not a panel gesture.
+  await drag(page, { x: 200, y: 420 }, 30);
+  await expect(panel).toHaveAttribute("data-panel", "closed");
 });
 
 test("the side panel closes by tapping the conversation or swiping it away", async ({
