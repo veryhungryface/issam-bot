@@ -26,6 +26,16 @@ async function sidebarLeft(page: Page) {
   return box?.x ?? Number.NaN;
 }
 
+async function sidebarWidth(page: Page) {
+  const box = await page.getByTestId("bots-sidebar").boundingBox();
+  return box?.width ?? Number.NaN;
+}
+
+async function conversationLeft(page: Page) {
+  const box = await page.getByTestId("conversation").boundingBox();
+  return box?.x ?? Number.NaN;
+}
+
 test("the navigation drawer opens and closes under the thumb", async ({ page }, testInfo) => {
   await page.setViewportSize(PHONE);
   const stamp = Date.now();
@@ -40,9 +50,16 @@ test("the navigation drawer opens and closes under the thumb", async ({ page }, 
   await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
   await captureScreenshot(page, testInfo, "70-drawer-opened-by-swipe");
 
-  // A drag back across the drawer puts it away again.
+  // The conversation went with it: the drawer's own width, edges together, so the two
+  // read as one surface instead of a sheet over a page that did not notice.
+  await expect
+    .poll(async () => Math.round((await conversationLeft(page)) - (await sidebarWidth(page))))
+    .toBe(0);
+
+  // A drag back across the drawer puts it away again, and the conversation comes back.
   await drag(page, { x: 240, y: 420 }, 10);
   await expect.poll(async () => (await sidebarLeft(page)) < 0).toBe(true);
+  await expect.poll(async () => Math.round(await conversationLeft(page))).toBe(0);
 
   // A drag that starts in the middle of the conversation is not a drawer gesture.
   await drag(page, { x: 200, y: 420 }, 360);
@@ -91,10 +108,12 @@ test("a desktop layout keeps its panes still", async ({ page }) => {
 
   const sidebar = page.getByTestId("bots-sidebar");
   const before = await sidebar.boundingBox();
+  const conversationBefore = await conversationLeft(page);
   // The same drag that would open a drawer is just a drag across a column here.
   await drag(page, { x: 3, y: 420 }, 320);
   const after = await sidebar.boundingBox();
   expect(after?.x).toBe(before?.x);
   expect(after?.width).toBe(before?.width);
+  expect(await conversationLeft(page)).toBe(conversationBefore);
   await expect(sidebar).not.toHaveAttribute("data-dragging", "true");
 });

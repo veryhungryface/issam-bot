@@ -9,6 +9,7 @@ import {
   dragAxis,
   drawerOffsetPx,
   drawerProgress,
+  drawerTravelPx,
   openingDistance,
   settlesOpen,
   startsAtEdge,
@@ -51,6 +52,11 @@ export interface DrawerSwipe {
    * no layout.
    */
   offsetPx: number | null;
+  /**
+   * How far the drawer has come out of the edge, in CSS pixels, or null at rest. The
+   * content behind it is pushed by exactly this much, so the two move as one surface.
+   */
+  travelPx: number | null;
   handlers: Pick<
     DOMAttributes<Element>,
     "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel"
@@ -82,7 +88,11 @@ function isRtl(): boolean {
 
 export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
   const drag = useRef<Drag | null>(null);
-  const [moved, setMoved] = useState<{ progress: number; offsetPx: number } | null>(null);
+  const [moved, setMoved] = useState<{
+    progress: number;
+    offsetPx: number;
+    travelPx: number;
+  } | null>(null);
 
   function end(settle: boolean) {
     const active = drag.current;
@@ -152,14 +162,16 @@ export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
       edge: options.edge,
       rtl: active.rtl,
     });
+    const placement = {
+      progress: active.progress,
+      width: active.width,
+      edge: options.edge,
+      rtl: active.rtl,
+    };
     setMoved({
       progress: active.progress,
-      offsetPx: drawerOffsetPx({
-        progress: active.progress,
-        width: active.width,
-        edge: options.edge,
-        rtl: active.rtl,
-      }),
+      offsetPx: drawerOffsetPx(placement),
+      travelPx: drawerTravelPx(placement),
     });
   }
 
@@ -177,6 +189,7 @@ export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
   return {
     progress: moved?.progress ?? null,
     offsetPx: moved?.offsetPx ?? null,
+    travelPx: moved?.travelPx ?? null,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
   };
 }
