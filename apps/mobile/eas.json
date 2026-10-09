@@ -7,18 +7,12 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
-      "channel": "preview",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://issam-bot.vercel.app"
-      }
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
       "environment": "production",
-      "channel": "production",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://issam-bot.vercel.app"
-      }
+      "channel": "production"
     }
   },
   "submit": {

@@ -28,10 +28,18 @@ under *our* account.
 2. **An Expo account** (free). `cd apps/mobile && npx eas login && npx eas init` writes the
    project id into `app.json`. For CI publishing, put an `EXPO_TOKEN` in the repository
    secrets.
-3. **A Firebase project** for Android push (free). Upload its `google-services.json` to EAS
+3. **The server URL, in the EAS environments.** `EXPO_PUBLIC_API_URL` is read from the
+   `preview` and `production` EAS environments — *not* from `eas.json`. A build profile's
+   `env` block would cover builds and silently miss over-the-air updates, which are
+   bundled from the environment alone; an update published without it inlines the
+   localhost fallback and every phone that takes it loses the server. Set it with
+   `npx eas-cli env:set --name EXPO_PUBLIC_API_URL --value https://<domain> --environment
+   preview --environment production --visibility plaintext`. CI refuses to publish an
+   update while either environment is missing it.
+4. **A Firebase project** for Android push (free). Upload its `google-services.json` to EAS
    (`npx eas credentials`, Android → FCM V1). Without it an Android build installs and runs
    but receives no push.
-4. **An Apple Developer Program membership** ($99/year) for iOS. A free Apple ID cannot get
+5. **An Apple Developer Program membership** ($99/year) for iOS. A free Apple ID cannot get
    the push entitlement, so iOS push needs it; EAS then generates the APNs key and the
    provisioning profile for you. Done: the App Store Connect app is `6820551643`, recorded
    as `submit.production.ios.ascAppId`, so a submit no longer asks which app it is.
@@ -41,10 +49,13 @@ under *our* account.
 ```bash
 cd apps/mobile
 
-# Android, no store needed: an installable build you download from the EAS link.
-EXPO_PUBLIC_API_URL=https://<domain> npx eas build --platform android --profile preview
+# Each profile names its EAS environment, which is where the server URL comes from, so
+# none of these needs the variable on the command line.
 
-# iOS (TestFlight). The profile carries EXPO_PUBLIC_API_URL, so neither needs a prefix.
+# Android, no store needed: an installable build you download from the EAS link.
+npx eas-cli build --platform android --profile preview
+
+# iOS (TestFlight).
 npx eas-cli build --platform ios --profile production
 npx eas-cli submit --platform ios --latest
 ```

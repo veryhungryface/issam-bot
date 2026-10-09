@@ -245,6 +245,22 @@ jobs:
       - name: Verify mobile project
         if: steps.ota.outputs.publish == 'true'
         run: pnpm --filter @rakazo/mobile check
+      - name: Require the server URL in both update environments
+        if: steps.ota.outputs.publish == 'true'
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          # An update is bundled from the EAS environment, not from eas.json. Without this
+          # variable the bundle inlines the localhost fallback, and every phone that takes
+          # the update stops being able to reach the server at all.
+          for environment in preview production; do
+            if ! eas env:list "$environment" | grep -q '^EXPO_PUBLIC_API_URL='; then
+              echo "EXPO_PUBLIC_API_URL is missing from the $environment EAS environment." >&2
+              echo "Set it with: eas env:set --name EXPO_PUBLIC_API_URL --value <https url> --environment $environment --visibility plaintext" >&2
+              exit 1
+            fi
+          done
+
       - name: Publish production update
         if: steps.ota.outputs.publish == 'true'
         working-directory: apps/mobile
