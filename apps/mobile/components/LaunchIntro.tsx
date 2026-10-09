@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle, Path } from "react-native-svg";
 import { mobileTokens } from "../lib/appearance";
@@ -34,6 +34,11 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
   const { t } = useI18n();
   const tokens = mobileTokens();
   const leaving = useRef(false);
+  // "Reduce motion" asks for less movement, not for none. The sequence still plays in
+  // order — it just arrives by fading rather than by flying, turning and bobbing, which
+  // is the part that makes people queasy. Freezing the finished picture, which is what
+  // this did before, reads on the phone as an animation that is broken.
+  const [calm, setCalm] = useState(false);
 
   // One value per element, each 0 before its beat and 1 after it. The score decides when.
   const ring = useRef(new Animated.Value(0)).current;
@@ -56,12 +61,7 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
 
     const play = (reduced: boolean) => {
       if (cancelled) return;
-      if (reduced) {
-        // The sequence is the decoration; the screen and its way out are not. Someone who
-        // has asked for less motion gets the finished picture instead of no picture.
-        for (const value of Object.values(values)) value.setValue(1);
-        return;
-      }
+      setCalm(reduced);
       Animated.parallel(
         (Object.keys(values) as (keyof typeof values)[]).map((element) =>
           Animated.sequence([
@@ -69,13 +69,18 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
             Animated.timing(values[element], {
               toValue: 1,
               duration: INTRO_SCORE[element].lasts,
-              easing: element === "mark" ? Easing.out(Easing.back(2)) : Easing.out(Easing.cubic),
+              easing:
+                !reduced && element === "mark"
+                  ? Easing.out(Easing.back(2))
+                  : Easing.out(Easing.cubic),
               useNativeDriver: true,
             }),
           ]),
         ),
       ).start();
 
+      // The bob is the one thing that is pure movement, so it is the one thing dropped.
+      if (reduced) return;
       idle = Animated.loop(
         Animated.sequence([
           Animated.delay(INTRO_SCORE.hint.at),
@@ -118,7 +123,7 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
   }
 
   const sheetOpacity = exit.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-  const sheetScale = exit.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] });
+  const sheetScale = exit.interpolate({ inputRange: [0, 1], outputRange: [1, calm ? 1 : 1.14] });
 
   return (
     <Pressable
@@ -135,9 +140,9 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
               {
                 borderColor: ORANGE,
                 opacity: ring.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.5, 0] }),
-                transform: [
-                  { scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.15, 1.9] }) },
-                ],
+                transform: calm
+                  ? []
+                  : [{ scale: ring.interpolate({ inputRange: [0, 1], outputRange: [0.15, 1.9] }) }],
               },
             ]}
           />
@@ -145,18 +150,20 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
           <Animated.View
             style={{
               opacity: mark,
-              transform: [
-                { scale: mark.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }) },
-                {
-                  rotate: mark.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ["-32deg", "0deg"],
-                  }),
-                },
-                {
-                  translateY: breath.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }),
-                },
-              ],
+              transform: calm
+                ? []
+                : [
+                    { scale: mark.interpolate({ inputRange: [0, 1], outputRange: [0.2, 1] }) },
+                    {
+                      rotate: mark.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["-32deg", "0deg"],
+                      }),
+                    },
+                    {
+                      translateY: breath.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }),
+                    },
+                  ],
             }}
           >
             <Svg width={168} height={168} viewBox="0 0 100 100">
@@ -197,15 +204,17 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
                       inputRange: [0, 0.35 + index * 0.1, 1],
                       outputRange: [0, 0, 1],
                     }),
-                    transform: [
-                      {
-                        translateY: sparks.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [34 + index * 6, 0],
-                        }),
-                      },
-                      { rotate: `${(index - 1) * 14}deg` },
-                    ],
+                    transform: calm
+                      ? [{ rotate: `${(index - 1) * 14}deg` }]
+                      : [
+                          {
+                            translateY: sparks.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [34 + index * 6, 0],
+                            }),
+                          },
+                          { rotate: `${(index - 1) * 14}deg` },
+                        ],
                   },
                 ]}
               />
@@ -218,9 +227,13 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
               {
                 color: tokens.foreground,
                 opacity: word,
-                transform: [
-                  { translateY: word.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
-                ],
+                transform: calm
+                  ? []
+                  : [
+                      {
+                        translateY: word.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }),
+                      },
+                    ],
               },
             ]}
           >
