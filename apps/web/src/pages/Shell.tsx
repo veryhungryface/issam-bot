@@ -149,7 +149,7 @@ import {
   shouldNotifyBrowser,
 } from "../lib/browser-notifications";
 import { loadComputerScreen } from "../lib/computer-screen";
-import { HIDE_MODEL_PICKER } from "../lib/deployment-flags";
+import { HIDE_MODEL_PICKER, VOICE_OUTPUT } from "../lib/deployment-flags";
 import { dictation } from "../lib/dictation";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { screenIframeSandbox as liveViewIframeSandbox } from "../lib/live-view";
@@ -482,6 +482,11 @@ export function ShellPage() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
+  // Speaking replies and calling are hidden in this deployment, so nothing offers them and
+  // a bot still carrying `autoSpeak` from before does not start talking by itself either.
+  // Dictation is not part of this: `voiceStatus.transcribe` comes from the deployment's own
+  // key, not from a voice provider anyone has to connect.
+  const speakAloud = VOICE_OUTPUT && Boolean(voiceStatus?.ready);
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [dictating, setDictating] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
@@ -1153,7 +1158,7 @@ export function ShellPage() {
       autoSpoken.current = lastBot?.id ?? null;
       return;
     }
-    if (callOpen || !active.autoSpeak) {
+    if (!speakAloud || callOpen || !active.autoSpeak) {
       autoSpoken.current = lastBot?.id ?? null;
       return;
     }
@@ -1170,6 +1175,7 @@ export function ShellPage() {
     active?.autoSpeak,
     active?.id,
     callOpen,
+    speakAloud,
   ]);
 
   useEffect(() => {
@@ -3234,7 +3240,7 @@ export function ShellPage() {
                 </span>
                 <Trans>Memory</Trans>
               </Button>
-              {!inGroup && active ? (
+              {VOICE_OUTPUT && !inGroup && active ? (
                 // Calling moved here when the conversation header lost its bar. It is a
                 // whole mode, not a glance at a panel, so it belongs with the settings
                 // rather than as a third circle over the messages.
@@ -3254,17 +3260,19 @@ export function ShellPage() {
                   <Trans>Call</Trans>
                 </Button>
               ) : null}
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setVoiceOpen(true);
-                }}
-              >
-                <Volume2 size={16} strokeWidth={1.7} className="text-muted-foreground" />
-                <Trans>Voice</Trans>
-              </Button>
+              {VOICE_OUTPUT ? (
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start font-normal"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setVoiceOpen(true);
+                  }}
+                >
+                  <Volume2 size={16} strokeWidth={1.7} className="text-muted-foreground" />
+                  <Trans>Voice</Trans>
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 className="w-full justify-start font-normal"
@@ -3480,7 +3488,7 @@ export function ShellPage() {
           onRefresh={refreshActiveThread}
           onBotChanged={refreshBots}
           onAddRoutine={addSkillRoutine}
-          voiceReady={Boolean(voiceStatus?.ready)}
+          voiceReady={speakAloud}
           speakingMessageId={speakingMessageId}
           onSpeak={speakMessage}
           takeoverWaiting={snapshot?.run?.status === "waiting_takeover"}
