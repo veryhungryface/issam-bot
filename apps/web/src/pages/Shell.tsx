@@ -57,7 +57,6 @@ import {
   userVisibleMessages,
 } from "@rakazo/core";
 import {
-  AvatarStyleProvider,
   BotAvatar,
   Button,
   cn,
@@ -4207,17 +4206,12 @@ export function ShellPage() {
             email={session.data?.user.email}
             usage={usage}
             focusUsage={accountSettingsFocusUsage}
-            avatarStyle={bootstrapMe?.avatarStyle ?? "robot"}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
             sandboxProvider={bootstrapMe?.sandboxProvider}
             messagingEnabled={messagingSurfaceEnabled}
             onOpenMessaging={() => {
               setAccountSettingsOpen(false);
               setMessagingSettingsOpen(true);
-            }}
-            onAvatarStyleChange={async (avatarStyle) => {
-              const nextMe = await rpc.preferences.update({ avatarStyle });
-              setBootstrapMe(nextMe);
             }}
             onClose={() => {
               setAccountSettingsOpen(false);
@@ -4511,9 +4505,7 @@ export function ShellPage() {
     </div>
   );
 
-  return (
-    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "robot"}>{shell}</AvatarStyleProvider>
-  );
+  return shell;
 }
 
 const Transcript = memo(function Transcript({
