@@ -3869,6 +3869,11 @@ export function ShellPage() {
                   await rpc.bots.update({ botId: active.id, ...patch });
                   await refreshBots();
                 }}
+                onLook={async (look) => {
+                  await rpc.bots.update({ botId: active.id, ...look });
+                  // Which is what puts the new face in the list and over the conversation.
+                  await refreshBots();
+                }}
                 onExport={async () => {
                   const manifest = await rpc.export.bot({ botId: active.id });
                   const blob = new Blob([JSON.stringify(manifest, null, 2)], {

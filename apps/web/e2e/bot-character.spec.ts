@@ -19,6 +19,10 @@ async function openSettings(page: Page) {
  * Choosing a character used to look like it worked and then not stick: the panel you chose
  * it in kept it, and every other place a bot is drawn — the list, the header — went on
  * deriving a character from the bot's id, because those call sites only ever had the id.
+ *
+ * It also used to need Save, at the foot of a long panel, which is a scroll away from a
+ * face that already looks chosen. A look is finished the moment it is picked, so picking
+ * it is what saves it.
  */
 test("a chosen character follows the bot out of the panel", async ({ page }, testInfo) => {
   const stamp = Date.now();
@@ -32,13 +36,9 @@ test("a chosen character follows the bot out of the panel", async ({ page }, tes
     const wanted = await swatch.locator("svg.rakazo-avatar").getAttribute("data-body");
     expect(wanted).toBeTruthy();
     await swatch.click();
-    await page
-      .getByTestId("bot-settings")
-      .getByRole("button", { name: "Save", exact: true })
-      .click();
 
-    // The list beside the panel, and the bot floating over the conversation — not the
-    // preview inside the panel, which worked all along.
+    // No Save: the list beside the panel, and the bot floating over the conversation —
+    // not just the preview inside the panel, which worked all along.
     await expect(sidebarFace(page)).toHaveAttribute("data-body", String(wanted));
     await expect(page.locator("main").locator("svg.rakazo-avatar").first()).toHaveAttribute(
       "data-body",
@@ -53,6 +53,17 @@ test("a chosen character follows the bot out of the panel", async ({ page }, tes
   // And it is still there on the next visit, rather than living in the panel's state.
   await page.reload();
   await expect(sidebarFace(page)).toHaveAttribute("data-body", String(seen[1]));
+
+  // A colour is the same kind of choice and keeps itself the same way. The body is drawn
+  // in it, so the fill of the sidebar's avatar is what to watch.
+  const bodyFill = () => sidebarFace(page).locator("path[fill]").first().getAttribute("fill");
+  const wasFill = await bodyFill();
+  await openSettings(page);
+  await page.getByRole("radio", { name: "Color 4" }).check();
+  await expect.poll(bodyFill).not.toBe(wasFill);
+  const chosenFill = await bodyFill();
+  await page.reload();
+  await expect.poll(bodyFill).toBe(chosenFill);
 });
 
 /**
