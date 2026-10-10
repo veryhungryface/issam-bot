@@ -28,7 +28,7 @@ import {
   Toggle,
 } from "@rakazo/ui-web";
 import { X } from "lucide-react";
-import { lazy, Suspense, useEffect, useId, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { SavedLoginsSection } from "../../components/SavedLoginsSection";
 import { HIDE_MODEL_PICKER, VOICE_OUTPUT } from "../../lib/deployment-flags";
 import { rpc } from "../../lib/rpc";
@@ -190,6 +190,7 @@ export function BotSettings({
   memoryProviderConfigured,
   onSkillsChange,
   onSave,
+  onLook,
   onExport,
   onClear,
 }: {
@@ -216,6 +217,16 @@ export function BotSettings({
     modelId?: string | null;
     thinkingLevel?: ThinkingLevel | null;
   }) => Promise<void>;
+  /**
+   * A look chosen is a look saved. Everything else here is typed and wants a moment to be
+   * finished; a face is finished the moment it is picked.
+   */
+  onLook: (patch: {
+    color: string;
+    avatarBody: number | null;
+    avatarFace: number | null;
+    avatarAccessory: number | null;
+  }) => Promise<void>;
   onExport: () => Promise<void>;
   onClear: () => void;
 }) {
@@ -231,6 +242,9 @@ export function BotSettings({
     face: bot.avatarFace,
     accessory: bot.avatarAccessory,
   });
+  // Saves are sent one after another, so three quick taps land in the order they were made
+  // rather than in the order the network happens to finish them.
+  const looksSaving = useRef<Promise<unknown>>(Promise.resolve());
   const [computerMode, setComputerMode] = useState(bot.computerMode);
   const [memoryScope, setMemoryScope] = useState(bot.memoryScope);
   const [autoSpeak, setAutoSpeak] = useState(bot.autoSpeak);
@@ -361,6 +375,38 @@ export function BotSettings({
     </NativeSelect>
   );
 
+  /**
+   * Picking a face, an expression, an accessory or a colour saves it there and then.
+   *
+   * The Save button is at the foot of a long panel, so a chosen face used to be a scroll
+   * away from being real — and it looked chosen either way, which is the worst of both.
+   * The written fields still wait for Save, because half a sentence is not a thing anyone
+   * means to keep.
+   */
+  function chooseLook(next: { color?: string; character?: AvatarChoice }) {
+    const was = { color, character };
+    const nextColor = next.color ?? color;
+    const nextCharacter = next.character ?? character;
+    setColor(nextColor);
+    setCharacter(nextCharacter);
+    setError(null);
+    looksSaving.current = looksSaving.current
+      .then(() =>
+        onLook({
+          color: nextColor,
+          avatarBody: nextCharacter.body ?? null,
+          avatarFace: nextCharacter.face ?? null,
+          avatarAccessory: nextCharacter.accessory ?? null,
+        }),
+      )
+      .catch((err) => {
+        // Put it back rather than leave the panel wearing something the bot is not.
+        setColor(was.color);
+        setCharacter(was.character);
+        setError(err instanceof Error ? err.message : t`Could not save`);
+      });
+  }
+
   return (
     <div data-testid="bot-settings">
       <div className="flex justify-center">
@@ -373,7 +419,12 @@ export function BotSettings({
         />
       </div>
 
-      <CharacterPicker botId={bot.id} color={color} character={character} onChange={setCharacter} />
+      <CharacterPicker
+        botId={bot.id}
+        color={color}
+        character={character}
+        onChange={(next) => chooseLook({ character: next })}
+      />
       <label htmlFor={`${ids}-name`} className="mt-6 block text-[14px] text-muted-foreground">
         <Trans>Name</Trans>
         <Input
@@ -420,7 +471,7 @@ export function BotSettings({
               checked={color === option}
               aria-label={t`Color ${index + 1}`}
               style={{ backgroundColor: option }}
-              onChange={() => setColor(option)}
+              onChange={() => chooseLook({ color: option })}
             />
           ))}
         </div>
