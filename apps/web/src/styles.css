@@ -53,11 +53,31 @@ summary,
   -webkit-touch-callout: none;
 }
 
+/* A finger on a control is pressing it or holding it for a menu; it is never selecting the
+   control's label. iOS runs its own long press alongside ours, and anything selectable
+   under the finger ends up highlighted — with the handles dragged across the menu that
+   just opened over it. Words that are there to be read stay selectable, here and on every
+   pointer that can hover. */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="option"],
+  [role="menuitem"],
+  [role="menuitemcheckbox"],
+  [role="menuitemradio"] {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 /* A surface whose long press belongs to the app. On a phone the menu a hold opens is the
    only way to reach what a message or a bot can do, so iOS must not raise its own callout
-   or start selecting the words under the finger first. "Select text" in that menu hands
-   selection back for one message, which is what data-selecting marks; a pointer with a
-   hover state never loses it, because there the actions are a rail away. */
+   or start selecting the words under the finger first — a selection started under a hold
+   goes on to grab whatever the menu opens over, handles and all. "Select text" in that
+   menu hands selection back for one message, which is what data-selecting marks; a
+   pointer with a hover state never loses it, because there the actions are a rail away. */
 .long-press {
   -webkit-touch-callout: none;
 }
