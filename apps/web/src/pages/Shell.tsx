@@ -57,14 +57,12 @@ import {
   userVisibleMessages,
 } from "@rakazo/core";
 import {
-  BotAvatar,
   Button,
   cn,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  GroupAvatar,
   type GroupAvatarMember,
   InputGroup,
   InputGroupAddon,
@@ -123,6 +121,7 @@ import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph, CollaborationMarker } from "../components/ai/CollaborationMarker";
 import { BrowserLoginCard } from "../components/BrowserLoginCard";
+import { BotFace, BotLooksProvider, GroupFace } from "../components/bot-face";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerBootProgress } from "../components/ComputerBootProgress";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
@@ -2693,7 +2692,16 @@ export function ShellPage() {
     .slice(0, 2)
     .toUpperCase();
 
+  // Every screen under the shell draws a bot from this one list, so a look chosen in the
+  // settings panel lands in the sidebar, the header and a mention chip at the same moment.
+  const dressedBots = [...bots, ...archivedBots];
+
   const shell = (
+    // How the phone's layers stack, since three of them overlap the same screen:
+    // the conversation and what it holds (≤ 20) under its composer (30), under the side
+    // panel and its scrim (30, and later in the document so it wins the tie), under the
+    // bots drawer's scrim (40) and the drawer itself (50). Desktop lays the same regions
+    // out side by side, where none of this applies.
     <div
       data-testid="shell-root"
       data-ready={shellReady}
@@ -2720,7 +2728,7 @@ export function ShellPage() {
           onClick={() => setMobileSidebarOpen(false)}
           // The dimming tracks the drawer, so a half-open drawer looks half-open.
           style={sidebarSwipe.progress === null ? undefined : { opacity: sidebarSwipe.progress }}
-          className="absolute inset-y-0 end-0 start-[min(calc(100%-48px),316px)] z-30 bg-overlay md:hidden"
+          className="absolute inset-y-0 end-0 start-[min(calc(100%-48px),316px)] z-40 bg-overlay md:hidden"
         />
       ) : null}
       <aside
@@ -2736,7 +2744,7 @@ export function ShellPage() {
             ? undefined
             : { transform: `translateX(${sidebarSwipe.offsetPx}px)`, transition: "none" }
         }
-        className={`absolute inset-y-0 start-0 z-40 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,width,opacity] md:static md:z-auto md:translate-x-0 ${
+        className={`absolute inset-y-0 start-0 z-50 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,width,opacity] md:static md:z-auto md:translate-x-0 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
         } ${
           botsSidebarCollapsed
@@ -2973,14 +2981,14 @@ export function ShellPage() {
                           }}
                         >
                           {item.kind === "bot" ? (
-                            <BotAvatar
+                            <BotFace
                               color={item.chat.color}
-                              identity={item.chat.id}
+                              botId={item.chat.id}
                               size={38}
                               status={item.chat.status}
                             />
                           ) : (
-                            <GroupAvatar
+                            <GroupFace
                               members={
                                 item.chat.id === activeSnapshot?.groupId
                                   ? (activeSnapshot.members ?? item.chat.members)
@@ -3078,12 +3086,7 @@ export function ShellPage() {
                 <>
                   {archivedBots.map((bot) => (
                     <div key={bot.id} className="flex items-center gap-2 rounded-lg px-2.5 py-2">
-                      <BotAvatar
-                        color={bot.color}
-                        identity={bot.id}
-                        size={28}
-                        status={bot.status}
-                      />
+                      <BotFace color={bot.color} botId={bot.id} size={28} status={bot.status} />
                       <span
                         className="min-w-0 flex-1 truncate text-[14px] text-foreground/75"
                         dir="auto"
@@ -3112,7 +3115,7 @@ export function ShellPage() {
                   ))}
                   {archivedGroups.map((group) => (
                     <div key={group.id} className="flex items-center gap-2 rounded-lg px-2.5 py-2">
-                      <GroupAvatar members={group.members} size={28} />
+                      <GroupFace members={group.members} size={28} />
                       <span
                         className="min-w-0 flex-1 truncate text-[14px] text-foreground/75"
                         dir="auto"
@@ -3393,17 +3396,12 @@ export function ShellPage() {
               className="app-no-drag pointer-events-auto absolute left-1/2 top-2 flex max-w-[58%] -translate-x-1/2 flex-col items-center gap-1.5"
             >
               {inGroup ? (
-                <GroupAvatar
+                <GroupFace
                   members={activeSnapshot?.members ?? activeGroup?.members ?? []}
                   size={52}
                 />
               ) : active ? (
-                <BotAvatar
-                  color={active.color}
-                  identity={active.id}
-                  size={52}
-                  status={active.status}
-                />
+                <BotFace color={active.color} botId={active.id} size={52} status={active.status} />
               ) : null}
               <span
                 className="max-w-full truncate rounded-full bg-card/80 px-3 py-1 text-[13.5px] font-medium text-foreground backdrop-blur-sm"
@@ -3546,7 +3544,10 @@ export function ShellPage() {
           style={
             sidePanelSwipe.progress === null ? undefined : { opacity: sidePanelSwipe.progress }
           }
-          className="absolute inset-y-0 start-0 end-[min(calc(100%-48px),384px)] z-10 bg-overlay md:hidden"
+          // z-30, like the panel it belongs to: a phone's composer is z-30 too, and a
+          // scrim that sits under it leaves the one strip of screen where a tap does not
+          // dismiss the panel.
+          className="absolute inset-y-0 start-0 end-[min(calc(100%-48px),384px)] z-30 bg-overlay md:hidden"
         />
       ) : null}
       <aside
@@ -3557,7 +3558,11 @@ export function ShellPage() {
         // A shut panel keeps its width and sits off the edge instead of collapsing to
         // nothing, so a drag that pulls it out has a width to measure from the first move.
         // A desktop column still opens and closes by width, which is what can be resized.
-        className={`absolute inset-y-0 end-0 z-20 flex min-h-0 w-[calc(100%-48px)] max-w-[384px] shrink-0 flex-col overflow-hidden border-s border-sidebar-border bg-background md:relative md:max-w-none ${
+        // On a phone this panel floats over the conversation, so it has to clear the
+        // composer (z-30) — at z-20 the message box covered the bottom of the panel, which
+        // is where Save sits. It ties with the composer and wins on document order, the
+        // same way the bots sidebar's scrim already does.
+        className={`absolute inset-y-0 end-0 z-30 flex min-h-0 w-[calc(100%-48px)] max-w-[384px] shrink-0 flex-col overflow-hidden border-s border-sidebar-border bg-background md:relative md:max-w-none ${
           panelDragActive ? "" : "transition-[width,transform] duration-150 ease-out"
         } ${
           sidePanelOpen
@@ -4284,12 +4289,7 @@ export function ShellPage() {
             className="flex items-center justify-between gap-4 border-b border-sidebar-border px-[18px] py-3.5"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <BotAvatar
-                color={active.color}
-                identity={active.id}
-                size={28}
-                status={active.status}
-              />
+              <BotFace color={active.color} botId={active.id} size={28} status={active.status} />
               {recordingSkill ? (
                 <TeachRecordingChrome
                   recording={recordingSkill}
@@ -4505,7 +4505,7 @@ export function ShellPage() {
     </div>
   );
 
-  return shell;
+  return <BotLooksProvider bots={dressedBots}>{shell}</BotLooksProvider>;
 }
 
 const Transcript = memo(function Transcript({
@@ -5515,7 +5515,7 @@ function MentionOptionIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return <BotFace color={mention.color ?? FALLBACK_BOT_COLOR} botId={mention.id} size={16} />;
 }
 
 function MentionChipIcon({ mention }: { mention: ComposerMention }) {
@@ -5532,7 +5532,7 @@ function MentionChipIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return <BotFace color={mention.color ?? FALLBACK_BOT_COLOR} botId={mention.id} size={16} />;
 }
 
 function previewMessageText(message: ThreadMessage): string {

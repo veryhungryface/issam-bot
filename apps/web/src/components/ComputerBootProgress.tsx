@@ -1,6 +1,6 @@
 import { Trans } from "@lingui/react/macro";
-import { BotAvatar } from "@rakazo/ui-web";
 import { useEffect, useState } from "react";
+import { BotFace } from "./bot-face.js";
 
 /**
  * Booting a cloud browser takes ten seconds or more (session, context, page restore).
@@ -50,7 +50,7 @@ export function ComputerBootProgress({
           style={{ animationDelay: "-1.1s" }}
         />
         {botId ? (
-          <BotAvatar color={botColor ?? "#5B8DEF"} identity={botId} size={56} />
+          <BotFace color={botColor ?? "#5B8DEF"} botId={botId} size={56} />
         ) : (
           <span className="h-14 w-14 rounded-full bg-accent" />
         )}

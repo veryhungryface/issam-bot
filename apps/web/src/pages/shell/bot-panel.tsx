@@ -688,9 +688,11 @@ function CharacterPicker({
   onChange: (next: AvatarChoice) => void;
 }) {
   const { t } = useLingui();
+  // The rows are named for what you are looking at, not for the column they write to:
+  // the body is the outline of the face, and the face is the expression on it.
   const racks = [
-    { key: "body" as const, label: t`Body`, count: AVATAR_BODIES.length },
-    { key: "face" as const, label: t`Face`, count: AVATAR_FACES.length },
+    { key: "body" as const, label: t`Face`, count: AVATAR_BODIES.length },
+    { key: "face" as const, label: t`Expression`, count: AVATAR_FACES.length },
     { key: "accessory" as const, label: t`Accessory`, count: AVATAR_ACCESSORIES.length },
   ];
 

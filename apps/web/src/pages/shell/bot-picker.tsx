@@ -1,7 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot } from "@rakazo/contracts";
 import {
-  BotAvatar,
   Command,
   CommandEmpty,
   CommandGroup,
@@ -11,6 +10,7 @@ import {
 } from "@rakazo/ui-web";
 import { Lock, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { BotFace } from "../../components/bot-face.js";
 
 export function BotCreatePicker({
   bots,
@@ -78,7 +78,7 @@ export function BotCreatePicker({
                 onSelect={() => onOpenBot(bot.id)}
                 className="gap-2"
               >
-                <BotAvatar color={bot.color} identity={bot.id} size={22} status={bot.status} />
+                <BotFace color={bot.color} botId={bot.id} size={22} status={bot.status} />
                 <span className="min-w-0 flex-1 truncate">{bot.name}</span>
               </CommandItem>
             ))}
