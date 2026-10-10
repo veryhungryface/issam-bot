@@ -198,8 +198,12 @@ export function useDrawerSwipe(options: DrawerSwipeOptions): DrawerSwipe {
 
   function onPointerCancel(event: ReactPointerEvent<Element>) {
     if (drag.current && event.pointerId !== drag.current.pointerId) return;
-    // A cancelled drag never happened: the drawer returns to the state it was already in.
-    end(false);
+    // Something took the pointer away mid-drag: the browser deciding the gesture was a
+    // scroll after all, a system gesture, a second finger. A drawer already halfway out
+    // and moving finishes where the hand was taking it, rather than snapping back as if
+    // the drag had never happened — which is what made it feel like the swipe dropped.
+    // A drag that never became the drawer's is still simply forgotten.
+    end(true);
   }
 
   return {

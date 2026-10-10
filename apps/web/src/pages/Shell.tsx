@@ -3408,6 +3408,30 @@ export function ShellPage() {
         inert={mobileSidebarOpen}
         className="relative flex min-w-0 flex-1 flex-col bg-background"
       >
+        {/* Where a drawer is pulled from.
+            `touch-action: none` is the whole point: the browser decides for itself whether
+            a touch is a scroll, and with `pan-y` it takes the gesture back the moment the
+            finger wanders off the horizontal — mid-drag, with the drawer already following
+            the hand, which is why the smallest wobble made it drop. A touch that starts in
+            this strip is never a scroll, however the finger moves afterwards, because that
+            is settled when the finger lands and not revisited. The strips are the width of
+            the edge they serve, invisible, only on a phone, and only while the drawer they
+            belong to is shut; they sit under the header and the composer, so nothing that
+            was tappable there stops being tappable. */}
+        {!desktopLayout && !mobileSidebarOpen && !sidePanelOpen ? (
+          <div
+            aria-hidden="true"
+            data-testid="edge-grab-start"
+            className="absolute inset-y-0 start-0 z-10 w-6 touch-none md:hidden"
+          />
+        ) : null}
+        {!desktopLayout && !mobileSidebarOpen && !sidePanelOpen && canSwipeOpenComputer ? (
+          <div
+            aria-hidden="true"
+            data-testid="edge-grab-end"
+            className="absolute inset-y-0 end-0 z-10 w-6 touch-none md:hidden"
+          />
+        ) : null}
         {/* The bot floats over its own conversation instead of sitting on a bar. The
             messages run underneath, dimmed by the scrim, so the only thing pinned to the
             top of the screen is who you are talking to. */}
