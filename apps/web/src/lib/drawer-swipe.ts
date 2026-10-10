@@ -15,9 +15,13 @@
 /** Which edge of the viewport the drawer is anchored to, in writing-direction terms. */
 export type DrawerEdge = "start" | "end";
 
-/** A drag counts as the drawer's only once it is clearly sideways — below this it could
+/** A drag counts as the drawer's only once it has travelled this far — below this it could
  * still become a scroll, and stealing it would make lists feel sticky. */
 export const DRAG_AXIS_SLOP_PX = 10;
+
+/** How much steeper than sideways a drag has to be before the drawer hands it back as a
+ * scroll. Between the two answers the drag is neither: see `dragAxis`. */
+export const VERTICAL_DOMINANCE = 2;
 
 /** How close to the viewport edge a drag must begin to pull a closed drawer out. Matches
  * the system back-gesture zone closely enough to feel familiar without fighting it. */
@@ -40,10 +44,21 @@ function clamp(value: number, low: number, high: number): number {
  *
  * "undecided" is not a failure: it is the state where the gesture still belongs to
  * whatever was under the finger, and the drawer must not claim it yet.
+ *
+ * A thumb does not travel in a straight line. It leaves the edge of the screen on an arc,
+ * so the first movement of an ordinary drawer swipe is often as far up or down as it is
+ * sideways. Answering "vertical" there — and a drag answered once is answered for good —
+ * is what made the drawer ignore every swipe that was not dead level. So the two answers
+ * no longer share one boundary: sideways travel that matches the vertical claims the
+ * gesture, vertical travel twice the sideways hands it back, and in between the drag stays
+ * open and keeps watching, which costs nothing because it has claimed nothing.
  */
 export function dragAxis(dx: number, dy: number, slop: number = DRAG_AXIS_SLOP_PX): DragAxis {
-  if (Math.abs(dx) < slop && Math.abs(dy) < slop) return "undecided";
-  return Math.abs(dx) >= Math.abs(dy) ? "horizontal" : "vertical";
+  const across = Math.abs(dx);
+  const down = Math.abs(dy);
+  if (across >= slop && across >= down) return "horizontal";
+  if (down >= slop && down >= across * VERTICAL_DOMINANCE) return "vertical";
+  return "undecided";
 }
 
 /** +1 when opening the drawer moves the pointer right, -1 when it moves left. */

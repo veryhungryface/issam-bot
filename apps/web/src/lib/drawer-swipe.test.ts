@@ -24,6 +24,25 @@ describe("dragAxis", () => {
     expect(dragAxis(12, -40)).toBe("vertical");
   });
 
+  it("keeps watching a drag that is neither, rather than writing it off as a scroll", () => {
+    // The arc a thumb makes as it leaves the edge of the screen: at the first movement it
+    // has gone as far down as across. The old rule answered "vertical" here and the answer
+    // was final, which is how a swipe only had to be slightly off level to be ignored.
+    expect(dragAxis(12, 16)).toBe("undecided");
+    expect(dragAxis(12, -16)).toBe("undecided");
+    expect(dragAxis(-12, 16)).toBe("undecided");
+  });
+
+  it("claims the same drag two samples later, once the sideways travel catches up", () => {
+    expect(dragAxis(20, 16)).toBe("horizontal");
+  });
+
+  it("still hands back a drag that is clearly going up or down", () => {
+    // Twice as far down as across: nothing a drawer swipe does, everything a scroll does.
+    expect(dragAxis(6, 14)).toBe("vertical");
+    expect(dragAxis(0, 12)).toBe("vertical");
+  });
+
   it("treats an exactly diagonal drag as the drawer's", () => {
     // Ties go sideways: a drawer that ignores them feels unresponsive, while a list that
     // ignores them does not, because the next move resolves the ambiguity anyway.

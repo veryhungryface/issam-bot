@@ -63,6 +63,79 @@ test("the navigation drawer opens and closes under the thumb", async ({ page }, 
   await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
 });
 
+/**
+ * Two things a swipe has to do that watching only the end of it never checked.
+ *
+ * The drawer used to appear fully open the moment the drag finished rather than coming out
+ * from under the thumb, because its resting position is a `translate` and the drag was a
+ * `transform`: the two add up, so a drawer dragged halfway sat a full width off screen the
+ * whole way. And a swipe only had to leave the edge on the slant a thumb naturally makes
+ * for the drawer to decide it was a scroll and let go of it for good.
+ */
+test("the drawer comes out from under the thumb, not after it", async ({ page }, testInfo) => {
+  await page.setViewportSize(PHONE);
+  const stamp = Date.now();
+  await signup(page, `drawer-tracks-${stamp}@rakazo.test`, "password12", "Drawer Tracks");
+  await completeOnboarding(page);
+
+  const sidebar = page.getByTestId("bots-sidebar");
+  await page.mouse.move(3, 420);
+  await page.mouse.down();
+  for (const x of [20, 60, 100, 140, 180, 200]) await page.mouse.move(x, 420);
+
+  // Still mid-drag: the drawer is partly on screen, with its leading edge at the thumb.
+  await expect(sidebar).toHaveAttribute("data-dragging", "true");
+  const box = await sidebar.boundingBox();
+  const left = box?.x ?? Number.NaN;
+  const width = box?.width ?? 0;
+  expect(left).toBeGreaterThan(-width);
+  expect(left).toBeLessThan(0);
+  expect(Math.abs(left + width - 200)).toBeLessThanOrEqual(12);
+  await captureScreenshot(page, testInfo, "73-drawer-halfway-out");
+
+  await page.mouse.move(330, 420);
+  await page.mouse.up();
+  await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
+});
+
+test("a swipe that drifts up or down still opens the drawer", async ({ page }) => {
+  await page.setViewportSize(PHONE);
+  const stamp = Date.now();
+  await signup(page, `drawer-slant-${stamp}@rakazo.test`, "password12", "Drawer Slant");
+  await completeOnboarding(page);
+
+  // The thumb leaves the edge on an arc: its first movement is further down than across,
+  // and the swipe straightens out from there.
+  await page.mouse.move(4, 400);
+  await page.mouse.down();
+  for (const [x, y] of [
+    [16, 416],
+    [44, 430],
+    [120, 438],
+    [220, 442],
+    [330, 444],
+  ] as const) {
+    await page.mouse.move(x, y);
+  }
+  await page.mouse.up();
+  await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
+
+  // A drag straight down the same edge is still a scroll, not a drawer.
+  await page.getByRole("button", { name: "Close navigation" }).click();
+  await expect.poll(async () => (await sidebarLeft(page)) < 0).toBe(true);
+  await page.mouse.move(4, 200);
+  await page.mouse.down();
+  for (const [x, y] of [
+    [10, 240],
+    [14, 320],
+    [18, 420],
+  ] as const) {
+    await page.mouse.move(x, y);
+  }
+  await page.mouse.up();
+  await expect.poll(async () => (await sidebarLeft(page)) < 0).toBe(true);
+});
+
 test("the right edge opens and closes the bot's computer", async ({ page }, testInfo) => {
   await page.setViewportSize(PHONE);
   const stamp = Date.now();
