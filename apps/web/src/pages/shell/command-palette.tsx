@@ -3,7 +3,6 @@ import { Trans } from "@lingui/react/macro";
 import type { Bot } from "@rakazo/contracts";
 import {
   Badge,
-  BotAvatar,
   Command,
   CommandDialog,
   CommandEmpty,
@@ -15,6 +14,7 @@ import {
   Kbd,
 } from "@rakazo/ui-web";
 import { useEffect, useMemo, useState } from "react";
+import { BotFace } from "../../components/bot-face.js";
 
 function isApplePlatform() {
   if (typeof navigator === "undefined") return false;
@@ -122,7 +122,7 @@ export function CommandPalette({
                   }}
                   className="items-center gap-3 rounded-xl! px-2.5 py-2.5"
                 >
-                  <BotAvatar color={bot.color} identity={bot.id} size={32} status={bot.status} />
+                  <BotFace color={bot.color} botId={bot.id} size={32} status={bot.status} />
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-medium text-foreground" dir="auto">

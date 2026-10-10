@@ -510,3 +510,23 @@ export function avatarCharacter(seed: number, choice: AvatarChoice = {}): Avatar
     accessory: within(choice.accessory, AVATAR_ACCESSORIES.length, 0),
   };
 }
+
+/** The three columns a bot carries in the database. */
+export interface AvatarColumns {
+  avatarBody?: number | null;
+  avatarFace?: number | null;
+  avatarAccessory?: number | null;
+}
+
+/**
+ * What a stored bot is wearing, in the shape the renderer takes.
+ *
+ * The columns and the choice are deliberately named apart — a row is a record, a choice is
+ * an argument — so this is the one place the two meet. Every screen that draws a bot goes
+ * through here; the alternative is what happened before, where the settings panel read the
+ * columns and nothing else did, so a bot you had dressed still turned up undressed in the
+ * list beside it.
+ */
+export function avatarChoiceOf(bot: AvatarColumns): AvatarChoice {
+  return { body: bot.avatarBody, face: bot.avatarFace, accessory: bot.avatarAccessory };
+}

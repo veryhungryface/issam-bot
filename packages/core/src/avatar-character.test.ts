@@ -5,6 +5,7 @@ import {
   AVATAR_FACES,
   type AvatarMark,
   avatarCharacter,
+  avatarChoiceOf,
 } from "./avatar-character.js";
 import { avatarIdentitySeed } from "./avatar-shape.js";
 
@@ -168,3 +169,24 @@ function markDepth(mark: AvatarMark): number {
   if (!start) throw new Error(`mark does not start with an absolute move: ${mark.d}`);
   return Number(start[2]);
 }
+
+describe("avatarChoiceOf", () => {
+  it("carries a dressed bot's columns through to the renderer", () => {
+    const choice = avatarChoiceOf({ avatarBody: 2, avatarFace: 5, avatarAccessory: 3 });
+    expect(choice).toEqual({ body: 2, face: 5, accessory: 3 });
+    const character = avatarCharacter(1, choice);
+    expect(character).toEqual({ body: 2, face: 5, accessory: 3 });
+  });
+
+  it("leaves an undressed bot to its id", () => {
+    const choice = avatarChoiceOf({ avatarBody: null, avatarFace: null, avatarAccessory: null });
+    expect(avatarCharacter(9, choice)).toEqual(avatarCharacter(9));
+  });
+
+  it("dresses the pieces that were chosen and derives the rest", () => {
+    const choice = avatarChoiceOf({ avatarBody: null, avatarFace: 4, avatarAccessory: null });
+    const character = avatarCharacter(9, choice);
+    expect(character.face).toBe(4);
+    expect(character.body).toBe(avatarCharacter(9).body);
+  });
+});

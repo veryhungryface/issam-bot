@@ -1,3 +1,4 @@
+import type { AvatarChoice } from "@rakazo/core";
 import { type CSSProperties, memo } from "react";
 import { BotAvatar } from "./bot-avatar.js";
 import { cn } from "./lib/utils.js";
@@ -7,6 +8,8 @@ export interface GroupAvatarMember {
   name?: string;
   color: string;
   status?: string;
+  /** What this member was dressed in. Left out, the renderer derives one from the id. */
+  character?: AvatarChoice;
 }
 
 export interface GroupAvatarProps {
@@ -57,6 +60,7 @@ export const GroupAvatar = memo(function GroupAvatar({
         identity={firstMember.botId ?? firstMember.name}
         size={size}
         status={firstMember.status}
+        character={firstMember.character}
         className={cn("rakazo-group-avatar", className)}
       />
     );
@@ -96,6 +100,7 @@ export const GroupAvatar = memo(function GroupAvatar({
             identity={member.botId ?? member.name}
             size={miniSize}
             status={member.status}
+            character={member.character}
           />
         </div>
       ))}
