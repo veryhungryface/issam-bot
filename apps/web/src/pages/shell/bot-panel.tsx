@@ -30,7 +30,7 @@ import {
 import { X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useState } from "react";
 import { SavedLoginsSection } from "../../components/SavedLoginsSection";
-import { HIDE_MODEL_PICKER } from "../../lib/deployment-flags";
+import { HIDE_MODEL_PICKER, VOICE_OUTPUT } from "../../lib/deployment-flags";
 import { rpc } from "../../lib/rpc";
 
 const ScratchpadSection = lazy(() =>
@@ -250,10 +250,13 @@ export function BotSettings({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    void rpc.voice
-      .voices({})
-      .then(setVoices)
-      .catch(() => setVoices([]));
+    // Nothing asks for a voice while speaking is hidden, so nothing asks the server either.
+    if (VOICE_OUTPUT) {
+      void rpc.voice
+        .voices({})
+        .then(setVoices)
+        .catch(() => setVoices([]));
+    }
     void Promise.all([rpc.models.credentials(), rpc.models.list(), rpc.me()])
       .then(([nextCredentials, nextCatalog, nextMe]) => {
         setCredentials(nextCredentials);
@@ -547,17 +550,19 @@ export function BotSettings({
             </p>
           ) : null}
         </div>
-        <label
-          htmlFor={`${ids}-auto-speak`}
-          className="mt-5 flex cursor-pointer items-center gap-3 text-[14px] text-foreground/75"
-        >
-          <Switch
-            id={`${ids}-auto-speak`}
-            checked={autoSpeak}
-            onCheckedChange={(checked) => setAutoSpeak(checked)}
-          />
-          <Trans>Read replies aloud</Trans>
-        </label>
+        {VOICE_OUTPUT ? (
+          <label
+            htmlFor={`${ids}-auto-speak`}
+            className="mt-5 flex cursor-pointer items-center gap-3 text-[14px] text-foreground/75"
+          >
+            <Switch
+              id={`${ids}-auto-speak`}
+              checked={autoSpeak}
+              onCheckedChange={(checked) => setAutoSpeak(checked)}
+            />
+            <Trans>Read replies aloud</Trans>
+          </label>
+        ) : null}
         {voices.length ? (
           <label htmlFor={`${ids}-voice`} className={fieldLabelClass}>
             <Trans>Voice</Trans>

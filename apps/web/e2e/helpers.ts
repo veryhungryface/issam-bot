@@ -50,6 +50,14 @@ export async function completeOnboarding(page: Page, testInfo?: TestInfo) {
   if (testInfo) await captureScreenshot(page, testInfo, "06-onboarding-complete");
 }
 
+/**
+ * Speaking replies and calling are hidden in this deployment, so a test that covers them
+ * turns the feature back on the way a person would. Call it before the first navigation.
+ */
+export async function enableVoiceOutput(page: Page) {
+  await page.addInitScript(() => localStorage.setItem("rakazo.voice-output", "1"));
+}
+
 export async function signup(
   page: Page,
   email: string,

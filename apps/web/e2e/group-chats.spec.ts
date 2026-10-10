@@ -3,6 +3,7 @@ import {
   captureScreenshot,
   completeOnboarding,
   createNamedBot,
+  enableVoiceOutput,
   openNewGroup,
   rpc,
   signup,
@@ -13,6 +14,8 @@ async function createBot(page: import("@playwright/test").Page, name: string) {
 }
 
 test("create group from + and see two bots in one transcript", async ({ page }, testInfo) => {
+  // This one speaks a reply further down, which only a deployment with voice offers.
+  await enableVoiceOutput(page);
   const stamp = Date.now();
   await signup(page, `group-${stamp}@rakazo.test`, "password12", "Group E2E");
   await completeOnboarding(page);
