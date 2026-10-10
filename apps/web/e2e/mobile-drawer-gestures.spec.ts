@@ -208,3 +208,85 @@ test("a desktop layout keeps its panes still", async ({ page }) => {
   expect(await conversationLeft(page)).toBe(conversationBefore);
   await expect(sidebar).not.toHaveAttribute("data-dragging", "true");
 });
+
+/**
+ * The part a mouse cannot reach: who the browser thinks the gesture belongs to.
+ *
+ * With the page's usual `touch-action: pan-y`, a touch that wanders off the horizontal is
+ * the browser's to scroll with, and it takes the pointer back mid-drag — the drawer was
+ * following the hand one moment and snapped home the next. The edges a drawer is pulled
+ * from now say `touch-action: none`, which is decided when the finger lands and not
+ * revisited, so the rest of the gesture is the drawer's however the finger moves.
+ */
+test.describe("touch drawer", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: PHONE });
+
+  /** A finger through the browser's own touch pipeline, not a mouse pretending. */
+  async function touchDrag(
+    page: Page,
+    path: { x: number; y: number }[],
+    finish: "lift" | "cancel" = "lift",
+  ) {
+    const cdp = await page.context().newCDPSession(page);
+    const [start, ...rest] = path;
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: start.x, y: start.y }],
+    });
+    for (const point of rest) {
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: point.x, y: point.y }],
+      });
+    }
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: finish === "lift" ? "touchEnd" : "touchCancel",
+      touchPoints: [],
+    });
+    await cdp.detach();
+  }
+
+  test("a shaking finger keeps the drawer it is dragging", async ({ page }) => {
+    const stamp = Date.now();
+    await signup(page, `drawer-touch-${stamp}@rakazo.test`, "password12", "Drawer Touch");
+    await completeOnboarding(page);
+
+    const edge = page.getByTestId("edge-grab-start");
+    await expect(edge).toHaveCSS("touch-action", "none");
+    expect(Math.round((await edge.boundingBox())?.x ?? -1)).toBe(0);
+
+    // Out from the edge, then as far up and down as across.
+    await touchDrag(page, [
+      { x: 4, y: 500 },
+      { x: 44, y: 494 },
+      { x: 96, y: 544 },
+      { x: 150, y: 468 },
+      { x: 210, y: 542 },
+      { x: 270, y: 476 },
+      { x: 336, y: 520 },
+    ]);
+    await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
+    // The edge belongs to the drawer only while the drawer is shut.
+    await expect(edge).toHaveCount(0);
+  });
+
+  test("a drag the browser takes away finishes where the hand was going", async ({ page }) => {
+    const stamp = Date.now();
+    await signup(page, `drawer-cancel-${stamp}@rakazo.test`, "password12", "Drawer Cancel");
+    await completeOnboarding(page);
+
+    // Two thirds of the way out, and then the pointer is taken — a system gesture, a
+    // second finger, the browser changing its mind. It opens rather than snapping shut.
+    await touchDrag(
+      page,
+      [
+        { x: 4, y: 500 },
+        { x: 60, y: 500 },
+        { x: 140, y: 502 },
+        { x: 230, y: 498 },
+      ],
+      "cancel",
+    );
+    await expect.poll(async () => Math.round(await sidebarLeft(page))).toBe(0);
+  });
+});

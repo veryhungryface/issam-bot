@@ -305,9 +305,16 @@ test.describe("touch bot list", () => {
     const chief = sidebar.getByRole("button", { name: /^Chief/ });
     await expect(chief).toBeVisible();
 
+    // Neither the row nor the menu is text to select. iOS runs its own long press
+    // alongside this one, and anything selectable under the finger ends up highlighted
+    // with handles dragged across the menu that just opened.
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+    await expect(chief).toHaveCSS("user-select", "none");
+
     await hold(page, chief);
     const menu = page.getByRole("menu", { name: /Actions for Chief/ });
     await expect(menu).toBeVisible();
+    await expect(menu).toHaveCSS("user-select", "none");
     await captureScreenshot(page, testInfo, "bot-list-held-menu");
     // The finger lifting off the row opened the menu, not the chat under it.
     expect(page.url()).toBe(spareUrl);
