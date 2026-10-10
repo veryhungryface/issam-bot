@@ -1370,6 +1370,19 @@ describe("turn prompt and instruction order", () => {
     botDirectory: "Other bots: Writer.",
   };
 
+  it("tells the bot which language to open in, before anything it might say", () => {
+    // Without this the model answers in the language its own instructions are written in,
+    // which is how a Korean teacher's new bot opened with "What do you want me on first?".
+    const rendered = runTurnInstructions(parts).filter(Boolean).join("\n\n");
+    expect(rendered).toContain("Write to the user in Korean");
+    // Ahead of the rest of the fixed guidance, so it stays in the cached prefix.
+    expect(rendered.indexOf("Write to the user in Korean")).toBeLessThan(
+      rendered.indexOf("render_plot"),
+    );
+    // And it covers the options too: the first thing a new bot does is ask with choices.
+    expect(rendered).toMatch(/ask_user/);
+  });
+
   it("keeps the clock out of the system prompt", () => {
     // It used to sit second here, so a minute's passing reread the whole ~14k-token prompt
     // on the first call of every run.
