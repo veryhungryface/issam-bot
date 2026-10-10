@@ -1,11 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  captureScreenshot,
-  completeOnboarding,
-  createBotFromPicker,
-  openNewBot,
-  signup,
-} from "./helpers";
+import { captureScreenshot, completeOnboarding, createBotFromPicker, signup } from "./helpers";
 
 test("create opens empty chat, picker lists bots, and sidebar collapses", async ({
   page,
@@ -54,8 +48,7 @@ test("later bot waits before showing the focus card; sending cancels it", async 
   await expect(page.getByText("What do you want me on first?", { exact: true })).toBeVisible();
 
   await page.clock.install();
-  await openNewBot(page);
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await createBotFromPicker(page);
   await expect(page.getByPlaceholder("Message New Bot")).toBeVisible();
   await expect(page.getByText("What do you want me on first?", { exact: true })).toHaveCount(0);
 
@@ -64,8 +57,7 @@ test("later bot waits before showing the focus card; sending cancels it", async 
   await page.clock.fastForward(1_500);
   await expect(page.getByText("What do you want me on first?", { exact: true })).toBeVisible();
 
-  await openNewBot(page);
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await createBotFromPicker(page);
   await expect(page.getByText("What do you want me on first?", { exact: true })).toHaveCount(0);
   const composer = page.getByPlaceholder(/Message/);
   await composer.fill("I'll set this up myself");

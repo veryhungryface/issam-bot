@@ -89,6 +89,10 @@ export function CreateBotForm({
     name: string;
     title: string;
     description: string;
+    color: string;
+    avatarBody: number | null;
+    avatarFace: number | null;
+    avatarAccessory: number | null;
     computerMode: ComputerMode;
   }) => Promise<void>;
   onCancel: () => void;
@@ -96,6 +100,9 @@ export function CreateBotForm({
   const { t } = useLingui();
   const ids = useId();
   const [name, setName] = useState("");
+  // A bot arrives wearing something, so the sheet opens on a real character rather than
+  // a placeholder the user has to fix afterwards.
+  const [look, setLook] = useState(randomLook);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [computerMode, setComputerMode] = useState<ComputerMode>("team");
@@ -111,6 +118,10 @@ export function CreateBotForm({
         name: name.trim(),
         title: title.trim(),
         description: description.trim(),
+        color: look.color,
+        avatarBody: look.character.body ?? null,
+        avatarFace: look.character.face ?? null,
+        avatarAccessory: look.character.accessory ?? null,
         computerMode,
       });
     } catch (err) {
@@ -139,7 +150,13 @@ export function CreateBotForm({
           {error}
         </p>
       ) : null}
-      <label htmlFor={`${ids}-name`} className="mt-6 block text-[14px] text-muted-foreground">
+      <div className="flex flex-col items-center gap-3">
+        <BotAvatar color={look.color} identity="new-bot" size={92} character={look.character} />
+        <Button variant="outline" size="sm" onClick={() => setLook(randomLook())}>
+          <Trans>Shuffle</Trans>
+        </Button>
+      </div>
+      <label htmlFor={`${ids}-name`} className="mt-5 block text-[14px] text-muted-foreground">
         <Trans>Name</Trans>
         <Input
           id={`${ids}-name`}
@@ -150,6 +167,17 @@ export function CreateBotForm({
           className="mt-2"
         />
       </label>
+      <CharacterPicker
+        botId="new-bot"
+        color={look.color}
+        character={look.character}
+        onChange={(character) => setLook((current) => ({ ...current, character }))}
+      />
+      <ColorPicker
+        value={look.color}
+        onChange={(color) => setLook((current) => ({ ...current, color }))}
+        ids={ids}
+      />
       <label htmlFor={`${ids}-title`} className={fieldLabelClass}>
         <Trans>Title</Trans>
         <Input
@@ -176,6 +204,7 @@ export function CreateBotForm({
       <ComputerModePicker value={computerMode} onChange={setComputerMode} />
       <Button
         className="mt-5"
+        data-testid="create-bot-submit"
         disabled={!name.trim() || submitting}
         onClick={() => void handleSubmit()}
       >
@@ -402,26 +431,7 @@ export function BotSettings({
           className="mt-2"
         />
       </label>
-      <div className={fieldLabelClass}>
-        <Trans>Color</Trans>
-        <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label={t`Color`}>
-          {BOT_COLORS.map((option, index) => (
-            <input
-              key={option}
-              className={`size-8 cursor-pointer appearance-none rounded-full border-2 ring-offset-card transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                color === option ? "border-foreground" : "border-transparent"
-              }`}
-              type="radio"
-              name={`${ids}-color`}
-              value={option}
-              checked={color === option}
-              aria-label={t`Color ${index + 1}`}
-              style={{ backgroundColor: option }}
-              onChange={() => setColor(option)}
-            />
-          ))}
-        </div>
-      </div>
+      <ColorPicker value={color} onChange={setColor} ids={ids} />
       <details
         data-testid="bot-settings-advanced"
         className="group mt-5"
@@ -739,4 +749,58 @@ function CharacterPicker({
       ))}
     </div>
   );
+}
+
+/** The colour row, shared by making a bot and dressing one. */
+function ColorPicker({
+  value,
+  onChange,
+  ids,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  ids: string;
+}) {
+  const { t } = useLingui();
+  return (
+    <div className={fieldLabelClass}>
+      <Trans>Color</Trans>
+      <div className="mt-2 flex flex-wrap gap-2" role="radiogroup" aria-label={t`Color`}>
+        {BOT_COLORS.map((option, index) => (
+          <input
+            key={option}
+            className={`size-8 cursor-pointer appearance-none rounded-full border-2 ring-offset-card transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+              value === option ? "border-foreground" : "border-transparent"
+            }`}
+            type="radio"
+            name={`${ids}-color`}
+            value={option}
+            checked={value === option}
+            aria-label={t`Color ${index + 1}`}
+            style={{ backgroundColor: option }}
+            onChange={() => onChange(option)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A whole look, at random.
+ *
+ * Shuffling the pieces independently is what makes a "random" character look like parts
+ * from a bin, so an accessory only turns up about a third of the time — most bots wear
+ * none, and a crowd where everyone has a hat is a costume party.
+ */
+function randomLook(): { color: string; character: AvatarChoice } {
+  const pick = (count: number) => Math.floor(Math.random() * count);
+  return {
+    color: BOT_COLORS[pick(BOT_COLORS.length)] ?? BOT_COLORS[0] ?? "#F26A1B",
+    character: {
+      body: pick(AVATAR_BODIES.length),
+      face: pick(AVATAR_FACES.length),
+      accessory: Math.random() < 0.34 ? 1 + pick(AVATAR_ACCESSORIES.length - 1) : 0,
+    },
+  };
 }
