@@ -28,11 +28,16 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
     resolveCreateAborted();
   });
   await openNewBot(page);
+  await page.getByPlaceholder("Name this bot").fill("Doomed");
+  await page.getByTestId("create-bot-submit").click();
   await createAborted;
-  // Instant create stays in chat; failed create leaves the current bot open.
-  await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
-  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
+  // A failed create keeps the sheet open with the reason on it, rather than throwing the
+  // user back to a chat with no idea what happened to the bot they were naming.
+  await expect(page.getByTestId("create-bot-error")).toBeVisible();
+  await expect(page.getByPlaceholder("Name this bot")).toHaveValue("Doomed");
   expect(createFailed).toBe(true);
+  await page.getByRole("button", { name: "Cancel new bot" }).click();
+  await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
   await page.unroute("**/rpc/bots/create");
 
   let failedPostCreateRefresh = false;

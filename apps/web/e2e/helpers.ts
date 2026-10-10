@@ -77,9 +77,11 @@ export async function captureScreenshot(page: Page, testInfo: TestInfo, name: st
   await testInfo.attach(name, { contentType: "image/png", path: screenshotPath });
 }
 
+/** Open the new-bot sheet. It no longer creates on its own — see createBotFromPicker. */
 export async function openNewBot(page: Page) {
   await page.getByTestId("create-menu-trigger").click();
   await page.getByTestId("create-new-bot").click();
+  await expect(page.getByTestId("create-bot-submit")).toBeVisible();
 }
 
 export async function openNewGroup(page: Page) {
@@ -92,9 +94,11 @@ export async function openNewSpace(page: Page) {
   await page.getByTestId("create-new-space").click();
 }
 
-/** Instant-create a bot from the + picker and wait for its chat (side panel closed). */
-export async function createBotFromPicker(page: Page) {
+/** Make a bot through the + picker's sheet and wait for its chat (side panel closed). */
+export async function createBotFromPicker(page: Page, name = "New Bot") {
   await openNewBot(page);
+  await page.getByPlaceholder("Name this bot").fill(name);
+  await page.getByTestId("create-bot-submit").click();
   await page.waitForURL(/\/app\/[^/]+$/);
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
 }

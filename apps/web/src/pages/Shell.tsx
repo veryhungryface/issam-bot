@@ -495,7 +495,6 @@ export function ShellPage() {
   const [botsSidebarCollapsed, setBotsSidebarCollapsed] = useState(false);
   const focusPromptAbortRef = useRef<AbortController | null>(null);
   const focusPromptBotIdRef = useRef<string | null>(null);
-  const creatingBotRef = useRef(false);
   const botsSidebarEdgeDragRef = useRef<{ startX: number; mode: "expand" | "collapse" } | null>(
     null,
   );
@@ -2331,14 +2330,31 @@ export function ShellPage() {
     name: string;
     title: string;
     description: string;
+    color?: string;
+    avatarBody?: number | null;
+    avatarFace?: number | null;
+    avatarAccessory?: number | null;
     computerMode: ComputerMode;
   }) {
     const isFirstBot = botsRef.current.length === 0;
     const bot = await rpc.bots.create({
       ...normalizeCreateBotProfile(input),
+      ...(input.color ? { color: input.color } : {}),
       notifyOnFinish: true,
       computerMode: input.computerMode,
     });
+    // The look is set on the new bot rather than at creation: the create contract is
+    // shared with spawn_bot, which has no business dressing anything.
+    if (input.avatarBody != null || input.avatarFace != null || input.avatarAccessory != null) {
+      await rpc.bots
+        .update({
+          botId: bot.id,
+          avatarBody: input.avatarBody ?? null,
+          avatarFace: input.avatarFace ?? null,
+          avatarAccessory: input.avatarAccessory ?? null,
+        })
+        .catch(() => undefined);
+    }
     setBots((current) =>
       current.some((item) => item.id === bot.id) ? current : [bot, ...current],
     );
@@ -2376,24 +2392,6 @@ export function ShellPage() {
       }
     });
     await refreshBots().catch(() => undefined);
-  }
-
-  async function createBotQuick() {
-    if (creatingBotRef.current) return;
-    creatingBotRef.current = true;
-    try {
-      await createBot({
-        name: "New Bot",
-        title: "",
-        description: "",
-        computerMode: "team",
-      });
-    } catch (error) {
-      // Keep the current chat open when create fails, but surface the error.
-      setSendError(error instanceof Error ? error.message : t`Could not create bot`);
-    } finally {
-      creatingBotRef.current = false;
-    }
   }
 
   async function bootComputer({
@@ -2795,7 +2793,9 @@ export function ShellPage() {
                     bots={bots}
                     onCreateBot={() => {
                       setCreateMenuOpen(false);
-                      void createBotQuick();
+                      // Opens the sheet. Creating straight from the menu left every bot
+                      // called "New Bot" wearing whatever its id happened to give it.
+                      setPanel("create");
                     }}
                     onOpenBot={(id) => {
                       setCreateMenuOpen(false);
