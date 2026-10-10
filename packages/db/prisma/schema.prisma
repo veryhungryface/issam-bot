@@ -331,6 +331,12 @@ model Bot {
   description       String            @default("")
   instructions      String            @default("")
   color             String
+  // Which character the bot wears. Null means "whatever suits it": the renderer derives
+  // one from the bot's id, so an undressed bot still has a face of its own, and nothing
+  // had to be backfilled when these arrived.
+  avatarBody        Int?
+  avatarFace        Int?
+  avatarAccessory   Int?
   notifyOnFinish    Boolean           @default(true)
   pinned            Boolean           @default(false)
   position          Int               @default(0)

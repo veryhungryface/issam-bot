@@ -31,6 +31,14 @@ export const BotSchema = z.object({
   description: z.string(),
   instructions: z.string(),
   color: z.string(),
+  /**
+   * Which character the bot wears. Null is not "unset" so much as "whatever suits it":
+   * the renderer derives one from the bot's id, so a bot nobody has dressed still has a
+   * face of its own.
+   */
+  avatarBody: z.number().int().min(0).nullable(),
+  avatarFace: z.number().int().min(0).nullable(),
+  avatarAccessory: z.number().int().min(0).nullable(),
   notifyOnFinish: z.boolean(),
   pinned: z.boolean(),
   sectionId: Id.nullable(),
@@ -226,6 +234,9 @@ export const UpdateBotInput = z
     instructions: z.string().trim().max(BOT_INSTRUCTIONS_MAX_LENGTH).optional(),
     notifyOnFinish: z.boolean().optional(),
     color: z.string().optional(),
+    avatarBody: z.number().int().min(0).nullable().optional(),
+    avatarFace: z.number().int().min(0).nullable().optional(),
+    avatarAccessory: z.number().int().min(0).nullable().optional(),
     pinned: z.boolean().optional(),
     memoryScope: MemoryScopeSchema.nullable().optional(),
     sectionId: Id.nullable().optional(),

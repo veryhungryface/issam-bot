@@ -3,6 +3,7 @@ import {
   AVATAR_ACCESSORIES,
   AVATAR_BODIES,
   AVATAR_FACES,
+  type AvatarChoice,
   type AvatarMark,
   avatarCharacter,
   avatarIdentitySeed,
@@ -16,6 +17,8 @@ export interface BotAvatarProps {
   size?: number;
   status?: string;
   identity?: string;
+  /** What the bot was dressed in. Anything left out is derived from its id. */
+  character?: AvatarChoice;
   className?: string;
 }
 
@@ -55,11 +58,12 @@ export const BotAvatar = memo(function BotAvatar({
   size = 38,
   status,
   identity,
+  character: chosen,
   className,
 }: BotAvatarProps) {
   const isWorking = ACTIVE_RUN_STATUSES.some((activeStatus) => activeStatus === status);
   const seed = avatarIdentitySeed(identity || color || "#8B5CF6");
-  const character = avatarCharacter(seed);
+  const character = avatarCharacter(seed, chosen);
   const body = AVATAR_BODIES[character.body] as (typeof AVATAR_BODIES)[number];
   const face = AVATAR_FACES[character.face] as (typeof AVATAR_FACES)[number];
   const accessory = AVATAR_ACCESSORIES[character.accessory] as (typeof AVATAR_ACCESSORIES)[number];

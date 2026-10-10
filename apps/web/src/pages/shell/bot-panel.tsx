@@ -16,6 +16,7 @@ import {
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
 } from "@rakazo/contracts";
+import { AVATAR_ACCESSORIES, AVATAR_BODIES, AVATAR_FACES, type AvatarChoice } from "@rakazo/core";
 import {
   BotAvatar,
   Button,
@@ -201,6 +202,9 @@ export function BotSettings({
     description?: string;
     instructions?: string;
     color?: string;
+    avatarBody?: number | null;
+    avatarFace?: number | null;
+    avatarAccessory?: number | null;
     computerMode: ComputerMode;
     memoryScope?: "isolated" | "shared" | null;
     autoSpeak?: boolean;
@@ -222,6 +226,11 @@ export function BotSettings({
   const [title, setTitle] = useState(bot.title);
   const [description, setDescription] = useState(bot.description);
   const [color, setColor] = useState(bot.color);
+  const [character, setCharacter] = useState<AvatarChoice>({
+    body: bot.avatarBody,
+    face: bot.avatarFace,
+    accessory: bot.avatarAccessory,
+  });
   const [computerMode, setComputerMode] = useState(bot.computerMode);
   const [memoryScope, setMemoryScope] = useState(bot.memoryScope);
   const [autoSpeak, setAutoSpeak] = useState(bot.autoSpeak);
@@ -352,8 +361,16 @@ export function BotSettings({
   return (
     <div data-testid="bot-settings">
       <div className="flex justify-center">
-        <BotAvatar color={color} identity={bot.id} size={64} status={bot.status} />
+        <BotAvatar
+          color={color}
+          identity={bot.id}
+          size={64}
+          status={bot.status}
+          character={character}
+        />
       </div>
+
+      <CharacterPicker botId={bot.id} color={color} character={character} onChange={setCharacter} />
       <label htmlFor={`${ids}-name`} className="mt-6 block text-[14px] text-muted-foreground">
         <Trans>Name</Trans>
         <Input
@@ -580,6 +597,9 @@ export function BotSettings({
               description: nextDescription,
               instructions: nextDescription,
               color,
+              avatarBody: character.body ?? null,
+              avatarFace: character.face ?? null,
+              avatarAccessory: character.accessory ?? null,
               computerMode,
               memoryScope,
               autoSpeak,
@@ -648,4 +668,75 @@ function catalogLabel(
 ) {
   if (!provider) return undefined;
   return catalog.find((entry) => entry.provider === provider && entry.id === modelId)?.label;
+}
+
+/**
+ * Dressing a bot: a body, a face, something to wear, and the colour that already had its
+ * own row. Each swatch previews the whole character rather than the piece on its own,
+ * because a face means nothing without a head and an accessory means nothing without a
+ * face — you are choosing how the bot will look, not collecting parts.
+ */
+function CharacterPicker({
+  botId,
+  color,
+  character,
+  onChange,
+}: {
+  botId: string;
+  color: string;
+  character: AvatarChoice;
+  onChange: (next: AvatarChoice) => void;
+}) {
+  const { t } = useLingui();
+  const racks = [
+    { key: "body" as const, label: t`Body`, count: AVATAR_BODIES.length },
+    { key: "face" as const, label: t`Face`, count: AVATAR_FACES.length },
+    { key: "accessory" as const, label: t`Accessory`, count: AVATAR_ACCESSORIES.length },
+  ];
+
+  return (
+    <div data-testid="character-picker" className="mt-5 space-y-4">
+      {racks.map((rack) => (
+        <div key={rack.key} className={fieldLabelClass}>
+          {rack.label}
+          <div
+            className="mt-2 flex flex-wrap gap-1.5"
+            role="radiogroup"
+            aria-label={String(rack.label)}
+          >
+            {Array.from({ length: rack.count }, (_, index) => {
+              const chosen = character[rack.key] === index;
+              return (
+                // A real radio, the way the colour row above does it: the input carries
+                // the semantics and the keyboard, the label carries the picture.
+                <label
+                  key={index}
+                  className={`cursor-pointer rounded-xl border-2 p-0.5 transition-transform hover:scale-105 has-focus-visible:ring-2 has-focus-visible:ring-ring ${
+                    chosen ? "border-foreground" : "border-transparent"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name={`${rack.key}-${botId}`}
+                    value={index}
+                    checked={chosen}
+                    aria-label={`${rack.label} ${index + 1}`}
+                    data-testid={`character-${rack.key}-${index}`}
+                    onChange={() => onChange({ ...character, [rack.key]: index })}
+                  />
+                  <BotAvatar
+                    color={color}
+                    identity={botId}
+                    size={34}
+                    character={{ ...character, [rack.key]: index }}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
