@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { AVATAR_BODIES, AVATAR_FACES } from "@rakazo/core";
+import { AVATAR_ACCESSORIES, AVATAR_BODIES, AVATAR_FACES } from "@rakazo/core";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BotAvatar } from "./bot-avatar.js";
@@ -95,5 +95,28 @@ describe("BotAvatar", () => {
     const html = renderToString(<BotAvatar color="#10B981" />);
     expect(html).toMatch(/data-face="([a-z]+)"/);
     expect(AVATAR_FACES.some((face) => html.includes(face.name))).toBe(true);
+  });
+  it("wears what it was dressed in, and derives only what it was not", () => {
+    const html = renderToString(
+      <BotAvatar color="#D9508A" identity="maya" character={{ body: 1, accessory: 2 }} />,
+    );
+    expect(html).toContain(`data-body="${AVATAR_BODIES[1]?.name}"`);
+    // The face was never chosen, so it still comes from the id — and it is a real face.
+    const face = html.match(/data-face="([a-z]+)"/)?.[1];
+    expect(AVATAR_FACES.some((item) => item.name === face)).toBe(true);
+    // The accessory is drawn, not merely recorded.
+    const front = AVATAR_ACCESSORIES[2]?.front[0];
+    if (front && front.kind === "path") expect(html).toContain(front.d);
+  });
+
+  it("ignores a choice this version has no piece for, rather than drawing nothing", () => {
+    // These numbers come from a database that outlives any one version of the lists.
+    const html = renderToString(
+      <BotAvatar color="#D9508A" identity="maya" character={{ body: 999, face: -3 }} />,
+    );
+    const derived = renderToString(<BotAvatar color="#D9508A" identity="maya" />);
+    expect(html.match(/data-body="([a-z]+)"/)?.[1]).toBe(
+      derived.match(/data-body="([a-z]+)"/)?.[1],
+    );
   });
 });

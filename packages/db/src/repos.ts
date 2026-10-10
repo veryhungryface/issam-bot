@@ -37,6 +37,9 @@ function mapBot(
     memoryScope: string | null;
     createdAt: Date;
     updatedAt: Date;
+    avatarBody: number | null;
+    avatarFace: number | null;
+    avatarAccessory: number | null;
     thread: { id: string; unread: boolean } | null;
     computer: { scope: string } | null;
     voiceId?: string | null;
@@ -63,6 +66,9 @@ function mapBot(
     description: bot.description,
     instructions: bot.instructions,
     color: bot.color,
+    avatarBody: bot.avatarBody,
+    avatarFace: bot.avatarFace,
+    avatarAccessory: bot.avatarAccessory,
     notifyOnFinish: bot.notifyOnFinish,
     pinned: bot.pinned,
     sectionId: bot.sectionId,
