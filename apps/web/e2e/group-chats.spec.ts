@@ -94,10 +94,14 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
     .getByRole("button", { name: /^Draft team/ })
     .locator(".rakazo-group-avatar");
   await expect(groupAvatar).toBeVisible();
-  await expect(groupAvatar.locator(".rakazo-bot-avatar")).toHaveCount(2);
+  await expect(groupAvatar.locator(".rakazo-avatar")).toHaveCount(2);
   const workingAvatar = groupAvatar.locator('[data-working="true"]');
   await expect(workingAvatar).toHaveCount(1);
-  await expect(workingAvatar.locator("svg")).toHaveCSS("animation-name", "rakazo-avatar-spin");
+  // The character itself holds still; the ring around it is what spins while a run is on.
+  await expect(workingAvatar.locator(".rakazo-avatar-ring")).toHaveCSS(
+    "animation-name",
+    "rakazo-avatar-spin",
+  );
   await captureScreenshot(page, testInfo, "group-avatar-active");
   await page.unroute("**/rpc/groups/list");
   await page.unroute("**/rpc/threads/get");

@@ -1,111 +1,99 @@
 import { readFileSync } from "node:fs";
-import { avatarIdentitySeed } from "@rakazo/core";
+import { AVATAR_BODIES, AVATAR_FACES } from "@rakazo/core";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AvatarStyleProvider } from "./avatar-style.js";
 import { BotAvatar } from "./bot-avatar.js";
 
+const styles = () => readFileSync(new URL("./styles.css", import.meta.url), "utf8");
+
 describe("BotAvatar", () => {
-  it("renders distinct SVG gradient IDs for concurrent working avatars", () => {
-    const html = renderToString(
-      <div>
-        <BotAvatar color="#8B5CF6" status="running" />
-        <BotAvatar color="#10B981" status="running" />
-      </div>,
-    );
-
-    const gradMatches = [...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
-    expect(gradMatches).toHaveLength(2);
-    expect(gradMatches[0]).toBeTruthy();
-    expect(gradMatches[1]).toBeTruthy();
-    expect(gradMatches[0]).not.toBe(gradMatches[1]);
-
-    expect(html).toContain(`stroke="url(#${gradMatches[0]})"`);
-    expect(html).toContain(`stroke="url(#${gradMatches[1]})"`);
-  });
-
   it.each(["running", "queued", "leased", "waiting_input", "waiting_takeover"])(
-    "renders active working ring for %s status",
+    "shows the working ring for %s",
     (status) => {
       const html = renderToString(<BotAvatar color="#3B82F6" status={status} />);
-      expect(html).toContain("<svg");
-      expect(html).toContain("rakazo-bot-avatar-ring");
+      expect(html).toContain('data-working="true"');
+      expect(html).toContain("rakazo-avatar-ring");
     },
   );
 
-  it("keeps the working ring mounted when idle so its timeline does not reset", () => {
+  it("keeps the ring mounted when idle so its timeline does not restart with every run", () => {
     const html = renderToString(<BotAvatar color="#F59E0B" status="idle" />);
     expect(html).toContain('data-working="false"');
-    expect(html).toContain("rakazo-bot-avatar-ring");
+    expect(html).toContain("rakazo-avatar-ring");
+    // Mounted, and hidden by the stylesheet rather than by unmounting.
+    expect(styles()).toMatch(/\.rakazo-avatar \.rakazo-avatar-ring \{[^}]*opacity: 0;/s);
   });
 
-  it("generates an organic avatar from the bot color", () => {
-    const html = renderToString(
-      <BotAvatar color="#D9508A" identity="maya" size={28} status="running" variant="organic" />,
-    );
-
-    expect(html).toContain("rakazo-organic-avatar");
-    expect(html).toContain('data-working="true"');
-    expect(html).toMatch(/data-shape-family="\d"/);
-    expect(html).toMatch(/data-eye-pattern="[0-3]"/);
-    expect(html).toContain("<animate");
-    expect(html).not.toContain("rakazo-bot-avatar-visor");
+  it("draws a whole character: a body, a face that can blink, and a mouth", () => {
+    const html = renderToString(<BotAvatar color="#D9508A" identity="maya" size={28} />);
+    expect(html).toContain("rakazo-avatar-eyes");
+    expect(html).toContain("rakazo-avatar-pupils");
+    expect(html).toContain("rakazo-avatar-mouth");
+    expect(html).toMatch(/data-body="[a-z]+"/);
+    expect(html).toMatch(/data-face="[a-z]+"/);
+    // The body is one of the shared shapes, not something drawn here.
+    expect(AVATAR_BODIES.some((body) => html.includes(body.d))).toBe(true);
   });
 
-  it("generates distinct organic silhouettes for distinct bot identities", () => {
-    const maya = renderToString(<BotAvatar color="#D9508A" identity="maya" variant="organic" />);
-    const github = renderToString(
-      <BotAvatar color="#D9508A" identity="github" variant="organic" />,
-    );
-
-    expect(maya).not.toEqual(github);
-  });
-
-  it("assigns animation hooks across every organic shape family", () => {
-    const identities = new Map<number, string>();
-    for (let index = 0; index < 500 && identities.size < 10; index++) {
-      const identity = `avatar-${index}`;
-      identities.set(avatarIdentitySeed(identity) % 10, identity);
+  it("gives different bots different characters", () => {
+    const names = ["maya", "github", "scout", "chief", "atlas", "nova"];
+    const bodies = new Set<string>();
+    const faces = new Set<string>();
+    for (const identity of names) {
+      const html = renderToString(<BotAvatar color="#D9508A" identity={identity} />);
+      bodies.add(html.match(/data-body="([a-z]+)"/)?.[1] ?? "");
+      faces.add(html.match(/data-face="([a-z]+)"/)?.[1] ?? "");
     }
-    expect(identities.size).toBe(10);
+    expect(bodies.size).toBeGreaterThan(1);
+    expect(faces.size).toBeGreaterThan(1);
+  });
 
-    for (const [family, identity] of identities) {
-      const html = renderToString(
-        <BotAvatar color="#D9508A" identity={identity} status="running" variant="organic" />,
-      );
-      expect(html).toContain(`data-shape-family="${family}"`);
-      expect(html).toMatch(/data-eye-pattern="[0-3]"/);
-      expect(html).toContain('data-working="true"');
+  it("keeps the same bot's character across renders and statuses", () => {
+    const idle = renderToString(<BotAvatar color="#D9508A" identity="maya" status="idle" />);
+    const working = renderToString(<BotAvatar color="#D9508A" identity="maya" status="running" />);
+    expect(working.match(/data-body="([a-z]+)"/)?.[1]).toBe(
+      idle.match(/data-body="([a-z]+)"/)?.[1],
+    );
+    expect(working.match(/data-face="([a-z]+)"/)?.[1]).toBe(
+      idle.match(/data-face="([a-z]+)"/)?.[1],
+    );
+  });
+
+  it("gives each bot its own rhythm, and keeps it when a run starts", () => {
+    // A row of faces blinking in unison reads as machinery, which is the one thing a face
+    // must not do; and a run starting must not reset the blink everyone is mid-way through.
+    const blink = (html: string) => html.match(/--rakazo-avatar-blink:\s*([0-9.]+s)/)?.[1];
+    const maya = renderToString(<BotAvatar color="#D9508A" identity="maya" />);
+    const github = renderToString(<BotAvatar color="#D9508A" identity="github" />);
+    const mayaWorking = renderToString(
+      <BotAvatar color="#D9508A" identity="maya" status="running" />,
+    );
+
+    expect(blink(maya)).toBeTruthy();
+    expect(blink(maya)).not.toBe(blink(github));
+    expect(blink(mayaWorking)).toBe(blink(maya));
+  });
+
+  it("talks only while it is working", () => {
+    expect(styles()).toMatch(
+      /\.rakazo-avatar\[data-working="true"\] \.rakazo-avatar-mouth \{[^}]*animation: rakazo-avatar-talk/s,
+    );
+    // The mouth is in the markup either way; the stylesheet decides whether it moves.
+    expect(renderToString(<BotAvatar color="#D9508A" identity="maya" />)).toContain(
+      "rakazo-avatar-mouth",
+    );
+  });
+
+  it("stops every bit of motion when the viewer asks for less", () => {
+    const reduced = styles().slice(styles().indexOf("@media (prefers-reduced-motion: reduce)"));
+    for (const part of ["rakazo-avatar-eyes", "rakazo-avatar-pupils", "rakazo-avatar-ring"]) {
+      expect(reduced).toContain(part);
     }
   });
 
-  it("uses the account avatar preference when no local variant is provided", () => {
-    const html = renderToString(
-      <AvatarStyleProvider value="organic">
-        <BotAvatar color="#D9508A" identity="maya" />
-      </AvatarStyleProvider>,
-    );
-
-    expect(html).toContain("rakazo-organic-avatar");
-  });
-
-  it("keeps the organic morph timeline stable across status updates", () => {
-    const idle = renderToString(
-      <BotAvatar color="#D9508A" identity="maya" status="idle" variant="organic" />,
-    );
-    const working = renderToString(
-      <BotAvatar color="#D9508A" identity="maya" status="running" variant="organic" />,
-    );
-
-    expect(working.match(/<animate[^>]+dur="([^"]+)"/)?.[1]).toBe(
-      idle.match(/<animate[^>]+dur="([^"]+)"/)?.[1],
-    );
-    expect(idle).toContain("rakazo-organic-avatar-eyes-idle");
-    expect(idle).toContain("rakazo-organic-avatar-eyes-working");
-    expect(idle).toContain("rakazo-organic-avatar-body-idle");
-    expect(idle).toContain("rakazo-organic-avatar-body-working");
-    expect(readFileSync(new URL("./styles.css", import.meta.url), "utf8")).not.toMatch(
-      /data-working[^}]+animation:/s,
-    );
+  it("falls back to the colour when a bot has no identity to be drawn from", () => {
+    const html = renderToString(<BotAvatar color="#10B981" />);
+    expect(html).toMatch(/data-face="([a-z]+)"/);
+    expect(AVATAR_FACES.some((face) => html.includes(face.name))).toBe(true);
   });
 });
