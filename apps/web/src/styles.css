@@ -53,6 +53,21 @@ summary,
   -webkit-touch-callout: none;
 }
 
+/* A surface whose long press belongs to the app. On a phone the menu a hold opens is the
+   only way to reach what a message or a bot can do, so iOS must not raise its own callout
+   or start selecting the words under the finger first. "Select text" in that menu hands
+   selection back for one message, which is what data-selecting marks; a pointer with a
+   hover state never loses it, because there the actions are a rail away. */
+.long-press {
+  -webkit-touch-callout: none;
+}
+@media (hover: none) and (pointer: coarse) {
+  .long-press:not([data-selecting="true"]) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 /* iOS zooms the whole page when a control it focuses sets text under 16px, so tapping the
    composer made the app lurch. Only touch devices need the floor; everywhere else the
    typography stays exactly as designed. */

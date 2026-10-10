@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
+import {
+  activeBotId,
+  captureScreenshot,
+  completeOnboarding,
+  createNamedBot,
+  hold,
+  rpc,
+  signup,
+} from "./helpers";
 
 test("pinned bots and sidebar sections persist", async ({ page }, testInfo) => {
   const stamp = Date.now();
@@ -275,4 +283,49 @@ test("group chats share every context-menu action", async ({ page }, testInfo) =
   await group.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Edit Profile", exact: true }).click();
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "group-settings");
+});
+
+/**
+ * Everything a bot can do lives behind the right button, which a phone does not have, so
+ * on a phone there was no way to rename or delete one from the list at all. A hold opens
+ * the same menu, and the chat the finger was resting on must not open behind it.
+ */
+test.describe("touch bot list", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("holding a bot opens what can be done with it", async ({ page }, testInfo) => {
+    const stamp = Date.now();
+    await signup(page, `bot-hold-${stamp}@rakazo.test`, "password12", "Bot Hold");
+    await completeOnboarding(page);
+    await createNamedBot(page, "Spare");
+    const spareUrl = page.url();
+
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    const sidebar = page.locator("aside").first();
+    const chief = sidebar.getByRole("button", { name: /^Chief/ });
+    await expect(chief).toBeVisible();
+
+    await hold(page, chief);
+    const menu = page.getByRole("menu", { name: /Actions for Chief/ });
+    await expect(menu).toBeVisible();
+    await captureScreenshot(page, testInfo, "bot-list-held-menu");
+    // The finger lifting off the row opened the menu, not the chat under it.
+    expect(page.url()).toBe(spareUrl);
+
+    await menu.getByRole("menuitem", { name: "Edit Profile" }).click();
+    await expect(page.getByTestId("bot-settings")).toBeVisible();
+    await expect(page.locator('label:has-text("Name") input')).toHaveValue("Chief");
+    // The list is a drawer on a phone: it gets out of the way of what it just opened.
+    await expect(page.getByTestId("bots-sidebar")).not.toBeInViewport();
+
+    // And the other end of the menu: a bot can be deleted without a right button.
+    await page.getByTestId("side-panel").getByRole("button", { name: "Close panel" }).click();
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    const spare = sidebar.getByRole("button", { name: /^Spare/ });
+    await hold(page, spare);
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await expect(page.getByRole("alertdialog", { name: "Delete Spare?" })).toBeVisible();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(sidebar.getByText("Spare", { exact: true })).toHaveCount(0);
+  });
 });

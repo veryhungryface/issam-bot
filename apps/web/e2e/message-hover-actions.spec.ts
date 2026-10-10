@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, hold, signup } from "./helpers";
 
 async function revealHoverRail(
   row: import("@playwright/test").Locator,
@@ -323,24 +323,46 @@ test("reply preview jumps to parent outside the loaded page", async ({ page }) =
   await expect(page.locator(`[data-message-id="${parentId}"]`)).toContainText(parentText);
 });
 
+/**
+ * A phone gets the same actions by holding the message.
+ *
+ * It used to get a rail of dots parked halfway down the bubble — the only way in, since
+ * there is no hover, and a thumb had to travel to it. Now the hold opens the menu where
+ * the thumb already is, and the dots are gone from a touch screen altogether.
+ */
 test.describe("touch message actions", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
-  test("More exposes actions without simulated hover", async ({ page }, testInfo) => {
+  test("holding a message opens its actions where the thumb is", async ({ page }, testInfo) => {
     await signup(page, `touch-actions-${Date.now()}@rakazo.test`, "password12", "Touch Actions");
     await completeOnboarding(page);
     expect(
       await page.evaluate(() => matchMedia("(hover: hover) and (pointer: fine)").matches),
     ).toBe(false);
     const row = page.getByTestId("transcript").locator("[data-message-id]").first();
-    const rail = row.getByTestId("message-hover-rail");
-    await expect(rail).toHaveCSS("opacity", "1");
-    await expect(rail.getByRole("button", { name: "Reply", exact: true })).toBeHidden();
-    await rail.getByRole("button", { name: "More" }).tap();
-    await expect(page.getByRole("menuitem", { name: "Copy" })).toBeVisible();
+    await expect(row).toBeVisible();
+    await expect(row.getByTestId("message-hover-rail")).toBeHidden();
+
+    const bubble = row.getByTestId("message-bot-bubble").first();
+    await hold(page, bubble);
+    const menu = page.getByTestId("message-held-menu");
+    await expect(menu).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Add thumbs-up" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Copy" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "Select text" })).toBeVisible();
     await expect(page.getByTestId("message-hover-time")).toBeVisible();
     await captureScreenshot(page, testInfo, "message-actions-touch-menu");
-    await page.getByRole("menuitem", { name: "Reply", exact: true }).tap();
+
+    await menu.getByRole("menuitem", { name: "Reply", exact: true }).click();
     await expect(page.getByRole("button", { name: "Cancel reply" })).toBeVisible();
+
+    // The words are not selectable under a finger — that is what frees the hold — so the
+    // menu is where selection comes from, and it leaves the reply selected and adjustable.
+    await hold(page, bubble);
+    await page.getByRole("menuitem", { name: "Select text" }).click();
+    await expect
+      .poll(async () => page.evaluate(() => (document.getSelection()?.toString() ?? "").trim()))
+      .not.toBe("");
+    await captureScreenshot(page, testInfo, "message-text-selected-by-hold");
   });
 });

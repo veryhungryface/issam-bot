@@ -19,9 +19,11 @@ describe("MessageHoverMetadata", () => {
     expect(html).not.toContain("bottom-0");
     expect(html).not.toContain("<time");
     expect(html).toContain("opacity-0");
-    expect(html).toContain("@media(hover:hover)_and_(pointer:fine)");
     expect(html).toContain("group-hover/message:opacity-100");
     expect(html).toContain("focus-within:opacity-100");
+    // A finger has no hover and no rail: it holds the message instead.
+    expect(html).toContain("hidden");
+    expect(html).toContain("[@media(hover:hover)_and_(pointer:fine)]:flex");
   });
 
   it("mirrors user actions flush to the left of the bubble", () => {
@@ -46,5 +48,6 @@ describe("MessageHoverMetadata", () => {
 
     expect(html).toContain("pointer-events-auto opacity-100");
     expect(html).not.toContain("group-hover/message:opacity-100");
+    expect(html).toContain("[@media(hover:hover)_and_(pointer:fine)]:flex");
   });
 });

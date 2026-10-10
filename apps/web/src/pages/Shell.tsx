@@ -98,6 +98,7 @@ import {
   Settings,
   Smile,
   Square,
+  TextCursorInput,
   Volume2,
   X,
 } from "lucide-react";
@@ -154,6 +155,7 @@ import { dictation } from "../lib/dictation";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { screenIframeSandbox as liveViewIframeSandbox } from "../lib/live-view";
 import { localTimezone } from "../lib/local-timezone";
+import { heldOnPlainContent, type PressPoint, useLongPress } from "../lib/long-press";
 import { copyableMessageText } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import { notifyNativeShellPainted, registerNativePushToken } from "../lib/native-shell";
@@ -665,6 +667,20 @@ export function ShellPage() {
     },
     onSettle: (stayOpen) => {
       if (!stayOpen) setPanel(null);
+    },
+  });
+
+  // A phone has no right button, so what a bot can do is behind a hold on its row. One hook
+  // for the whole list: it reads the row under the finger when the hold completes.
+  const rosterPress = useLongPress({
+    onLongPress: (point, target) => {
+      const row = target.closest<HTMLElement>("[data-roster-chat-id]");
+      const id = row?.dataset.rosterChatId;
+      const kind = row?.dataset.rosterChatKind;
+      if (!row || !id || (kind !== "bot" && kind !== "group")) return;
+      if (row.dataset.rosterSpaceId !== bootstrapMe?.spaceId) return;
+      botMenuAnchor.current = row;
+      setBotMenu({ kind, id, position: { x: point.x, y: point.y } });
     },
   });
 
@@ -2857,7 +2873,16 @@ export function ShellPage() {
             name="sidebar-search"
           />
         </InputGroup>
-        <div className="rk-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5">
+        <div
+          className="rk-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5"
+          {...rosterPress.handlers}
+          // The finger lifting off a row after a hold must not also open the chat.
+          onClickCapture={(event) => {
+            if (!rosterPress.afterPress()) return;
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
           {showSpaceSearch ? (
             <SpaceSearchResults
               hits={searchHits}
@@ -2931,6 +2956,11 @@ export function ShellPage() {
                           type="button"
                           draggable={item.kind === "bot"}
                           data-roster-bot-id={item.kind === "bot" ? item.chat.id : undefined}
+                          // What a hold on this row reads, since the hold is caught once on
+                          // the scroller rather than row by row.
+                          data-roster-chat-id={item.chat.id}
+                          data-roster-chat-kind={item.kind}
+                          data-roster-space-id={item.chat.spaceId}
                           aria-keyshortcuts={
                             item.kind === "bot" ? "Alt+ArrowUp Alt+ArrowDown" : undefined
                           }
@@ -4070,6 +4100,10 @@ export function ShellPage() {
               navigate(contextBot ? `/app/${contextBot.id}` : `/app/g/${contextGroup!.id}`);
               setPanel(contextBot ? "settings" : "group-settings");
               setBotMenu(null);
+              // On a phone the list is a drawer over the screen; leaving it up would hide
+              // the very settings this just opened. The menu was desktop-only until a
+              // hold could open it, which is why this never came up.
+              setMobileSidebarOpen(false);
             }}
             onDuplicate={() => {
               setBotMenu(null);
@@ -4079,6 +4113,7 @@ export function ShellPage() {
               void request.then(async (chat) => {
                 await refreshBots();
                 navigate(contextBot ? `/app/${chat.id}` : `/app/g/${chat.id}`);
+                setMobileSidebarOpen(false);
               });
             }}
             onClear={() => {
@@ -4603,10 +4638,42 @@ const Transcript = memo(function Transcript({
   const lastScrollTop = useRef<number | null>(null);
   const autoScrollTimer = useRef<number | undefined>(undefined);
   const jumpButtonRef = useRef<HTMLButtonElement>(null);
+  // What a hold on a message opened, and the bubble it opened over — "Select text" needs
+  // the element itself, not the message, to hand the words under the finger to the browser.
+  const [held, setHeld] = useState<{ message: ThreadMessage; point: PressPoint } | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
+  const heldFrame = useRef<HTMLElement | null>(null);
   const messageById = useMemo(
     () => new Map(messages.map((message) => [message.id, message])),
     [messages],
   );
+  const press = useLongPress({
+    // A message can hold an approval button, a link, a card with its own menu; a hold on
+    // any of those is theirs. A hold on the words of the message is this menu's.
+    claims: heldOnPlainContent,
+    onLongPress: (point, target) => {
+      const frame = target.closest<HTMLElement>('[data-testid="message-bubble-frame"]');
+      const id = frame?.closest<HTMLElement>("[data-message-id]")?.dataset.messageId;
+      const message = id ? messageById.get(id) : undefined;
+      // A bubble still being written has nothing to reply to or copy yet.
+      if (!frame || !message || message.id.startsWith("progress:")) return;
+      heldFrame.current = frame;
+      setHeld({ message, point });
+    },
+  });
+
+  // Selection mode lasts as long as the selection does: once the reader taps away, the
+  // message goes back to being something a hold opens a menu on.
+  useEffect(() => {
+    if (!selectingId) return;
+    const onSelectionChange = () => {
+      const selection = document.getSelection();
+      if (!selection || selection.isCollapsed) setSelectingId(null);
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [selectingId]);
+
   const workingBotName = workingBots.length === 1 ? workingBots[0]?.name : undefined;
   const workingLabel =
     workingBotName != null && workingBotName !== ""
@@ -4686,7 +4753,11 @@ const Transcript = memo(function Transcript({
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
           following.current = false;
+          press.handlers.onPointerDown?.(event);
         }}
+        onPointerMove={press.handlers.onPointerMove}
+        onPointerUp={press.handlers.onPointerUp}
+        onPointerCancel={press.handlers.onPointerCancel}
         onTouchStart={(event) => {
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
@@ -4747,10 +4818,11 @@ const Transcript = memo(function Transcript({
               >
                 <div
                   data-testid={peerReceipt ? undefined : "message-bubble-frame"}
+                  data-selecting={selectingId === message.id ? "true" : undefined}
                   className={
                     peerReceipt
                       ? undefined
-                      : `relative w-fit min-w-0 ${
+                      : `long-press relative w-fit min-w-0 ${
                           // A phone gives up only the width the action rail needs; a wide
                           // screen keeps a readable measure instead of running edge to edge.
                           message.role === "user"
@@ -4843,6 +4915,28 @@ const Transcript = memo(function Transcript({
       >
         <ArrowDown size={17} strokeWidth={1.8} />
       </button>
+      {held ? (
+        <MessageHeldMenu
+          message={held.message}
+          point={held.point}
+          onClose={() => setHeld(null)}
+          onReply={onReply}
+          onReact={onReact}
+          onSelectText={() => {
+            const frame = heldFrame.current;
+            if (!frame) return;
+            setSelectingId(held.message.id);
+            // The words are only selectable once that attribute has landed.
+            requestAnimationFrame(() => {
+              const range = document.createRange();
+              range.selectNodeContents(frame);
+              const selection = document.getSelection();
+              selection?.removeAllRanges();
+              selection?.addRange(range);
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 });
@@ -5576,6 +5670,135 @@ function previewMessageText(message: ThreadMessage): string {
   return t`Message`;
 }
 
+function copyMessageText(message: ThreadMessage) {
+  const text = copyableMessageText(message);
+  if (!text || !navigator.clipboard) return;
+  void navigator.clipboard.writeText(text).catch(() => undefined);
+}
+
+/**
+ * What can be done with one message, in whichever menu asked.
+ *
+ * A pointer with a hover state reaches these from the rail beside the bubble, which keeps
+ * the reaction and the reply as buttons of their own and leaves the rest here. A finger
+ * holds the message and gets the lot, because there is no rail to hover.
+ */
+function MessageMenuItems({
+  message,
+  onReply,
+  onReact,
+  onSelectText,
+}: {
+  message: ThreadMessage;
+  onReply: (message: ThreadMessage) => void;
+  onReact: (message: ThreadMessage) => Promise<void>;
+  /** Only a finger needs this: a mouse can already drag across the words. */
+  onSelectText?: () => void;
+}) {
+  const { t } = useLingui();
+  const railHandled = "[@media(hover:hover)_and_(pointer:fine)]:hidden";
+  return (
+    <>
+      {canReactToThreadMessage(message) ? (
+        <DropdownMenuItem className={railHandled} onClick={() => void onReact(message)}>
+          <Smile size={15} />
+          {message.thumbsUp ? t`Remove thumbs-up` : t`Add thumbs-up`}
+        </DropdownMenuItem>
+      ) : null}
+      <DropdownMenuItem className={railHandled} onClick={() => onReply(message)}>
+        <Reply size={15} />
+        <Trans>Reply</Trans>
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => copyMessageText(message)}>
+        <Copy size={14} strokeWidth={1.7} />
+        <Trans>Copy</Trans>
+      </DropdownMenuItem>
+      {onSelectText ? (
+        <DropdownMenuItem onClick={onSelectText}>
+          <TextCursorInput size={14} strokeWidth={1.7} />
+          <Trans>Select text</Trans>
+        </DropdownMenuItem>
+      ) : null}
+      <time
+        dateTime={message.createdAt}
+        data-testid="message-hover-time"
+        className="block px-1.5 py-1 text-xs tabular-nums text-muted-foreground"
+      >
+        {new Date(message.createdAt).toLocaleTimeString(i18n.locale || "en", {
+          hour: "numeric",
+          minute: "2-digit",
+        })}
+      </time>
+    </>
+  );
+}
+
+/**
+ * The same menu, opened by holding the message rather than by finding a target to tap.
+ *
+ * It hangs off an invisible anchor at the finger, the way the bot list's menu does, so it
+ * comes up where the hold was instead of somewhere the thumb has to travel to.
+ */
+function MessageHeldMenu({
+  message,
+  point,
+  onClose,
+  onReply,
+  onReact,
+  onSelectText,
+}: {
+  message: ThreadMessage;
+  point: PressPoint;
+  onClose: () => void;
+  onReply: (message: ThreadMessage) => void;
+  onReact: (message: ThreadMessage) => Promise<void>;
+  onSelectText: () => void;
+}) {
+  const { t } = useLingui();
+  return (
+    <DropdownMenu
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden
+            className="fixed size-0 p-0 opacity-0"
+            style={{ left: point.x, top: point.y }}
+          />
+        }
+      />
+      <DropdownMenuContent
+        data-testid="message-held-menu"
+        aria-label={t`Message actions`}
+        align="start"
+        sideOffset={0}
+      >
+        <MessageMenuItems
+          message={message}
+          onReply={(target) => {
+            onClose();
+            onReply(target);
+          }}
+          onReact={async (target) => {
+            onClose();
+            await onReact(target);
+          }}
+          onSelectText={() => {
+            onClose();
+            onSelectText();
+          }}
+        />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function MessageHoverActions({
   message,
   side,
@@ -5592,12 +5815,6 @@ function MessageHoverActions({
 
   // Streaming progress bubbles keep hover free for selection / stop clicks.
   if (message.id.startsWith("progress:")) return null;
-
-  function copyMessage() {
-    const text = copyableMessageText(message);
-    if (!text || !navigator.clipboard) return;
-    void navigator.clipboard.writeText(text).catch(() => undefined);
-  }
 
   const iconButtonClass =
     "grid h-7 w-7 place-items-center text-muted-foreground transition-colors hover:text-foreground";
@@ -5639,36 +5856,7 @@ function MessageHoverActions({
             <MoreHorizontal size={15} strokeWidth={1.7} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align={side === "end" ? "start" : "end"}>
-            {canReactToThreadMessage(message) ? (
-              <DropdownMenuItem
-                className="[@media(hover:hover)_and_(pointer:fine)]:hidden"
-                onClick={() => void onReact(message)}
-              >
-                <Smile size={15} />
-                {message.thumbsUp ? t`Remove thumbs-up` : t`Add thumbs-up`}
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem
-              className="[@media(hover:hover)_and_(pointer:fine)]:hidden"
-              onClick={() => onReply(message)}
-            >
-              <Reply size={15} />
-              <Trans>Reply</Trans>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={copyMessage}>
-              <Copy size={14} strokeWidth={1.7} />
-              <Trans>Copy</Trans>
-            </DropdownMenuItem>
-            <time
-              dateTime={message.createdAt}
-              data-testid="message-hover-time"
-              className="block px-1.5 py-1 text-xs tabular-nums text-muted-foreground"
-            >
-              {new Date(message.createdAt).toLocaleTimeString(i18n.locale || "en", {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </time>
+            <MessageMenuItems message={message} onReply={onReply} onReact={onReact} />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -1,4 +1,5 @@
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { LONG_PRESS_MS } from "../src/lib/long-press";
 
 export function isRealSandboxProvider(provider = process.env.SANDBOX_PROVIDER) {
   return provider === "e2b" || provider === "daytona" || provider === "box";
@@ -56,6 +57,28 @@ export async function completeOnboarding(page: Page, testInfo?: TestInfo) {
  */
 export async function enableVoiceOutput(page: Page) {
   await page.addInitScript(() => localStorage.setItem("rakazo.voice-output", "1"));
+}
+
+/**
+ * A finger held still on something, which is how a phone asks what can be done with it.
+ * Playwright's touchscreen only taps, so this sends the pointer events the app listens for
+ * — with the pause in the middle, which is the whole gesture.
+ */
+export async function hold(page: Page, target: Locator) {
+  const box = await target.boundingBox();
+  if (!box) throw new Error("nothing to hold");
+  const init = {
+    pointerType: "touch",
+    pointerId: 1,
+    isPrimary: true,
+    bubbles: true,
+    cancelable: true,
+    clientX: box.x + box.width / 2,
+    clientY: box.y + box.height / 2,
+  };
+  await target.dispatchEvent("pointerdown", init);
+  await page.waitForTimeout(LONG_PRESS_MS + 200);
+  await target.dispatchEvent("pointerup", init);
 }
 
 export async function signup(
