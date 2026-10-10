@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { completeOnboarding, rpc, signup } from "./helpers";
+import { completeOnboarding, enableVoiceOutput, rpc, signup } from "./helpers";
 
 /**
  * Speaking replies and calling are hidden in this deployment, so the suite turns the whole
@@ -7,7 +7,7 @@ import { completeOnboarding, rpc, signup } from "./helpers";
  * feature rather than a build nobody runs.
  */
 test("voice settings connect a key, speak a reply, and open a call", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("rakazo.voice-output", "1"));
+  await enableVoiceOutput(page);
   const stamp = Date.now();
   const userName = `Voice ${stamp}`;
   await signup(page, `voice-${stamp}@rakazo.test`, "password12", userName);
