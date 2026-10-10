@@ -2726,8 +2726,14 @@ export function ShellPage() {
           type="button"
           aria-label={t`Close navigation`}
           onClick={() => setMobileSidebarOpen(false)}
-          // The dimming tracks the drawer, so a half-open drawer looks half-open.
-          style={sidebarSwipe.progress === null ? undefined : { opacity: sidebarSwipe.progress }}
+          // The dimming tracks the drawer, so a half-open drawer looks half-open. At rest
+          // it covers only the strip the open drawer leaves showing; mid-drag it covers
+          // everything the drawer has not reached yet, which is what is being dimmed.
+          style={
+            sidebarSwipe.progress === null
+              ? undefined
+              : { opacity: sidebarSwipe.progress, insetInlineStart: 0 }
+          }
           className="absolute inset-y-0 end-0 start-[min(calc(100%-48px),316px)] z-40 bg-overlay md:hidden"
         />
       ) : null}
@@ -2738,13 +2744,22 @@ export function ShellPage() {
         data-dragging={sidebarSwipe.progress === null ? undefined : "true"}
         inert={botsSidebarCollapsed && !mobileSidebarOpen ? true : undefined}
         // While a finger is on it the drawer is wherever the finger put it, and animating
-        // towards that would only lag behind the hand.
+        // towards that would only lag behind the hand. `translate: none` is what makes the
+        // drag visible at all: the resting position below is a Tailwind translate utility,
+        // which sets the `translate` property, and `translate` composes with `transform`
+        // rather than being replaced by it — a closed drawer dragged halfway out would sit
+        // its own width further off screen the whole way and only appear once the class
+        // changed, which is exactly how it looked.
         style={
           sidebarSwipe.offsetPx === null
             ? undefined
-            : { transform: `translateX(${sidebarSwipe.offsetPx}px)`, transition: "none" }
+            : {
+                translate: "none",
+                transform: `translateX(${sidebarSwipe.offsetPx}px)`,
+                transition: "none",
+              }
         }
-        className={`absolute inset-y-0 start-0 z-50 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,width,opacity] md:static md:z-auto md:translate-x-0 ${
+        className={`absolute inset-y-0 start-0 z-50 flex w-[calc(100%-48px)] max-w-[316px] shrink-0 flex-col border-e border-sidebar-border bg-sidebar transition-[transform,translate,width,opacity] md:static md:z-auto md:translate-x-0 ${
           mobileSidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
         } ${
           botsSidebarCollapsed
@@ -3542,7 +3557,9 @@ export function ShellPage() {
           aria-label={t`Close panel`}
           onClick={() => setPanel(null)}
           style={
-            sidePanelSwipe.progress === null ? undefined : { opacity: sidePanelSwipe.progress }
+            sidePanelSwipe.progress === null
+              ? undefined
+              : { opacity: sidePanelSwipe.progress, insetInlineEnd: 0 }
           }
           // z-30, like the panel it belongs to: a phone's composer is z-30 too, and a
           // scrim that sits under it leaves the one strip of screen where a tap does not
@@ -3563,7 +3580,7 @@ export function ShellPage() {
         // is where Save sits. It ties with the composer and wins on document order, the
         // same way the bots sidebar's scrim already does.
         className={`absolute inset-y-0 end-0 z-30 flex min-h-0 w-[calc(100%-48px)] max-w-[384px] shrink-0 flex-col overflow-hidden border-s border-sidebar-border bg-background md:relative md:max-w-none ${
-          panelDragActive ? "" : "transition-[width,transform] duration-150 ease-out"
+          panelDragActive ? "" : "transition-[width,transform,translate] duration-150 ease-out"
         } ${
           sidePanelOpen
             ? "md:w-(--side-panel-width)"
@@ -3572,9 +3589,12 @@ export function ShellPage() {
         style={
           {
             "--side-panel-width": `${panelWidth}px`,
+            // `translate: none` for the same reason as the bots drawer: the shut position
+            // is a translate utility, and the two properties would otherwise add up.
             ...(sidePanelSwipe.offsetPx === null
               ? {}
               : {
+                  translate: "none",
                   transform: `translateX(${sidePanelSwipe.offsetPx}px)`,
                   transition: "none",
                 }),
