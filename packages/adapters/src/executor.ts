@@ -4440,7 +4440,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (notifyBody && !completed.continuationRunId) {
             await notifyRun(deps, run, {
               kind: "completion",
-              title: `${bot.name} finished`,
+              // The bot's name alone, the way every other chat app titles a message. The
+              // notification already carries the reply underneath it, so saying the run
+              // "finished" only puts an English status word in front of it.
+              title: bot.name,
               body: notifyBody,
               botId: bot.id,
               threadId: thread.id,
