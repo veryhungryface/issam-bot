@@ -551,7 +551,10 @@ export function ShellPage() {
   const [newSectionTarget, setNewSectionTarget] = useState<
     { kind: "bot"; chat: Bot } | { kind: "group"; chat: Group } | null
   >(null);
-  const [booting, setBooting] = useState(false);
+  // Which surface is waiting on a cold browser. The full-window computer covers the app
+  // while it boots; the panel has its own line inside it and must leave the conversation
+  // — and the strip that dismisses the panel — reachable.
+  const [booting, setBooting] = useState<"window" | "panel" | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [initialBotsLoaded, setInitialBotsLoaded] = useState(false);
   const [bootstrapMe, setBootstrapMe] = useState<Me | null>();
@@ -2423,12 +2426,12 @@ export function ShellPage() {
     force = false,
   }: {
     takeControl: boolean;
-    overlay: boolean;
+    overlay: "window" | "panel" | null;
     force?: boolean;
   }) {
     if (!active) return;
     const needsBoot = force || computer?.state !== "running" || !screenUrl;
-    if (overlay && needsBoot) setBooting(true);
+    if (overlay && needsBoot) setBooting(overlay);
     setComputerError(null);
     setComputerErrorFromScreen(false);
     try {
@@ -2440,7 +2443,7 @@ export function ShellPage() {
       setComputerErrorFromScreen(false);
       throw error;
     } finally {
-      setBooting(false);
+      setBooting(null);
     }
   }
 
@@ -2470,7 +2473,7 @@ export function ShellPage() {
       if (!computerPanelAutoUsesBoot(action)) return;
       await bootComputer({
         takeControl: false,
-        overlay: action === "boot",
+        overlay: action === "boot" ? "panel" : null,
         force: true,
       }).catch(() => undefined);
     })();
@@ -2632,7 +2635,7 @@ export function ShellPage() {
     try {
       await bootComputer({
         takeControl: needsTakeover,
-        overlay: needsTakeover || computer?.state !== "running",
+        overlay: needsTakeover || computer?.state !== "running" ? "window" : null,
         force: computer?.state !== "running",
       });
       setComputerOpen(true);
@@ -3715,7 +3718,7 @@ export function ShellPage() {
                   {active &&
                   panel === "computer" &&
                   !computerOpen &&
-                  computerPanelNeedsMaintenance(computer?.state, booting) ? (
+                  computerPanelNeedsMaintenance(computer?.state, booting !== null) ? (
                     <ComputerMaintenanceActions
                       botId={active.id}
                       computer={computer}
@@ -3784,7 +3787,7 @@ export function ShellPage() {
                         ) : (
                           computerPlaceholder(
                             computer?.state,
-                            booting,
+                            booting !== null,
                             computerLabel(computer?.mode, active.name),
                             Boolean(computer?.busyBotName),
                           )
@@ -4368,7 +4371,7 @@ export function ShellPage() {
         ) : null}
       </Suspense>
 
-      {booting ? (
+      {booting === "window" ? (
         <ComputerBootProgress
           botName={active?.name ?? ""}
           botColor={active?.color}
