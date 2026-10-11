@@ -191,6 +191,38 @@ test("the side panel closes by tapping the conversation or swiping it away", asy
   await expect(panel).toHaveAttribute("data-panel", "closed");
 });
 
+test("a panel waiting on a cold browser still lets the conversation dismiss it", async ({
+  page,
+}) => {
+  await page.setViewportSize(PHONE);
+  const stamp = Date.now();
+  await signup(page, `panel-booting-${stamp}@rakazo.test`, "password12", "Panel Booting");
+  await completeOnboarding(page);
+
+  // Hold the boot open, so the wait is a state the test can act inside rather than a
+  // flicker. A real cloud browser takes ten seconds or more to come up.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/rpc/computer/boot", async (route) => {
+    await held;
+    await route.continue();
+  });
+
+  const panel = page.getByTestId("side-panel");
+  await page.getByTitle("Agent computer").click();
+  await expect(panel).toHaveAttribute("data-panel", "computer");
+  // The panel says what it is waiting on, inside the panel.
+  await expect(page.getByTestId("computer-preview")).toContainText("Booting live desktop");
+
+  // And the conversation it left showing is still the way out. A boot screen over the
+  // whole app would swallow this tap and strand the user until the browser came up.
+  await page.mouse.click(16, 420);
+  await expect(panel).toHaveAttribute("data-panel", "closed");
+  release();
+});
+
 test("a desktop layout keeps its panes still", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   const stamp = Date.now();
