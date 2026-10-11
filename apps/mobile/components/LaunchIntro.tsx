@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, View } from "react-native";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
-import { INTRO_SCORE } from "../lib/launch-intro";
+import { INTRO_FIELD, INTRO_HALOS, INTRO_LIGHT, INTRO_SCORE } from "../lib/launch-intro";
 
 /**
  * The opening sequence.
@@ -28,6 +28,12 @@ const INK = "#141416";
 const STAR =
   "M50.00 3.00 C63.46 3.00 60.88 12.80 74.04 25.96 C87.20 39.12 97.00 36.54 97.00 50.00 C97.00 63.46 87.20 60.88 74.04 74.04 C60.88 87.20 63.46 97.00 50.00 97.00 C36.54 97.00 39.12 87.20 25.96 74.04 C12.80 60.88 3.00 63.46 3.00 50.00 C3.00 36.54 12.80 39.12 25.96 25.96 C39.12 12.80 36.54 3.00 50.00 3.00 Z";
 
+/**
+ * The field's star is the mark's shape pulled thin. At twelve points across the plump
+ * silhouette fills in and reads as a diamond; this one still reads as a twinkle.
+ */
+const SPARKLE = "M50 1 Q56 44 99 50 Q56 56 50 99 Q44 56 1 50 Q44 44 50 1 Z";
+
 const EXIT_MS = 420;
 
 export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
@@ -41,7 +47,9 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
   const [calm, setCalm] = useState(false);
 
   // One value per element, each 0 before its beat and 1 after it. The score decides when.
+  const field = useRef(new Animated.Value(0)).current;
   const ring = useRef(new Animated.Value(0)).current;
+  const glow = useRef(new Animated.Value(0)).current;
   const mark = useRef(new Animated.Value(0)).current;
   const face = useRef(new Animated.Value(0)).current;
   const sparks = useRef(new Animated.Value(0)).current;
@@ -51,8 +59,8 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
   const breath = useRef(new Animated.Value(0)).current;
 
   const values = useMemo(
-    () => ({ ring, mark, face, sparks, word, hint }),
-    [face, hint, mark, ring, sparks, word],
+    () => ({ field, ring, glow, mark, face, sparks, word, hint }),
+    [face, field, glow, hint, mark, ring, sparks, word],
   );
 
   useEffect(() => {
@@ -133,6 +141,100 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
       style={[styles.fill, { backgroundColor: tokens.background }]}
     >
       <Animated.View style={[styles.stage, { opacity: sheetOpacity }]}>
+        {/* The ground the splash hands over is flat near-black, and so is the edge of
+            every layer below: the warmth is all in the middle, so there is still nothing
+            to notice between the system screen and this one. */}
+        <Animated.View style={[styles.fill, { opacity: glow }]} pointerEvents="none">
+          <Svg width="100%" height="100%">
+            <Defs>
+              <RadialGradient
+                id="warmth"
+                cx={`${INTRO_LIGHT.x * 100}%`}
+                cy={`${INTRO_LIGHT.y * 100}%`}
+                r="48%"
+              >
+                <Stop offset="0" stopColor={ORANGE} stopOpacity={0.28} />
+                <Stop offset="0.55" stopColor={ORANGE} stopOpacity={0.07} />
+                <Stop offset="1" stopColor={ORANGE} stopOpacity={0} />
+              </RadialGradient>
+              <RadialGradient
+                id="core"
+                cx={`${INTRO_LIGHT.x * 100}%`}
+                cy={`${INTRO_LIGHT.y * 100}%`}
+                r="26%"
+              >
+                <Stop offset="0" stopColor={SPARK} stopOpacity={0.2} />
+                <Stop offset="1" stopColor={SPARK} stopOpacity={0} />
+              </RadialGradient>
+              <RadialGradient id="blush" cx="16%" cy="86%" r="40%">
+                <Stop offset="0" stopColor={CHEEK} stopOpacity={0.09} />
+                <Stop offset="1" stopColor={CHEEK} stopOpacity={0} />
+              </RadialGradient>
+              {/* Corners pulled back down to the colour the system splash hands over, so
+                  the warmth reads as light in the middle rather than a tint on the glass. */}
+              <RadialGradient
+                id="corners"
+                cx={`${INTRO_LIGHT.x * 100}%`}
+                cy={`${INTRO_LIGHT.y * 100}%`}
+                r="78%"
+              >
+                <Stop offset="0.45" stopColor="#000000" stopOpacity={0} />
+                <Stop offset="1" stopColor="#000000" stopOpacity={0.55} />
+              </RadialGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#warmth)" />
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#core)" />
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#blush)" />
+            <Rect x="0" y="0" width="100%" height="100%" fill="url(#corners)" />
+            {INTRO_HALOS.map((halo) => (
+              <Circle
+                key={halo.radius}
+                cx={`${INTRO_LIGHT.x * 100}%`}
+                cy={`${INTRO_LIGHT.y * 100}%`}
+                r={halo.radius}
+                fill="none"
+                stroke={ORANGE}
+                strokeOpacity={halo.dim}
+                strokeWidth={1}
+              />
+            ))}
+          </Svg>
+        </Animated.View>
+
+        <View style={styles.fill} pointerEvents="none">
+          {INTRO_FIELD.map((star, index) => (
+            <Animated.View
+              key={`${star.x}-${star.y}`}
+              style={[
+                styles.star,
+                {
+                  left: `${star.x * 100}%`,
+                  top: `${star.y * 100}%`,
+                  transform: [{ rotate: `${star.turn}deg` }],
+                  // Half the sky breathes against the other half, so the field is never
+                  // a still photograph and never a flicker either.
+                  opacity: calm
+                    ? Animated.multiply(field, star.dim)
+                    : Animated.multiply(
+                        field,
+                        breath.interpolate({
+                          inputRange: [0, 1],
+                          outputRange:
+                            index % 2 === 0
+                              ? [star.dim * 0.45, star.dim]
+                              : [star.dim, star.dim * 0.45],
+                        }),
+                      ),
+                },
+              ]}
+            >
+              <Svg width={star.size} height={star.size} viewBox="0 0 100 100">
+                <Path d={SPARKLE} fill={SPARK} />
+              </Svg>
+            </Animated.View>
+          ))}
+        </View>
+
         <Animated.View style={[styles.stage, { transform: [{ scale: sheetScale }] }]}>
           <Animated.View
             style={[
@@ -262,6 +364,7 @@ export function LaunchIntro({ onDismiss }: { onDismiss: () => void }) {
 const styles = StyleSheet.create({
   fill: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   stage: { flex: 1, alignItems: "center", justifyContent: "center" },
+  star: { position: "absolute" },
   ring: { position: "absolute", height: 180, width: 180, borderRadius: 90, borderWidth: 2 },
   faceLayer: { position: "absolute", top: 0, left: 0 },
   sparkRow: { flexDirection: "row", gap: 9, height: 26, marginTop: 14, alignItems: "flex-start" },
