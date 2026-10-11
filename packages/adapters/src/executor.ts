@@ -208,6 +208,7 @@ import {
 import { observationToolResult, parseComputerActions } from "./computer-tools.js";
 import { checkpointAndRecordComputerWorkspace } from "./computer-workspace.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
+import { creditDecisionForRun } from "./credit-gate.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
 import {
@@ -1412,6 +1413,53 @@ export function createRunExecutor(deps: ExecutorDeps) {
               recallSucceeded,
             }),
           );
+        }
+        // The weekly credit is checked here, before a model is chosen and before anything
+        // bills: the same place the missing-model check sits, for the same reason. A run
+        // already under way is left alone — see creditAllowsRun — so this only ever stops
+        // work that has not started spending yet.
+        const credit = await creditDecisionForRun(deps.prisma, run.userId).catch((error) => {
+          getLogger().error("weekly credit check failed", error);
+          return null;
+        });
+        if (credit && !credit.allowed) {
+          const failed = await deps.events.finalizeRun({
+            spaceId: run.spaceId,
+            threadId: thread.id,
+            botId: bot.id,
+            runId,
+            taskId: run.taskId,
+            attemptId: attempt.id,
+            leaseOwner: workerId,
+            leaseFence: fence,
+            outcome: "failed",
+            error: credit.message,
+          });
+          if (!failed) return;
+          if (failed.continuationRunId) {
+            await deps.jobs
+              .enqueue(runContinueJob(failed.continuationRunId))
+              .catch((error) => getLogger().error("steering continuation enqueue", error));
+          }
+          if (run.trigger === "bot_message") {
+            await returnBotMessageOutcome(
+              deps,
+              { ...run, sourceMessageId: run.sourceMessageId },
+              { id: bot.id, name: bot.name },
+              `Could not complete the delegated request: ${credit.message}`,
+              "status",
+            ).catch((error) => getLogger().error("bot message failure return", error));
+          }
+          if (!failed.continuationRunId) {
+            await notifyRun(deps, run, {
+              kind: "failure",
+              title: `${withSubjectParticle(bot.name)} 사용량 한도에 걸렸어요`,
+              body: credit.message,
+              botId: bot.id,
+              threadId: thread.id,
+            });
+          }
+          return;
         }
         const runDeployment = deps.deploymentModelKey ? resolveDeploymentModel() : null;
         const runtimeFallback = runtimeFallbackModel(deps.runtime);

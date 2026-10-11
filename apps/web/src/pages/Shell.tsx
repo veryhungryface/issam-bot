@@ -11,6 +11,7 @@ import type {
   ComputerStatus,
   Connection,
   ConnectionCatalogItem,
+  CreditStatus,
   Group,
   Me,
   ProductEvent,
@@ -130,6 +131,7 @@ import {
   ComputersUnavailableHint,
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
+import { CreditDetail, CreditPill } from "../components/CreditMeter";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
@@ -484,6 +486,7 @@ export function ShellPage() {
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [callOpen, setCallOpen] = useState(false);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
+  const [credit, setCredit] = useState<CreditStatus | null>(null);
   // Speaking replies and calling are hidden in this deployment, so nothing offers them and
   // a bot still carrying `autoSpeak` from before does not start talking by itself either.
   // Dictation is not part of this: `voiceStatus.transcribe` comes from the deployment's own
@@ -1143,6 +1146,17 @@ export function ShellPage() {
     };
   }, []);
 
+  // The pill beside the name is read every time the sidebar is looked at, so it is kept
+  // current by the two moments that can change it — the app opening, and a run ending —
+  // rather than by a timer. Polling it would mean asking Browserbase for session times on
+  // a schedule nobody asked for.
+  const refreshCredit = useCallback(() => {
+    void rpc.credit
+      .status()
+      .then(setCredit)
+      .catch(() => undefined);
+  }, []);
+
   const refreshAgentSkills = useCallback(() => {
     void rpc.agentSkills
       .list()
@@ -1155,6 +1169,7 @@ export function ShellPage() {
       .status()
       .then(setVoiceStatus)
       .catch(() => undefined);
+    refreshCredit();
     const unsubSpeech = speaker.subscribe((state) => {
       setSpeakingMessageId(state.status === "idle" ? null : (state.messageId ?? null));
     });
@@ -1290,6 +1305,7 @@ export function ShellPage() {
         ) {
           void refreshBots().catch(() => undefined);
         }
+        if (isRunTerminalEvent(event)) refreshCredit();
         if (event.type === "thread.message.created") {
           const blocks = (event.payload.blocks as Array<{ kind?: string }>) ?? [];
           if (blocks.some((block) => block.kind === "child_bot")) {
@@ -3218,148 +3234,166 @@ export function ShellPage() {
             <Trans>Integrations</Trans>
           </span>
         </button>
-        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverTrigger
-            data-testid="user-menu-trigger"
-            className="flex items-center gap-[11px] px-[18px] py-3.5"
-          >
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-[12px] text-foreground/75">
-              {initials}
-            </span>
-            <span className="text-[14.5px] text-foreground/90">{userName}</span>
-          </PopoverTrigger>
-          {menuOpen ? (
-            <PopoverContent
-              side="top"
-              align="start"
-              className="w-[calc(316px-1.5rem)] max-w-[calc(100vw-3rem)] gap-0 p-1 data-closed:animate-none"
+        <div className="flex items-center justify-between gap-2 pr-[18px]">
+          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+            <PopoverTrigger
+              data-testid="user-menu-trigger"
+              className="flex min-w-0 items-center gap-[11px] px-[18px] py-3.5"
             >
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                aria-label={t`Settings`}
-                onClick={() => {
-                  setMenuOpen(false);
-                  setAccountSettingsFocusUsage(false);
-                  setAccountSettingsOpen(true);
-                }}
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-[12px] text-foreground/75">
+                {initials}
+              </span>
+              <span className="truncate text-[14.5px] text-foreground/90">{userName}</span>
+            </PopoverTrigger>
+            {menuOpen ? (
+              <PopoverContent
+                side="top"
+                align="start"
+                className="w-[calc(316px-1.5rem)] max-w-[calc(100vw-3rem)] gap-0 p-1 data-closed:animate-none"
               >
-                <span className="text-muted-foreground">⚙</span>
-                <Trans>Settings</Trans>
-              </Button>
-              {HIDE_MODEL_PICKER ? null : (
                 <Button
                   variant="ghost"
                   className="w-full justify-start font-normal"
+                  aria-label={t`Settings`}
                   onClick={() => {
                     setMenuOpen(false);
-                    setModelsOpen(true);
+                    setAccountSettingsFocusUsage(false);
+                    setAccountSettingsOpen(true);
                   }}
                 >
-                  <Cpu size={16} strokeWidth={1.7} className="text-muted-foreground" />
-                  <Trans>Models</Trans>
+                  <span className="text-muted-foreground">⚙</span>
+                  <Trans>Settings</Trans>
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setMemorySettingsOpen(true);
-                }}
-              >
-                <span aria-hidden="true" className="text-muted-foreground">
-                  ◇
-                </span>
-                <Trans>Memory</Trans>
-              </Button>
-              {VOICE_OUTPUT && !inGroup && active ? (
-                // Calling moved here when the conversation header lost its bar. It is a
-                // whole mode, not a glance at a panel, so it belongs with the settings
-                // rather than as a third circle over the messages.
+                {HIDE_MODEL_PICKER ? null : (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start font-normal"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setModelsOpen(true);
+                    }}
+                  >
+                    <Cpu size={16} strokeWidth={1.7} className="text-muted-foreground" />
+                    <Trans>Models</Trans>
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   className="w-full justify-start font-normal"
                   onClick={() => {
                     setMenuOpen(false);
-                    if (!voiceStatus?.ready) {
+                    setMemorySettingsOpen(true);
+                  }}
+                >
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    ◇
+                  </span>
+                  <Trans>Memory</Trans>
+                </Button>
+                {VOICE_OUTPUT && !inGroup && active ? (
+                  // Calling moved here when the conversation header lost its bar. It is a
+                  // whole mode, not a glance at a panel, so it belongs with the settings
+                  // rather than as a third circle over the messages.
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start font-normal"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      if (!voiceStatus?.ready) {
+                        setVoiceOpen(true);
+                        return;
+                      }
+                      setCallOpen(true);
+                    }}
+                  >
+                    <Phone size={16} strokeWidth={1.7} className="text-muted-foreground" />
+                    <Trans>Call</Trans>
+                  </Button>
+                ) : null}
+                {VOICE_OUTPUT ? (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start font-normal"
+                    onClick={() => {
+                      setMenuOpen(false);
                       setVoiceOpen(true);
-                      return;
-                    }
-                    setCallOpen(true);
-                  }}
-                >
-                  <Phone size={16} strokeWidth={1.7} className="text-muted-foreground" />
-                  <Trans>Call</Trans>
-                </Button>
-              ) : null}
-              {VOICE_OUTPUT ? (
+                    }}
+                  >
+                    <Volume2 size={16} strokeWidth={1.7} className="text-muted-foreground" />
+                    <Trans>Voice</Trans>
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   className="w-full justify-start font-normal"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setVoiceOpen(true);
+                  onClick={async () => {
+                    refreshCredit();
+                    setUsage(await rpc.usage.summary());
+                    if (bootstrapMe?.isDeploymentOwner) {
+                      setWorkspaceUsage(await rpc.usage.workspace({ days: 30 }).catch(() => null));
+                    }
                   }}
                 >
-                  <Volume2 size={16} strokeWidth={1.7} className="text-muted-foreground" />
-                  <Trans>Voice</Trans>
+                  <Gauge size={16} strokeWidth={1.7} className="text-muted-foreground" />
+                  <Trans>Usage</Trans>
                 </Button>
-              ) : null}
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                onClick={async () => {
-                  setUsage(await rpc.usage.summary());
-                  if (bootstrapMe?.isDeploymentOwner) {
-                    setWorkspaceUsage(await rpc.usage.workspace({ days: 30 }).catch(() => null));
-                  }
-                }}
-              >
-                <Gauge size={16} strokeWidth={1.7} className="text-muted-foreground" />
-                <Trans>Usage</Trans>
-              </Button>
-              {usage ? (
-                <div className="px-3 pb-2 text-[12.5px] leading-5 text-muted-foreground">
-                  <p className="m-0">
-                    {usage.runs}회 실행 · 토큰 입력 {usage.inputTokens.toLocaleString()} / 출력{" "}
-                    {usage.outputTokens.toLocaleString()}
-                  </p>
-                  <p className="m-0">브라우저 {formatBrowserMinutes(usage.browserSeconds)}</p>
-                  {workspaceUsage?.length ? (
-                    <div className="mt-2 border-t border-border pt-2">
-                      <p className="m-0 mb-1 text-[11.5px] uppercase tracking-wide text-muted-foreground/70">
-                        사용자별 · 최근 30일
-                      </p>
-                      {workspaceUsage.map((row) => (
-                        <p key={row.userId} className="m-0 flex justify-between gap-3">
-                          <span className="truncate text-foreground/80">{row.name}</span>
-                          <span className="shrink-0 tabular-nums">
-                            {row.runs}회 · {(row.inputTokens + row.outputTokens).toLocaleString()}tk
-                            · {formatBrowserMinutes(row.browserSeconds)}
-                          </span>
+                {credit ? (
+                  <div className="px-3 pb-2">
+                    <CreditDetail status={credit} />
+                  </div>
+                ) : null}
+                {usage ? (
+                  <div className="px-3 pb-2 text-[12.5px] leading-5 text-muted-foreground">
+                    <p className="m-0 border-t border-border pt-2">
+                      전체 기간 {usage.runs}회 · 토큰{" "}
+                      {(usage.inputTokens + usage.outputTokens).toLocaleString()}
+                    </p>
+                    {workspaceUsage?.length ? (
+                      <div className="mt-2 border-t border-border pt-2">
+                        <p className="m-0 mb-1 text-[11.5px] uppercase tracking-wide text-muted-foreground/70">
+                          사용자별 · 최근 30일
                         </p>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                onClick={() =>
-                  void authClient.signOut().then(() => {
-                    clearSpaceSelection();
-                    navigate("/");
-                  })
-                }
-              >
-                <LogOut size={16} strokeWidth={1.7} className="text-muted-foreground" />
-                <Trans>Log out</Trans>
-              </Button>
-            </PopoverContent>
+                        {workspaceUsage.map((row) => (
+                          <p key={row.userId} className="m-0 flex justify-between gap-3">
+                            <span className="truncate text-foreground/80">{row.name}</span>
+                            <span className="shrink-0 tabular-nums">
+                              {row.runs}회 · {(row.inputTokens + row.outputTokens).toLocaleString()}
+                              tk · {formatBrowserMinutes(row.browserSeconds)}
+                            </span>
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start font-normal"
+                  onClick={() =>
+                    void authClient.signOut().then(() => {
+                      clearSpaceSelection();
+                      navigate("/");
+                    })
+                  }
+                >
+                  <LogOut size={16} strokeWidth={1.7} className="text-muted-foreground" />
+                  <Trans>Log out</Trans>
+                </Button>
+              </PopoverContent>
+            ) : null}
+          </Popover>
+          {credit ? (
+            <CreditPill
+              status={credit}
+              onClick={() => {
+                setMenuOpen(false);
+                refreshCredit();
+                setAccountSettingsFocusUsage(true);
+                setAccountSettingsOpen(true);
+              }}
+            />
           ) : null}
-        </Popover>
+        </div>
       </aside>
 
       <button
@@ -4305,6 +4339,7 @@ export function ShellPage() {
             name={userName}
             email={session.data?.user.email}
             usage={usage}
+            credit={credit}
             focusUsage={accountSettingsFocusUsage}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
             sandboxProvider={bootstrapMe?.sandboxProvider}

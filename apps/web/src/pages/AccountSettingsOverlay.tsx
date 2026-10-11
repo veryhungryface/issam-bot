@@ -1,4 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { CreditStatus } from "@rakazo/contracts";
 import {
   Button,
   Dialog,
@@ -24,9 +25,12 @@ import {
   ComputersUnavailableHint,
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
+import { CreditLimits } from "../components/CreditLimits";
+import { CreditDetail } from "../components/CreditMeter";
 import { SoftwareUpdateSection } from "../components/SoftwareUpdateSection";
 import { authClient } from "../lib/auth";
 import { getActiveUiLocale, setUiLocale } from "../lib/i18n";
+import { rpc } from "../lib/rpc";
 import {
   type AppearancePreference,
   getUiAppearancePreference,
@@ -38,6 +42,7 @@ export function AccountSettingsOverlay({
   email,
   name,
   usage,
+  credit,
   focusUsage,
   isDeploymentOwner = false,
   sandboxProvider,
@@ -48,6 +53,7 @@ export function AccountSettingsOverlay({
   email?: string | null;
   name: string;
   usage?: { runs: number; inputTokens: number; outputTokens: number } | null;
+  credit?: CreditStatus | null;
   focusUsage?: boolean;
   isDeploymentOwner?: boolean;
   sandboxProvider?: string | null;
@@ -150,19 +156,29 @@ export function AccountSettingsOverlay({
           data-testid="usage-settings"
           className="mt-5 rounded-xl border border-border px-4 py-4 outline-none"
         >
-          <h3 className="text-[15px] font-medium text-foreground">
-            <Trans>Usage</Trans>
-          </h3>
+          <h3 className="text-[15px] font-medium text-foreground">사용량</h3>
+          {credit ? (
+            <div className="mt-3">
+              <CreditDetail status={credit} />
+            </div>
+          ) : null}
           {usage ? (
-            <p className="mt-3 text-[14px] text-foreground/75">
-              <Trans>
-                {usage.runs} runs · {usage.inputTokens + usage.outputTokens} tokens
-              </Trans>
+            <p className="mt-3 border-t border-border pt-2 text-[12.5px] text-muted-foreground">
+              전체 기간 {usage.runs}회 실행 ·{" "}
+              {(usage.inputTokens + usage.outputTokens).toLocaleString("ko-KR")} 토큰
             </p>
           ) : null}
-          <p className={`text-[12.5px] text-muted-foreground/80 ${usage ? "mt-2" : "mt-3"}`}>
-            <Trans>Model spend uses your provider keys.</Trans>
-          </p>
+          {isDeploymentOwner ? (
+            <CreditLimits
+              onLoad={() => rpc.credit.everyone()}
+              onSetLimit={(userId, weeklyCreditKrw) =>
+                rpc.credit.setLimit({ userId, weeklyCreditKrw })
+              }
+              onSetDeploymentLimit={(weeklyCreditKrw) =>
+                rpc.credit.setDeploymentLimit({ weeklyCreditKrw })
+              }
+            />
+          ) : null}
         </div>
 
         <SoftwareUpdateSection isDeploymentOwner={isDeploymentOwner} />

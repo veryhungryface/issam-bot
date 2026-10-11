@@ -16,6 +16,8 @@ model User {
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("robot")
+  /// Weekly credit in won for this account. Null defers to the deployment default.
+  weeklyCreditKrw             Int?
   sessions                    Session[]
   accounts                    Account[]
   members                     Member[]
@@ -246,6 +248,8 @@ model DeploymentSettings {
   defaultModelId                  String?
   deploymentModelCredentialCipher String?
   computerHost                    String?
+  /// Weekly credit in won applied to every account without its own override.
+  weeklyCreditKrw                 Int      @default(2000)
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
 

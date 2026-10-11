@@ -616,6 +616,49 @@ export const UsageRecordSchema = z.object({
   createdAt: z.string(),
 });
 
+/**
+ * One account's weekly credit, as the pill beside the name and the panel behind it read it.
+ *
+ * The money figures are won and already rounded for display; the raw meters travel beside
+ * them so the detail view can explain the number rather than only state it.
+ */
+export const CreditStatusSchema = z.object({
+  state: z.enum(["unlimited", "ok", "low", "exhausted"]),
+  /** Null when this account has no limit. */
+  limitKrw: z.number().nullable(),
+  spentKrw: z.number(),
+  remainingKrw: z.number().nullable(),
+  /** Null when unlimited; otherwise 0–100, which is the number on the pill. */
+  remainingPercent: z.number().nullable(),
+  /** The Monday this week's allowance came back, and the one it returns on. */
+  windowStart: z.string(),
+  windowEnd: z.string(),
+  /** Whether the limit came from this account or from the deployment default. */
+  limitSource: z.enum(["owner", "account", "deployment"]),
+  spent: z.object({
+    runs: z.number().int(),
+    inputTokens: z.number().int(),
+    outputTokens: z.number().int(),
+    browserSeconds: z.number().int(),
+    browserSessions: z.number().int(),
+    modelKrw: z.number(),
+    browserKrw: z.number(),
+  }),
+});
+export type CreditStatus = z.infer<typeof CreditStatusSchema>;
+
+/** One row of the deployment owner's view of everyone's week. */
+export const CreditAccountSchema = z.object({
+  userId: Id,
+  name: z.string(),
+  email: z.string(),
+  isDeploymentOwner: z.boolean(),
+  /** This account's own override, or null when it follows the deployment default. */
+  overrideKrw: z.number().nullable(),
+  status: CreditStatusSchema,
+});
+export type CreditAccount = z.infer<typeof CreditAccountSchema>;
+
 export const ComputerStatusSchema = z.object({
   botId: Id,
   mode: ComputerModeSchema,
