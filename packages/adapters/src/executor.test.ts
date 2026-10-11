@@ -1162,7 +1162,7 @@ description: Prepare standup notes
     expect(finalizeRun).toHaveBeenCalledWith(
       expect.objectContaining({
         outcome: "failed",
-        error: "Connect a model in Settings before running bots.",
+        error: "봇을 실행하려면 설정에서 모델을 먼저 연결해 주세요.",
       }),
     );
     expect(runtimeRun).not.toHaveBeenCalled();

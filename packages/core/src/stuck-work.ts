@@ -12,6 +12,8 @@
  * wait is never silent until the next day.
  */
 
+import { withSubjectParticle } from "./korean-particle.js";
+
 /** Remind once a queued run or a human wait has been sitting this long. */
 export const STUCK_WORK_NOTIFY_AFTER_MS = 4 * 60 * 60 * 1000;
 
@@ -89,24 +91,24 @@ export function stuckWorkReminder(
   status: StuckWorkStatus,
   botName: string,
 ): { kind: StuckAttentionKind; title: string; body: string } {
-  const name = botLabel(botName);
+  const name = withSubjectParticle(botLabel(botName));
   switch (status) {
     case "queued":
       return {
         kind: "help",
-        title: `${name}이 아직 시작하지 못했어요`,
+        title: `${name} 아직 시작하지 못했어요`,
         body: "작업이 대기 중이에요.",
       };
     case "waiting_input":
       return {
         kind: "help",
-        title: `${name}이 답을 기다리고 있어요`,
+        title: `${name} 답을 기다리고 있어요`,
         body: "입력해 주시면 이어서 할게요.",
       };
     case "waiting_takeover":
       return {
         kind: "takeover",
-        title: `${name}이 화면에서 기다리고 있어요`,
+        title: `${name} 화면에서 기다리고 있어요`,
         body: "직접 확인해 주셔야 이어갈 수 있어요.",
       };
   }
