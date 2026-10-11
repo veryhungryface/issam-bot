@@ -17,7 +17,12 @@ concurrency:
 
 jobs:
   publish:
+    # The gallery needs somewhere to go. This deployment profile has no bucket, so without
+    # the guard every merge ends in a red "publish Playwright report" that means nothing but
+    # "S3 was never set up here" — noise that hides a real failure. Fill in S3_BUCKET and
+    # PLAYWRIGHT_PUBLIC_BASE_URL and the job comes back on its own.
     if: >-
+      vars.S3_BUCKET != '' && vars.PLAYWRIGHT_PUBLIC_BASE_URL != '' &&
       (github.event.workflow_run.conclusion == 'success' ||
        github.event.workflow_run.conclusion == 'failure' ||
        github.event.workflow_run.conclusion == 'timed_out') &&
