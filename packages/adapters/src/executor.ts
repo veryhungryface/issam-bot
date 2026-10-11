@@ -74,6 +74,7 @@ import {
   toolRequiresExplicitApproval,
   truncatedPlainText,
   userTurnBlocksForRun,
+  withSubjectParticle,
 } from "@rakazo/core";
 import {
   approvalEffectKey,
@@ -489,7 +490,7 @@ export function isProtectedComputerLifecycleCommand(command: string): boolean {
 
 /** Cap the roster so a large Space cannot flood the prompt. */
 const BOT_DIRECTORY_LIMIT = 40;
-const MISSING_MODEL_MESSAGE = "Connect a model in Settings before running bots.";
+const MISSING_MODEL_MESSAGE = "봇을 실행하려면 설정에서 모델을 먼저 연결해 주세요.";
 
 function runtimeFallbackModel(runtime: AgentRuntime) {
   return runtime.describe().capabilities.scripted ? { provider: "scripted", id: "scripted" } : null;
@@ -1455,7 +1456,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (!failed.continuationRunId) {
             await notifyRun(deps, run, {
               kind: "failure",
-              title: `${bot.name} failed`,
+              title: `${bot.name} 작업이 실패했어요`,
               body: MISSING_MODEL_MESSAGE,
               botId: bot.id,
               threadId: thread.id,
@@ -2213,8 +2214,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await notifyRun(deps, run, {
               kind: "help",
-              title: `${bot.name} needs approval`,
-              body: `Review before ${name}`,
+              title: `${withSubjectParticle(bot.name)} 승인을 기다리고 있어요`,
+              body: `${name} 실행 전에 확인해 주세요`,
               botId: bot.id,
               threadId: thread.id,
             });
@@ -3439,8 +3440,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await notifyRun(deps, run, {
               kind: "help",
-              title: `${bot.name} needs a code`,
-              body: String(args.label ?? "Code"),
+              title: `${withSubjectParticle(bot.name)} 인증코드를 기다리고 있어요`,
+              body: String(args.label ?? "인증코드"),
               botId: bot.id,
               threadId: thread.id,
             });
@@ -3539,7 +3540,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             await notifyRun(deps, run, {
               kind: "help",
-              title: `${bot.name} needs a sign-in`,
+              title: `${withSubjectParticle(bot.name)} 로그인을 기다리고 있어요`,
               body: String(args.title ?? origin),
               botId: bot.id,
               threadId: thread.id,
@@ -4065,7 +4066,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (!paused) return;
               await notifyRun(deps, run, {
                 kind: "help",
-                title: `${bot.name} needs an answer`,
+                title: `${withSubjectParticle(bot.name)} 답을 기다리고 있어요`,
                 body: safeText,
                 botId: bot.id,
                 threadId: thread.id,
@@ -4168,7 +4169,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               retainComputerLease = true;
               await notifyRun(deps, run, {
                 kind: "takeover",
-                title: `${bot.name} needs you on the screen`,
+                title: `${withSubjectParticle(bot.name)} 화면에서 기다리고 있어요`,
                 body: safeReason,
                 botId: bot.id,
                 threadId: thread.id,
@@ -4511,7 +4512,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (!failed.continuationRunId) {
             await notifyRun(deps, run, {
               kind: "failure",
-              title: `${bot.name} failed`,
+              title: `${bot.name} 작업이 실패했어요`,
               body: message.slice(0, 180),
               botId: bot.id,
               threadId: thread.id,

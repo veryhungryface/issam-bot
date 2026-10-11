@@ -85,6 +85,11 @@ describe("what the user reads", () => {
   it("names the bot, and stays readable when it has no name", () => {
     expect(stuckWorkReminder("waiting_input", "이삼봇").title).toContain("이삼봇");
     expect(stuckWorkReminder("waiting_input", "  ").title).toContain("봇");
+    // The particle belongs to the name, not to the sentence: 이삼봇이, but 비서가.
+    expect(stuckWorkReminder("waiting_input", "이삼봇").title).toBe(
+      "이삼봇이 답을 기다리고 있어요",
+    );
+    expect(stuckWorkReminder("waiting_input", "비서").title).toBe("비서가 답을 기다리고 있어요");
     expect(stuckWorkStoppedNotification("queued", "이삼봇")).toMatchObject({
       kind: "failure",
       body: stuckWorkStatusMessage("queued"),
