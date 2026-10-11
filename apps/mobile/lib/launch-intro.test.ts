@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   COVER_CEILING_MS,
+  clearsTheStage,
   coverHoldMs,
+  INTRO_FIELD,
   INTRO_ORDER,
   INTRO_SCORE,
+  INTRO_STAGE,
   introRunsForMs,
   playsIntro,
 } from "./launch-intro";
@@ -49,6 +52,49 @@ describe("the intro's score", () => {
         ring: { at: 0, lasts: 9_000 },
       }),
     ).toBe(9_000);
+  });
+});
+
+describe("the sky it plays in", () => {
+  it("is already there when the sequence starts, and warms as the mark arrives", () => {
+    expect(INTRO_SCORE.field.at).toBe(0);
+    expect(INTRO_SCORE.glow.at).toBe(INTRO_SCORE.mark.at);
+  });
+
+  it("keeps every star clear of the centre the sequence plays in", () => {
+    for (const star of INTRO_FIELD) {
+      expect(clearsTheStage(star)).toBe(true);
+    }
+    // The rule is worth having only if it could fail: one in the middle must not pass.
+    expect(clearsTheStage({ x: 0.5, y: 0.5, size: 10, dim: 0.2, turn: 0 })).toBe(false);
+  });
+
+  it("stays on the screen, stays faint, and stays scattered", () => {
+    for (const star of INTRO_FIELD) {
+      expect(star.x).toBeGreaterThanOrEqual(0);
+      expect(star.x).toBeLessThanOrEqual(1);
+      expect(star.y).toBeGreaterThanOrEqual(0);
+      expect(star.y).toBeLessThanOrEqual(1);
+      // Background, not decoration: a star bright enough to read as an element would
+      // compete with the mark it sits behind. The ceiling is higher than it looks —
+      // the field's sparkle is a thin shape, so it puts far less ink on the screen at
+      // the same opacity than the plump mark would.
+      expect(star.dim).toBeLessThanOrEqual(0.35);
+      expect(star.size).toBeLessThanOrEqual(22);
+    }
+    for (const [index, star] of INTRO_FIELD.entries()) {
+      for (const other of INTRO_FIELD.slice(index + 1)) {
+        const apart = Math.hypot(star.x - other.x, star.y - other.y);
+        expect(apart).toBeGreaterThan(0.12);
+      }
+    }
+  });
+
+  it("describes a stage the mark and its name actually stand in", () => {
+    expect(INTRO_STAGE.left).toBeLessThan(0.5);
+    expect(INTRO_STAGE.right).toBeGreaterThan(0.5);
+    expect(INTRO_STAGE.top).toBeLessThan(0.5);
+    expect(INTRO_STAGE.bottom).toBeGreaterThan(0.5);
   });
 });
 
