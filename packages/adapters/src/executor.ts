@@ -2118,7 +2118,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               }
             } catch {
               // Auth/refresh failures must fail closed like a checker error, not fail the run.
-              reviewReason = "Checker could not authenticate.";
+              reviewReason = "검사 모델 인증에 실패했어요.";
               gateDecision = applyJudgeDecision({
                 decision: "error",
                 consequential: requiresApprovalByDefault,
@@ -3425,7 +3425,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               blocks: [
                 {
                   kind: "ask",
-                  text: String(args.label ?? "Code"),
+                  text: String(args.label ?? "인증코드"),
                   input: "secret",
                   ...(destination ? { credential: destination } : {}),
                   purpose: normalizeSecretAskPurpose(
@@ -3528,7 +3528,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               blocks: [
                 {
                   kind: "browser_login",
-                  title: String(args.title ?? "Sign in"),
+                  title: String(args.title ?? "로그인"),
                   origin,
                   fields: fields.data,
                   status: "pending",

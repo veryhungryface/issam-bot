@@ -2588,7 +2588,7 @@ describeJourneys("required product journeys", () => {
       (snap) => snap.run?.id === sent.runId && snap.run.status === "waiting_input",
     );
     const approval = JSON.stringify(waiting.messages);
-    expect(approval).toContain("Create space");
+    expect(approval).toContain("스페이스를 만들까요?");
     expect(approval).toContain("Customer support");
     expect(approval).toContain("Cancel");
     expect(approval).not.toContain("Always allow this tool");
