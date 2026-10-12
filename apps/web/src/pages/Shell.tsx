@@ -131,7 +131,7 @@ import {
   ComputersUnavailableHint,
   computersAreUnavailable,
 } from "../components/ComputersUnavailableHint";
-import { CreditDetail, CreditPill } from "../components/CreditMeter";
+import { CreditPill } from "../components/CreditMeter";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
@@ -1156,6 +1156,25 @@ export function ShellPage() {
       .then(setCredit)
       .catch(() => undefined);
   }, []);
+
+  // The settings panel is the one place the usage section lives, so it fetches on open
+  // rather than trusting whoever opened it to have fetched first. Before this, the section
+  // was blank unless the reader had happened to press the menu's Usage entry earlier in
+  // the session — the numbers were there, with nothing on screen to show them.
+  useEffect(() => {
+    if (!accountSettingsOpen) return;
+    refreshCredit();
+    void rpc.usage
+      .summary()
+      .then(setUsage)
+      .catch(() => undefined);
+    if (bootstrapMe?.isDeploymentOwner) {
+      void rpc.usage
+        .workspace({ days: 30 })
+        .then(setWorkspaceUsage)
+        .catch(() => undefined);
+    }
+  }, [accountSettingsOpen, bootstrapMe?.isDeploymentOwner, refreshCredit]);
 
   const refreshAgentSkills = useCallback(() => {
     void rpc.agentSkills
@@ -3326,46 +3345,15 @@ export function ShellPage() {
                 <Button
                   variant="ghost"
                   className="w-full justify-start font-normal"
-                  onClick={async () => {
-                    refreshCredit();
-                    setUsage(await rpc.usage.summary());
-                    if (bootstrapMe?.isDeploymentOwner) {
-                      setWorkspaceUsage(await rpc.usage.workspace({ days: 30 }).catch(() => null));
-                    }
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setAccountSettingsFocusUsage(true);
+                    setAccountSettingsOpen(true);
                   }}
                 >
                   <Gauge size={16} strokeWidth={1.7} className="text-muted-foreground" />
                   <Trans>Usage</Trans>
                 </Button>
-                {credit ? (
-                  <div className="px-3 pb-2">
-                    <CreditDetail status={credit} />
-                  </div>
-                ) : null}
-                {usage ? (
-                  <div className="px-3 pb-2 text-[12.5px] leading-5 text-muted-foreground">
-                    <p className="m-0 border-t border-border pt-2">
-                      전체 기간 {usage.runs}회 · 토큰{" "}
-                      {(usage.inputTokens + usage.outputTokens).toLocaleString()}
-                    </p>
-                    {workspaceUsage?.length ? (
-                      <div className="mt-2 border-t border-border pt-2">
-                        <p className="m-0 mb-1 text-[11.5px] uppercase tracking-wide text-muted-foreground/70">
-                          사용자별 · 최근 30일
-                        </p>
-                        {workspaceUsage.map((row) => (
-                          <p key={row.userId} className="m-0 flex justify-between gap-3">
-                            <span className="truncate text-foreground/80">{row.name}</span>
-                            <span className="shrink-0 tabular-nums">
-                              {row.runs}회 · {(row.inputTokens + row.outputTokens).toLocaleString()}
-                              tk · {formatBrowserMinutes(row.browserSeconds)}
-                            </span>
-                          </p>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
                 <Button
                   variant="ghost"
                   className="w-full justify-start font-normal"
@@ -4354,6 +4342,7 @@ export function ShellPage() {
             name={userName}
             email={session.data?.user.email}
             usage={usage}
+            workspaceUsage={workspaceUsage}
             credit={credit}
             focusUsage={accountSettingsFocusUsage}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
@@ -5944,14 +5933,6 @@ function MessageHoverActions({
       </div>
     </MessageHoverMetadata>
   );
-}
-
-function formatBrowserMinutes(seconds: number): string {
-  if (seconds <= 0) return "0분";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes >= 60) return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분`;
-  if (minutes === 0) return `${seconds}초`;
-  return `${minutes}분 ${seconds % 60}초`;
 }
 
 function firstThreadRoute(

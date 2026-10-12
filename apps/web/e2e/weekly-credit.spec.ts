@@ -120,3 +120,39 @@ test("a phone shows the meter without opening the drawer", async ({ browser }, t
   await captureScreenshot(page, testInfo, "weekly-credit-phone");
   await context.close();
 });
+
+test("the settings panel fills its usage section in, however it was opened", async ({
+  page,
+}, testInfo) => {
+  // The report that prompted this: opening Settings from the gear showed a 사용량 heading
+  // with nothing under it. The numbers only arrived if the reader had pressed the menu's
+  // Usage entry at some earlier point in the session, which nobody does. The panel now
+  // fetches on open, and this is the door that was broken.
+  const stamp = Date.now();
+  await signup(page, `credit-settings-${stamp}@rakazo.test`, "password12", "Credit Settings");
+  await completeOnboarding(page, testInfo);
+
+  await page.getByTestId("user-menu-trigger").click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+
+  const section = page.getByTestId("usage-settings");
+  await expect(section).toBeVisible();
+  const detail = section.getByTestId("credit-detail");
+  await expect(detail).toBeVisible();
+  await expect(detail).toContainText("이번 주 사용량");
+  // The all-time line comes from the other call the panel makes on open.
+  await expect(section).toContainText("전체 기간");
+  await captureScreenshot(page, testInfo, "weekly-credit-settings");
+});
+
+test("the menu's usage entry opens the same panel", async ({ page }, testInfo) => {
+  const stamp = Date.now();
+  await signup(page, `credit-menu-${stamp}@rakazo.test`, "password12", "Credit Menu");
+  await completeOnboarding(page, testInfo);
+
+  await page.getByTestId("user-menu-trigger").click();
+  await page.getByRole("button", { name: "Usage", exact: true }).click();
+
+  await expect(page.getByTestId("user-settings")).toBeVisible();
+  await expect(page.getByTestId("usage-settings").getByTestId("credit-detail")).toBeVisible();
+});

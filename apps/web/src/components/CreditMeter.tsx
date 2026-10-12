@@ -15,7 +15,7 @@ export function formatKrw(krw: number): string {
   return `${Math.round(krw).toLocaleString("ko-KR")}원`;
 }
 
-function minutes(seconds: number): string {
+export function formatMinutes(seconds: number): string {
   if (seconds <= 0) return "0분";
   const whole = Math.floor(seconds / 60);
   if (whole >= 60) return `${Math.floor(whole / 60)}시간 ${whole % 60}분`;
@@ -146,7 +146,7 @@ export function CreditDetail({ status }: { status: CreditStatus }) {
         </div>
         <div className="flex justify-between gap-3">
           <dt className="m-0 text-muted-foreground">
-            브라우저 {minutes(status.spent.browserSeconds)}
+            브라우저 {formatMinutes(status.spent.browserSeconds)}
             {status.spent.browserSessions > 0 ? ` · ${status.spent.browserSessions}세션` : ""}
           </dt>
           <dd className="m-0 tabular-nums text-foreground/80">
