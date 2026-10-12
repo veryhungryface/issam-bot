@@ -22,6 +22,22 @@ from.
 The rate card lives in `packages/core/src/credit.ts` with an effective date. It is the only place
 a price is written down, and changing one changes every figure in the app at once.
 
+**The card has a row per model.** Token prices differ by a factor of twenty across the models on
+it, so a single blended rate would misprice any week a model switch touched: `usage_records` keeps
+the model on every row, and the week is priced by grouping on it. Two consequences for whoever
+changes the deployment's model:
+
+- Add a row to `CREDIT_RATES.models` for the new model id, and point `fallbackTokenRates` at it.
+  A model with no row is charged the fallback rate — never nothing, which would hand whoever ran
+  it an unlimited week, and never the dearest rate, which would lock them out over a missing row.
+- Do it in the same change as the model switch. The meter and the invoice disagree until you do,
+  and the direction of the error depends on which way the price moved.
+
+On 2026-10-12 the deployment moved from `gpt-5.6-luna` to `gpt-6-luna`, which halved the input
+price and cut output by 58%. The 5.6 rows stay on the card because a week already spent on them
+has to keep costing what it cost. `PI_DEFAULT_MODEL` on the server is what actually selects the
+model; `.env.example` and `docs/DEPLOYMENT.md` only document the intended value.
+
 **Checked before a run, not during one.** A run already under way keeps its session: killing it
 halfway spends the money without finishing the job. A week can therefore end a little over its
 limit, and the overspend comes out of the following check rather than out of a half-done task.

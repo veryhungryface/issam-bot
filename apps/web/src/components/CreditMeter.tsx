@@ -32,7 +32,28 @@ const TONE: Record<CreditStatus["state"], string> = {
   unlimited: "bg-muted text-muted-foreground",
 };
 
-export function CreditPill({ status, onClick }: { status: CreditStatus; onClick: () => void }) {
+/**
+ * `className` and `testId` exist for the phone copy of this pill.
+ *
+ * On a desktop the pill lives in the sidebar beside the account name. A phone keeps that
+ * sidebar in a drawer, so a pill that only exists there is not the "always on screen"
+ * meter it was asked to be — it is a meter you have to go looking for. The conversation
+ * header is the one strip a phone always shows, so a second copy goes there, and it needs
+ * the header's own `pointer-events-auto` (the header bar itself does not take pointer
+ * events, so that its gradient never swallows a tap meant for the page) and a testid of
+ * its own, so a test can say which of the two it means.
+ */
+export function CreditPill({
+  status,
+  onClick,
+  className = "",
+  testId = "credit-pill",
+}: {
+  status: CreditStatus;
+  onClick: () => void;
+  className?: string;
+  testId?: string;
+}) {
   const label =
     status.state === "unlimited"
       ? formatKrw(status.spentKrw)
@@ -46,12 +67,12 @@ export function CreditPill({ status, onClick }: { status: CreditStatus; onClick:
   return (
     <button
       type="button"
-      data-testid="credit-pill"
+      data-testid={testId}
       data-state={status.state}
       onClick={onClick}
       title={title}
       aria-label={`사용량: ${label}`}
-      className={`shrink-0 rounded-full px-2 py-[3px] text-[11.5px] font-medium tabular-nums transition-colors hover:brightness-95 ${TONE[status.state]}`}
+      className={`shrink-0 rounded-full px-2 py-[3px] text-[11.5px] font-medium tabular-nums transition-colors hover:brightness-95 ${TONE[status.state]} ${className}`}
     >
       {label}
     </button>
@@ -141,8 +162,9 @@ export function CreditDetail({ status }: { status: CreditStatus }) {
       </dl>
 
       <p className="m-0 text-[11.5px] leading-4 text-muted-foreground/70">
-        단가 기준 {CREDIT_RATES.effectiveFrom} · 입력 1M당 ${CREDIT_RATES.usdPerMillionInputTokens},
-        출력 1M당 ${CREDIT_RATES.usdPerMillionOutputTokens}, 브라우저 1시간당 $
+        단가 기준 {CREDIT_RATES.effectiveFrom} · 현재 모델 입력 1M당 $
+        {CREDIT_RATES.fallbackTokenRates.usdPerMillionInputTokens}, 출력 1M당 $
+        {CREDIT_RATES.fallbackTokenRates.usdPerMillionOutputTokens}, 브라우저 1시간당 $
         {CREDIT_RATES.usdPerBrowserHour} · $1 = {CREDIT_RATES.krwPerUsd.toLocaleString("ko-KR")}원
       </p>
     </div>

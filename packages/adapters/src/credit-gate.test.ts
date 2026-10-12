@@ -10,8 +10,11 @@ function prismaWith(options: {
   ownerUserId?: string | null;
   deploymentLimitKrw?: number;
   userLimitKrw?: number | null;
+  model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  /** Several models in one week, for the case a model switch left rows at both prices. */
+  models?: { model: string; inputTokens: number; outputTokens: number }[];
   browserSeconds?: number;
   failOn?: "settings" | "tokens";
 }): PrismaClient {
@@ -29,14 +32,23 @@ function prismaWith(options: {
       findUnique: async () => ({ weeklyCreditKrw: options.userLimitKrw ?? null }),
     },
     usageRecord: {
-      aggregate: async () => {
+      groupBy: async () => {
         if (options.failOn === "tokens") throw new Error("database is down");
-        return {
-          _sum: {
-            inputTokens: options.inputTokens ?? 0,
-            outputTokens: options.outputTokens ?? 0,
-          },
-        };
+        const rows =
+          options.models ??
+          (options.inputTokens || options.outputTokens
+            ? [
+                {
+                  model: options.model ?? "gpt-6-luna",
+                  inputTokens: options.inputTokens ?? 0,
+                  outputTokens: options.outputTokens ?? 0,
+                },
+              ]
+            : []);
+        return rows.map((row) => ({
+          model: row.model,
+          _sum: { inputTokens: row.inputTokens, outputTokens: row.outputTokens },
+        }));
       },
     },
     browserSessionUsage: {
@@ -57,7 +69,7 @@ describe("the gate a run passes before it costs anything", () => {
   });
 
   it("stops a run once the week's credit is gone", async () => {
-    // 20M input tokens is about 5,800 won on the current card: well past 2,000.
+    // 20M input tokens is about 2,900 won on the current card: well past 2,000.
     const decision = await creditDecisionForRun(
       prismaWith({ inputTokens: 20_000_000 }),
       "tester-1",
@@ -112,6 +124,28 @@ describe("the gate a run passes before it costs anything", () => {
       MONDAY_MORNING,
     );
     expect(decision.allowed).toBe(false);
+  });
+
+  it("prices a week that spans a model switch at both models' rates", async () => {
+    // Same token volume either way. Split across the old and new model it has to land
+    // between the two single-model weeks, which is only true if the gate groups by model
+    // instead of handing one blended rate to the whole week.
+    const half = { inputTokens: 10_000_000, outputTokens: 100_000 };
+    const spent = async (models: { model: string; inputTokens: number; outputTokens: number }[]) =>
+      (await creditDecisionForRun(prismaWith({ models }), "tester-1", MONDAY_MORNING)).spentKrw;
+
+    const allNew = await spent([
+      { model: "gpt-6-luna", inputTokens: 20_000_000, outputTokens: 200_000 },
+    ]);
+    const allOld = await spent([
+      { model: "gpt-5.6-luna", inputTokens: 20_000_000, outputTokens: 200_000 },
+    ]);
+    const mixed = await spent([
+      { model: "gpt-5.6-luna", ...half },
+      { model: "gpt-6-luna", ...half },
+    ]);
+    expect(mixed).toBeGreaterThan(allNew);
+    expect(mixed).toBeLessThan(allOld);
   });
 
   it("propagates a read failure rather than silently allowing a free week", async () => {

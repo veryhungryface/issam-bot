@@ -12,14 +12,35 @@
  * estimate can still be recomputed against the card that was current when it was spent.
  */
 
+/** What one model charges per million tokens, in the provider's own currency. */
+export interface ModelTokenRates {
+  usdPerMillionInputTokens: number;
+  usdPerMillionOutputTokens: number;
+}
+
 /** What the providers charge. Rates are the provider's own units; `krwPerUsd` converts. */
 export interface CreditRates {
   /** Which card this is, persisted alongside an estimate so old estimates stay explainable. */
   version: string;
   /** The day these rates were read from the providers, as `YYYY-MM-DD`. */
   effectiveFrom: string;
-  usdPerMillionInputTokens: number;
-  usdPerMillionOutputTokens: number;
+  /** Token prices by model id, as `usage_records.model` records them. */
+  models: Record<string, ModelTokenRates>;
+  /**
+   * What a model with no row above is charged.
+   *
+   * Priced per model rather than once for the deployment because the two are not the same
+   * number and the gap is large: on this card the cheapest and dearest models are twenty
+   * times apart. A single blended rate would silently misprice every week that a model
+   * switch touched — the deployment moved from gpt-5.6-luna to gpt-6-luna mid-flight, and
+   * a global card would have kept charging the old price until someone noticed.
+   *
+   * Keep this tracking whatever `PI_DEFAULT_MODEL` resolves to, so an unpriced model is
+   * charged what the deployment's own model costs rather than a guess in either direction.
+   * Charging the dearest known rate would be safer for the invoice but would lock someone
+   * out of a deployment over a missing table row, which is worse than a small misprice.
+   */
+  fallbackTokenRates: ModelTokenRates;
   usdPerBrowserHour: number;
   krwPerUsd: number;
 }
@@ -27,10 +48,14 @@ export interface CreditRates {
 /**
  * Rates as of 2026-10-12.
  *
- * The model is gpt-5.6-luna at $0.20 / $1.20 per million tokens, the rate after the
- * 2026-07-30 cut. Browser time is Browserbase's $0.12 per browser-hour, which is the
- * Developer-tier overage rate — the marginal price of one more hour, which is what a limit
- * should be built on, rather than the blended price of a plan's included hours.
+ * Token prices are OpenAI's list prices. gpt-6-luna and gpt-6-sol landed on 2026-09-22 at
+ * half their predecessors' input price or less, and OpenAI has said the figures are
+ * permanent rather than introductory. The 5.6 rows stay because a week already spent on
+ * them has to keep costing what it cost.
+ *
+ * Browser time is Browserbase's $0.12 per browser-hour, the Developer-tier overage rate —
+ * the marginal price of one more hour, which is what a limit should be built on, rather
+ * than the blended price of a plan's included hours.
  *
  * The exchange rate is the one number here that moves daily. It is deliberately a round
  * figure: a credit limit is a budget, not an invoice, and a limit that drifts with the
@@ -39,16 +64,33 @@ export interface CreditRates {
 export const CREDIT_RATES: CreditRates = {
   version: "2026-10-12",
   effectiveFrom: "2026-10-12",
-  usdPerMillionInputTokens: 0.2,
-  usdPerMillionOutputTokens: 1.2,
+  models: {
+    "gpt-6-luna": { usdPerMillionInputTokens: 0.1, usdPerMillionOutputTokens: 0.5 },
+    "gpt-6-sol": { usdPerMillionInputTokens: 2, usdPerMillionOutputTokens: 10 },
+    "gpt-5.6-luna": { usdPerMillionInputTokens: 0.2, usdPerMillionOutputTokens: 1.2 },
+    "gpt-5.6-sol": { usdPerMillionInputTokens: 4, usdPerMillionOutputTokens: 20 },
+  },
+  fallbackTokenRates: { usdPerMillionInputTokens: 0.1, usdPerMillionOutputTokens: 0.5 },
   usdPerBrowserHour: 0.12,
   krwPerUsd: 1_450,
 };
 
-/** What one run, or one week, consumed. */
-export interface CreditUsage {
+/** The card's rate for one model id, or the fallback when the card does not name it. */
+export function modelTokenRates(model: string, rates: CreditRates = CREDIT_RATES): ModelTokenRates {
+  return rates.models[model] ?? rates.fallbackTokenRates;
+}
+
+/** Tokens one model spent. `usage_records` holds a row per call, with the model on it. */
+export interface ModelUsage {
+  model: string;
   inputTokens: number;
   outputTokens: number;
+}
+
+/** What one run, or one week, consumed. */
+export interface CreditUsage {
+  /** Token usage grouped by model, because models are not priced alike. */
+  models: ModelUsage[];
   browserSeconds: number;
 }
 
@@ -62,11 +104,7 @@ const SECONDS_PER_HOUR = 3_600;
  * nearest won before adding them up would lose most of a light user's week.
  */
 export function estimateCostKrw(usage: CreditUsage, rates: CreditRates = CREDIT_RATES): number {
-  const usd =
-    (Math.max(0, usage.inputTokens) / MILLION) * rates.usdPerMillionInputTokens +
-    (Math.max(0, usage.outputTokens) / MILLION) * rates.usdPerMillionOutputTokens +
-    (Math.max(0, usage.browserSeconds) / SECONDS_PER_HOUR) * rates.usdPerBrowserHour;
-  return usd * rates.krwPerUsd;
+  return costBreakdownKrw(usage, rates).totalKrw;
 }
 
 /** The same figure split up, for the detail view that answers "what did I spend it on?". */
@@ -74,17 +112,20 @@ export function costBreakdownKrw(
   usage: CreditUsage,
   rates: CreditRates = CREDIT_RATES,
 ): { inputKrw: number; outputKrw: number; browserKrw: number; totalKrw: number } {
-  const inputKrw =
-    (Math.max(0, usage.inputTokens) / MILLION) * rates.usdPerMillionInputTokens * rates.krwPerUsd;
-  const outputKrw =
-    (Math.max(0, usage.outputTokens) / MILLION) * rates.usdPerMillionOutputTokens * rates.krwPerUsd;
-  const browserKrw =
-    (Math.max(0, usage.browserSeconds) / SECONDS_PER_HOUR) *
-    rates.usdPerBrowserHour *
-    rates.krwPerUsd;
+  let inputUsd = 0;
+  let outputUsd = 0;
+  for (const row of usage.models) {
+    const modelRates = modelTokenRates(row.model, rates);
+    inputUsd += (Math.max(0, row.inputTokens) / MILLION) * modelRates.usdPerMillionInputTokens;
+    outputUsd += (Math.max(0, row.outputTokens) / MILLION) * modelRates.usdPerMillionOutputTokens;
+  }
+  const browserUsd =
+    (Math.max(0, usage.browserSeconds) / SECONDS_PER_HOUR) * rates.usdPerBrowserHour;
+  const inputKrw = inputUsd * rates.krwPerUsd;
+  const outputKrw = outputUsd * rates.krwPerUsd;
+  const browserKrw = browserUsd * rates.krwPerUsd;
   return { inputKrw, outputKrw, browserKrw, totalKrw: inputKrw + outputKrw + browserKrw };
 }
-
 /**
  * The week the credit is measured over: Monday 00:00 Korean time to the next Monday.
  *

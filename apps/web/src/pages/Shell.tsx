@@ -3501,6 +3501,21 @@ export function ShellPage() {
                   <PanelLeftOpen size={18} strokeWidth={1.7} aria-hidden="true" />
                 </button>
               ) : null}
+              {/* The phone's copy of the sidebar pill: on this width the sidebar is a
+                  drawer, so this is the only place the meter is actually always on
+                  screen. Hidden from md up, where the sidebar one is visible. */}
+              {credit ? (
+                <CreditPill
+                  status={credit}
+                  testId="credit-pill-compact"
+                  className="app-no-drag pointer-events-auto border border-border/60 backdrop-blur-sm md:hidden"
+                  onClick={() => {
+                    refreshCredit();
+                    setAccountSettingsFocusUsage(true);
+                    setAccountSettingsOpen(true);
+                  }}
+                />
+              ) : null}
             </div>
 
             <button

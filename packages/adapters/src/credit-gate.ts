@@ -47,7 +47,10 @@ export async function creditDecisionForRun(
       select: { ownerUserId: true, weeklyCreditKrw: true },
     }),
     prisma.user.findUnique({ where: { id: userId }, select: { weeklyCreditKrw: true } }),
-    prisma.usageRecord.aggregate({
+    // Grouped by model, not summed flat: the card prices models differently, and a week
+    // that spans a model switch holds rows at both prices.
+    prisma.usageRecord.groupBy({
+      by: ["model"],
       where: { userId, createdAt: { gte: week.start, lt: week.end } },
       _sum: { inputTokens: true, outputTokens: true },
     }),
@@ -62,8 +65,11 @@ export async function creditDecisionForRun(
     deploymentLimitKrw: settings?.weeklyCreditKrw ?? null,
   });
   const spentKrw = costBreakdownKrw({
-    inputTokens: tokens._sum.inputTokens ?? 0,
-    outputTokens: tokens._sum.outputTokens ?? 0,
+    models: tokens.map((row) => ({
+      model: row.model,
+      inputTokens: row._sum.inputTokens ?? 0,
+      outputTokens: row._sum.outputTokens ?? 0,
+    })),
     browserSeconds: browser._sum.seconds ?? 0,
   }).totalKrw;
   const status = creditStatus({ limitKrw, spentKrw });

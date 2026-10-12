@@ -96,6 +96,26 @@ describe("the pill beside the name", () => {
     expect(html).not.toContain("남음");
   });
 
+  it("can be rendered a second time for the phone, under its own name", () => {
+    // A phone keeps the sidebar in a drawer, so the header carries its own copy. Both
+    // exist in the document at once, which only works if a test can tell them apart.
+    const html = renderToStaticMarkup(
+      <CreditPill
+        status={status()}
+        onClick={() => {}}
+        testId="credit-pill-compact"
+        className="pointer-events-auto md:hidden"
+      />,
+    );
+    expect(html).toContain('data-testid="credit-pill-compact"');
+    expect(html).not.toContain('data-testid="credit-pill"');
+    // The header bar itself takes no pointer events, so the copy in it has to say it does.
+    expect(html).toContain("pointer-events-auto");
+    expect(html).toContain("md:hidden");
+    // Same label as the one in the sidebar: two places, one number.
+    expect(html.replace(/<[^>]*>/g, "")).toBe("64% 남음");
+  });
+
   it("names its state for anything reading the page", () => {
     const html = renderToStaticMarkup(<CreditPill status={status()} onClick={() => {}} />);
     expect(html).toContain('data-testid="credit-pill"');

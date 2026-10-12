@@ -4423,7 +4423,10 @@ async function weeklyCreditStatus(
 ): Promise<CreditStatus> {
   const week = creditWeek(now);
   const [tokens, runs, browser] = await Promise.all([
-    prisma.usageRecord.aggregate({
+    // Grouped by model, not summed flat: the card prices models differently, and a week
+    // that spans a model switch holds rows at both prices.
+    prisma.usageRecord.groupBy({
+      by: ["model"],
       where: { userId: account.userId, createdAt: { gte: week.start, lt: week.end } },
       _sum: { inputTokens: true, outputTokens: true },
     }),
@@ -4443,14 +4446,19 @@ async function weeklyCreditStatus(
       _count: { _all: true },
     }),
   ]);
+  const models = tokens.map((row) => ({
+    model: row.model,
+    inputTokens: row._sum.inputTokens ?? 0,
+    outputTokens: row._sum.outputTokens ?? 0,
+  }));
   const spent = {
     runs: runs.length,
-    inputTokens: tokens._sum.inputTokens ?? 0,
-    outputTokens: tokens._sum.outputTokens ?? 0,
+    inputTokens: models.reduce((total, row) => total + row.inputTokens, 0),
+    outputTokens: models.reduce((total, row) => total + row.outputTokens, 0),
     browserSeconds: browser._sum.seconds ?? 0,
     browserSessions: browser._count._all,
   };
-  const parts = costBreakdownKrw(spent);
+  const parts = costBreakdownKrw({ models, browserSeconds: spent.browserSeconds });
   const limitKrw = resolveWeeklyCreditKrw({
     isDeploymentOwner: account.isDeploymentOwner,
     userLimitKrw: account.userLimitKrw,

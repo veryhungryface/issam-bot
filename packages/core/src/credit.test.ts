@@ -10,74 +10,145 @@ import {
   DEFAULT_WEEKLY_CREDIT_KRW,
   estimateCostKrw,
   formatResetDay,
+  modelTokenRates,
   resolveWeeklyCreditKrw,
 } from "./credit.js";
 
+/** The model the deployment runs today. Named once so a switch is one edit here too. */
+const MODEL = "gpt-6-luna";
+
+/** Tokens on one model, which is what a week looks like when nobody changed models. */
+function onModel(inputTokens: number, outputTokens: number, model = MODEL) {
+  return [{ model, inputTokens, outputTokens }];
+}
+
 describe("what a run costs", () => {
   it("charges nothing for nothing", () => {
-    expect(estimateCostKrw({ inputTokens: 0, outputTokens: 0, browserSeconds: 0 })).toBe(0);
+    expect(estimateCostKrw({ models: [], browserSeconds: 0 })).toBe(0);
   });
 
-  it("prices a million input tokens at the card's rate", () => {
-    const cost = estimateCostKrw({ inputTokens: 1_000_000, outputTokens: 0, browserSeconds: 0 });
-    expect(cost).toBeCloseTo(CREDIT_RATES.usdPerMillionInputTokens * CREDIT_RATES.krwPerUsd, 6);
+  it("prices a million input tokens at the card's rate for that model", () => {
+    const cost = estimateCostKrw({ models: onModel(1_000_000, 0), browserSeconds: 0 });
+    const rate = modelTokenRates(MODEL).usdPerMillionInputTokens;
+    expect(cost).toBeCloseTo(rate * CREDIT_RATES.krwPerUsd, 6);
   });
 
   it("charges more for output than for input, because the provider does", () => {
     const sameVolume = 500_000;
-    const input = estimateCostKrw({
-      inputTokens: sameVolume,
-      outputTokens: 0,
-      browserSeconds: 0,
-    });
-    const output = estimateCostKrw({
-      inputTokens: 0,
-      outputTokens: sameVolume,
-      browserSeconds: 0,
-    });
+    const input = estimateCostKrw({ models: onModel(sameVolume, 0), browserSeconds: 0 });
+    const output = estimateCostKrw({ models: onModel(0, sameVolume), browserSeconds: 0 });
     expect(output).toBeGreaterThan(input);
   });
 
   it("prices an hour of browser time at the card's hourly rate", () => {
-    const cost = estimateCostKrw({ inputTokens: 0, outputTokens: 0, browserSeconds: 3_600 });
+    const cost = estimateCostKrw({ models: [], browserSeconds: 3_600 });
     expect(cost).toBeCloseTo(CREDIT_RATES.usdPerBrowserHour * CREDIT_RATES.krwPerUsd, 6);
   });
 
   it("stays fractional, so a run too cheap to round is still charged", () => {
     // A median run on the observed data is a few won. Rounding each one to the nearest won
     // before summing would throw away most of a light week.
-    const oneRun = estimateCostKrw({ inputTokens: 10_000, outputTokens: 300, browserSeconds: 0 });
+    const oneRun = estimateCostKrw({ models: onModel(10_000, 300), browserSeconds: 0 });
     expect(oneRun).toBeGreaterThan(0);
     expect(oneRun).toBeLessThan(10);
     expect(Number.isInteger(oneRun)).toBe(false);
   });
 
   it("ignores negative meters rather than crediting them back", () => {
-    expect(
-      estimateCostKrw({ inputTokens: -1_000_000, outputTokens: 0, browserSeconds: -3_600 }),
-    ).toBe(0);
+    expect(estimateCostKrw({ models: onModel(-1_000_000, 0), browserSeconds: -3_600 })).toBe(0);
   });
 
   it("splits the same total into the parts it was spent on", () => {
-    const usage = { inputTokens: 2_000_000, outputTokens: 50_000, browserSeconds: 1_800 };
+    const usage = { models: onModel(2_000_000, 50_000), browserSeconds: 1_800 };
     const parts = costBreakdownKrw(usage);
     expect(parts.totalKrw).toBeCloseTo(estimateCostKrw(usage), 6);
     expect(parts.inputKrw).toBeGreaterThan(0);
     expect(parts.outputKrw).toBeGreaterThan(0);
     expect(parts.browserKrw).toBeGreaterThan(0);
   });
+});
+
+describe("a card with a row per model", () => {
+  it("charges the cheaper model less for identical work", () => {
+    const work = { inputTokens: 5_000_000, outputTokens: 200_000 };
+    const luna6 = estimateCostKrw({
+      models: [{ model: "gpt-6-luna", ...work }],
+      browserSeconds: 0,
+    });
+    const luna56 = estimateCostKrw({
+      models: [{ model: "gpt-5.6-luna", ...work }],
+      browserSeconds: 0,
+    });
+    expect(luna6).toBeLessThan(luna56);
+    // The published cut: half the input price, and well under half the output price.
+    expect(luna6 / luna56).toBeLessThan(0.6);
+  });
+
+  it("prices a week that spans a model switch at both prices, not one", () => {
+    // The deployment moved from 5.6 to 6 mid-week. The rows before the switch have to keep
+    // costing what they cost — this is the whole reason the card is keyed by model.
+    const mixed = estimateCostKrw({
+      models: [
+        { model: "gpt-5.6-luna", inputTokens: 2_000_000, outputTokens: 20_000 },
+        { model: "gpt-6-luna", inputTokens: 2_000_000, outputTokens: 20_000 },
+      ],
+      browserSeconds: 0,
+    });
+    const allOld = estimateCostKrw({
+      models: [{ model: "gpt-5.6-luna", inputTokens: 4_000_000, outputTokens: 40_000 }],
+      browserSeconds: 0,
+    });
+    const allNew = estimateCostKrw({
+      models: [{ model: "gpt-6-luna", inputTokens: 4_000_000, outputTokens: 40_000 }],
+      browserSeconds: 0,
+    });
+    expect(mixed).toBeGreaterThan(allNew);
+    expect(mixed).toBeLessThan(allOld);
+  });
+
+  it("charges an unpriced model the deployment default's rate, not nothing", () => {
+    // A model with no row must never be free: that would hand whoever uses it an unlimited
+    // week. The fallback is the default model's rate, which is also what the gate would
+    // have charged before the card learned about models at all.
+    const unknown = estimateCostKrw({
+      models: [{ model: "some-model-nobody-priced", inputTokens: 1_000_000, outputTokens: 0 }],
+      browserSeconds: 0,
+    });
+    expect(unknown).toBeGreaterThan(0);
+    expect(unknown).toBeCloseTo(
+      CREDIT_RATES.fallbackTokenRates.usdPerMillionInputTokens * CREDIT_RATES.krwPerUsd,
+      6,
+    );
+  });
+
+  it("keeps the fallback in step with the model the deployment actually runs", () => {
+    // If someone adds a row for a new default model and forgets the fallback, an unpriced
+    // model starts being charged the old price. Tying them here says so out loud.
+    expect(CREDIT_RATES.fallbackTokenRates).toEqual(modelTokenRates(MODEL));
+  });
 
   it("puts the observed weekly spend of one heavy user in the right ballpark", () => {
     // Measured from production for the week of 2026-10-05: the heaviest account.
     // This is a guard on the rate card, not on the data: if someone edits a rate by a
-    // factor of ten, a week that cost about four thousand won stops costing that.
-    const spend = estimateCostKrw({
-      inputTokens: 10_923_435,
-      outputTokens: 108_789,
-      browserSeconds: 10_174,
+    // factor of ten, a week that cost about two thousand won stops costing that.
+    const metered = { inputTokens: 10_923_435, outputTokens: 108_789 };
+    const browserSeconds = 10_174;
+
+    const onOldModel = estimateCostKrw({
+      models: [{ model: "gpt-5.6-luna", ...metered }],
+      browserSeconds,
     });
-    expect(spend).toBeGreaterThan(3_000);
-    expect(spend).toBeLessThan(5_000);
+    expect(onOldModel).toBeGreaterThan(3_000);
+    expect(onOldModel).toBeLessThan(5_000);
+
+    // The same week on the model the deployment moved to: around the 2,000 won limit
+    // rather than twice it, which is the number the weekly default was chosen against.
+    const onNewModel = estimateCostKrw({
+      models: [{ model: "gpt-6-luna", ...metered }],
+      browserSeconds,
+    });
+    expect(onNewModel).toBeGreaterThan(1_800);
+    expect(onNewModel).toBeLessThan(2_600);
   });
 });
 
