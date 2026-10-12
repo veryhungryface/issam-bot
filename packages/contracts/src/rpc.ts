@@ -25,6 +25,8 @@ import {
   CreateGroupInput,
   CreateRoutineInput,
   CreateScratchpadItemInput,
+  CreditAccountSchema,
+  CreditStatusSchema,
   DeploymentSettingsSchema,
   ExportManifestSchema,
   GroupDetailSchema,
@@ -693,6 +695,26 @@ export const appContract = {
         }),
       ),
     ),
+  },
+  credit: {
+    /** This account's own weekly balance: what the pill beside the name shows. */
+    status: oc.output(CreditStatusSchema),
+    /** Every account's balance this week, for the deployment owner. */
+    everyone: oc.output(z.array(CreditAccountSchema)),
+    /** Raise, lower, or clear one account's weekly limit. Deployment owner only. */
+    setLimit: oc
+      .input(
+        z.object({
+          userId: z.string().min(1),
+          /** Null clears the override and returns the account to the deployment default. */
+          weeklyCreditKrw: z.number().int().min(0).max(10_000_000).nullable(),
+        }),
+      )
+      .output(z.array(CreditAccountSchema)),
+    /** The figure every account without an override gets. Deployment owner only. */
+    setDeploymentLimit: oc
+      .input(z.object({ weeklyCreditKrw: z.number().int().min(0).max(10_000_000) }))
+      .output(CreditStatusSchema),
   },
   export: {
     bot: oc.input(botId).output(ExportManifestSchema),

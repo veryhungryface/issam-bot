@@ -86,6 +86,8 @@ import {
   type Actor,
   appContract,
   type ComputerStatus,
+  type CreditAccount,
+  type CreditStatus,
   type McpServer,
   type Me,
   MessageBlock as MessageBlockSchema,
@@ -97,10 +99,15 @@ import {
   AttachmentValidationError,
   CHECK_IN_ROUTINE_KIND,
   containsSecret,
+  costBreakdownKrw,
+  creditStatus,
+  creditWeek,
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
+  isMessagingEmail,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
+  resolveWeeklyCreditKrw,
   USER_ROUTINE_KIND,
 } from "@rakazo/core";
 import {
@@ -3842,6 +3849,54 @@ export function createRouter(deps: RouterDeps) {
           .sort((a, b) => b.browserSeconds + b.outputTokens - (a.browserSeconds + a.outputTokens));
       }),
     },
+    credit: {
+      status: authed.credit.status.handler(async ({ context }) => {
+        await syncBrowserSessionUsage(deps.prisma, deps.sandbox);
+        const [settings, user] = await Promise.all([
+          deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+          deps.prisma.user.findUnique({
+            where: { id: context.actor.userId },
+            select: { weeklyCreditKrw: true },
+          }),
+        ]);
+        return weeklyCreditStatus(deps.prisma, {
+          userId: context.actor.userId,
+          isDeploymentOwner: settings?.ownerUserId === context.actor.userId,
+          userLimitKrw: user?.weeklyCreditKrw ?? null,
+          deploymentLimitKrw: settings?.weeklyCreditKrw ?? null,
+        });
+      }),
+      everyone: authed.credit.everyone.handler(async ({ context }) => {
+        const settings = await requireDeploymentOwner(deps.prisma, context.actor.userId);
+        await syncBrowserSessionUsage(deps.prisma, deps.sandbox);
+        return everyoneCreditStatus(deps.prisma, settings);
+      }),
+      setLimit: authed.credit.setLimit.handler(async ({ context, input }) => {
+        const settings = await requireDeploymentOwner(deps.prisma, context.actor.userId);
+        await deps.prisma.user.update({
+          where: { id: input.userId },
+          data: { weeklyCreditKrw: input.weeklyCreditKrw },
+        });
+        return everyoneCreditStatus(deps.prisma, settings);
+      }),
+      setDeploymentLimit: authed.credit.setDeploymentLimit.handler(async ({ context, input }) => {
+        await requireDeploymentOwner(deps.prisma, context.actor.userId);
+        const settings = await deps.prisma.deploymentSettings.update({
+          where: { id: "default" },
+          data: { weeklyCreditKrw: input.weeklyCreditKrw },
+        });
+        const user = await deps.prisma.user.findUnique({
+          where: { id: context.actor.userId },
+          select: { weeklyCreditKrw: true },
+        });
+        return weeklyCreditStatus(deps.prisma, {
+          userId: context.actor.userId,
+          isDeploymentOwner: settings.ownerUserId === context.actor.userId,
+          userLimitKrw: user?.weeklyCreditKrw ?? null,
+          deploymentLimitKrw: settings.weeklyCreditKrw,
+        });
+      }),
+    },
     export: {
       bot: authed.export.bot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
@@ -4348,6 +4403,119 @@ async function computerScreenContext(
   });
   if (!lease || lease.expiresAt.getTime() <= Date.now()) return context;
   return { ...context, screenLeaseId: screenLeaseIdForRun(lease, lease.runId) };
+}
+
+/**
+ * One account's weekly credit.
+ *
+ * Scoped by user rather than by space on purpose: a credit is a budget on a person, and
+ * someone who could reset it by creating a second space would not have a budget at all.
+ */
+async function weeklyCreditStatus(
+  prisma: PrismaClient,
+  account: {
+    userId: string;
+    isDeploymentOwner: boolean;
+    userLimitKrw: number | null;
+    deploymentLimitKrw: number | null;
+  },
+  now = new Date(),
+): Promise<CreditStatus> {
+  const week = creditWeek(now);
+  const [tokens, runs, browser] = await Promise.all([
+    // Grouped by model, not summed flat: the card prices models differently, and a week
+    // that spans a model switch holds rows at both prices.
+    prisma.usageRecord.groupBy({
+      by: ["model"],
+      where: { userId: account.userId, createdAt: { gte: week.start, lt: week.end } },
+      _sum: { inputTokens: true, outputTokens: true },
+    }),
+    // The usage table holds one row per model call, several per run, so the count of rows
+    // is not the count of runs. A week is a few hundred rows; grouping is cheap here.
+    prisma.usageRecord.groupBy({
+      by: ["runId"],
+      where: {
+        userId: account.userId,
+        runId: { not: null },
+        createdAt: { gte: week.start, lt: week.end },
+      },
+    }),
+    prisma.browserSessionUsage.aggregate({
+      where: { userId: account.userId, startedAt: { gte: week.start, lt: week.end } },
+      _sum: { seconds: true },
+      _count: { _all: true },
+    }),
+  ]);
+  const models = tokens.map((row) => ({
+    model: row.model,
+    inputTokens: row._sum.inputTokens ?? 0,
+    outputTokens: row._sum.outputTokens ?? 0,
+  }));
+  const spent = {
+    runs: runs.length,
+    inputTokens: models.reduce((total, row) => total + row.inputTokens, 0),
+    outputTokens: models.reduce((total, row) => total + row.outputTokens, 0),
+    browserSeconds: browser._sum.seconds ?? 0,
+    browserSessions: browser._count._all,
+  };
+  const parts = costBreakdownKrw({ models, browserSeconds: spent.browserSeconds });
+  const limitKrw = resolveWeeklyCreditKrw({
+    isDeploymentOwner: account.isDeploymentOwner,
+    userLimitKrw: account.userLimitKrw,
+    deploymentLimitKrw: account.deploymentLimitKrw,
+  });
+  const status = creditStatus({ limitKrw, spentKrw: parts.totalKrw });
+  return {
+    ...status,
+    windowStart: week.start.toISOString(),
+    windowEnd: week.end.toISOString(),
+    limitSource: account.isDeploymentOwner
+      ? "owner"
+      : account.userLimitKrw != null
+        ? "account"
+        : "deployment",
+    spent: {
+      ...spent,
+      modelKrw: parts.inputKrw + parts.outputKrw,
+      browserKrw: parts.browserKrw,
+    },
+  };
+}
+
+/** Everyone's week, newest spenders first, for the owner's panel. */
+async function everyoneCreditStatus(
+  prisma: PrismaClient,
+  settings: { ownerUserId: string | null; weeklyCreditKrw: number },
+): Promise<CreditAccount[]> {
+  const users = await prisma.user.findMany({
+    select: { id: true, name: true, email: true, weeklyCreditKrw: true },
+  });
+  const rows = await Promise.all(
+    users
+      .filter((user) => !isMessagingEmail(user.email))
+      .map(async (user) => ({
+        userId: user.id,
+        name: user.name,
+        email: user.email,
+        isDeploymentOwner: settings.ownerUserId === user.id,
+        overrideKrw: user.weeklyCreditKrw,
+        status: await weeklyCreditStatus(prisma, {
+          userId: user.id,
+          isDeploymentOwner: settings.ownerUserId === user.id,
+          userLimitKrw: user.weeklyCreditKrw,
+          deploymentLimitKrw: settings.weeklyCreditKrw,
+        }),
+      })),
+  );
+  return rows.sort((a, b) => b.status.spentKrw - a.status.spentKrw);
+}
+
+async function requireDeploymentOwner(prisma: PrismaClient, userId: string) {
+  const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
+  if (!settings?.ownerUserId || settings.ownerUserId !== userId) {
+    throw new ORPCError("FORBIDDEN");
+  }
+  return settings;
 }
 
 async function deploymentDto(prisma: PrismaClient, sandboxProvider: string) {

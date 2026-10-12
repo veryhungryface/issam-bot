@@ -16,7 +16,7 @@ While the company Qwen endpoint is waiting for source-IP allowlisting, deploy wi
 
 ```dotenv
 PI_DEFAULT_PROVIDER=openai
-PI_DEFAULT_MODEL=gpt-5.6-luna
+PI_DEFAULT_MODEL=gpt-6-luna
 OPENAI_API_KEY=
 ```
 

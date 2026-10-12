@@ -13,6 +13,7 @@ export * from "./compose-update.js";
 export * from "./composer-mention-picker.js";
 export * from "./composer-mentions.js";
 export * from "./composer-slash.js";
+export * from "./credit.js";
 export * from "./cron.js";
 export * from "./events.js";
 export * from "./featured-connectors.js";

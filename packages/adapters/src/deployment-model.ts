@@ -15,10 +15,13 @@ export function resolveDeploymentModel(env: NodeJS.ProcessEnv = process.env) {
     openai: env.OPENAI_API_KEY,
     qwen: env.QWEN_API_KEY,
   };
+  // Changing a model here or in `PI_DEFAULT_MODEL` also changes what a run costs, so
+  // `CREDIT_RATES` in packages/core needs a row for the new id and its `fallbackTokenRates`
+  // pointed at it — otherwise the weekly meter keeps charging the old model's price.
   const models: Record<string, string> = {
     openrouter: "deepseek/deepseek-v4-flash-0731",
     anthropic: "claude-sonnet-5",
-    openai: env.OPENAI_MODEL_ID?.trim() || "gpt-5.2",
+    openai: env.OPENAI_MODEL_ID?.trim() || "gpt-6-luna",
     qwen: env.QWEN_MODEL_ID?.trim() || "Qwen/Qwen3.6-35B-A3B-FP8",
   };
   return {
