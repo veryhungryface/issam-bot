@@ -86,7 +86,10 @@ test("nothing offers to speak or call unless the deployment turns it on", async 
   await completeOnboarding(page);
 
   await page.getByRole("button", { name: new RegExp(userName) }).click();
-  await expect(page.getByRole("button", { name: "Memory", exact: true })).toBeVisible();
+  // Settings is the anchor: something in this menu has to be visible, or an absent Call
+  // would only prove the menu never opened. Memory used to play that part and is itself
+  // hidden now, which is exactly the trap this line exists to avoid.
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Call", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Voice", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");

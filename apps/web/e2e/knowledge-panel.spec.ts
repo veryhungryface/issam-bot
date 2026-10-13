@@ -1,11 +1,20 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import type { MemoryDocument } from "@rakazo/contracts";
-import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
+import {
+  activeBotId,
+  captureScreenshot,
+  completeOnboarding,
+  enableMemoryUi,
+  rpc,
+  signup,
+} from "./helpers";
 
 test("memory and skills are readable and editable in the app", async ({ page }, testInfo) => {
   const stamp = Date.now();
   const userName = `Knowledge ${stamp}`;
+  // The memory screens are off in this deployment; this covers them as they are built.
+  await enableMemoryUi(page);
   await signup(page, `knowledge-${stamp}@rakazo.test`, "password12", userName);
   await completeOnboarding(page);
   await page.goto("/app");
@@ -176,4 +185,44 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   expect(await rpc<Array<{ name: string }>>(page, "agentSkills/list", {})).not.toContainEqual(
     expect.objectContaining({ name: "greet-politely" }),
   );
+});
+
+test("the memory screens are off, and the skills beside them stay", async ({ page }) => {
+  // No enableMemoryUi here: this is the app as it ships. The Memory entry opened on a
+  // sign-up form for a service this deployment has never connected, which taught everyone
+  // who looked that the feature was broken. Hiding the screens does not stop a bot
+  // remembering — that happens in the agent runtime, and the API below still serves it.
+  const stamp = Date.now();
+  const userName = `Memory Off ${stamp}`;
+  await signup(page, `memory-off-${stamp}@rakazo.test`, "password12", userName);
+  await completeOnboarding(page);
+  await page.goto("/app");
+  await page.waitForURL(/\/app\/[^/]+$/);
+
+  await page.getByTestId("user-menu-trigger").click();
+  await expect(page.getByRole("button", { name: "Memory", exact: true })).toHaveCount(0);
+  // The entry it sat beside is still there, so this is the memory screen going and not the
+  // whole menu failing to open.
+  await expect(page.getByRole("button", { name: "Usage", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Skills keep their place in bot settings; only the memory tab beside them goes.
+  await page
+    .locator("main")
+    .getByRole("button", { name: /^Chief/ })
+    .click();
+  const settings = page.getByTestId("bot-settings");
+  await settings.getByText("Advanced", { exact: true }).click();
+  const knowledge = settings.getByTestId("bot-knowledge");
+  await expect(knowledge).toBeVisible();
+  await expect(knowledge.getByRole("tablist", { name: "Knowledge" })).toHaveCount(0);
+  await expect(knowledge.getByTestId("bot-knowledge-memory")).toHaveCount(0);
+  await expect(knowledge.getByTestId("bot-knowledge-skills")).toBeVisible();
+
+  // The memories themselves are untouched: bot creation seeded one, and it is still served.
+  const docs = await rpc<MemoryDocument[]>(page, "memory/list", {
+    botId: activeBotId(page),
+    scope: "bot",
+  });
+  expect(docs.some((doc) => doc.path === "MEMORY.md")).toBe(true);
 });

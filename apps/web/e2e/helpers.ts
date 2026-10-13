@@ -60,6 +60,14 @@ export async function enableVoiceOutput(page: Page) {
 }
 
 /**
+ * The memory screens are hidden in this deployment, so a test that covers them turns the
+ * feature back on the way a person would. Call it before the first navigation.
+ */
+export async function enableMemoryUi(page: Page) {
+  await page.addInitScript(() => localStorage.setItem("rakazo.memory-ui", "1"));
+}
+
+/**
  * A finger held still on something, which is how a phone asks what can be done with it.
  * Playwright's touchscreen only taps, so this sends the pointer events the app listens for
  * — with the pause in the middle, which is the whole gesture.
