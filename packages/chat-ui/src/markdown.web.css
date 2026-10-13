@@ -224,3 +224,41 @@
     opacity: 0;
   }
 }
+
+/*
+ * Math, typeset by KaTeX.
+ *
+ * Two things have to be undone for it. The container sets `overflow-wrap: anywhere` so a
+ * long URL cannot widen a bubble, and that same rule would break a formula across lines
+ * mid-symbol; and a displayed equation is frequently wider than a chat bubble on a phone,
+ * which is the one place every teacher reads these. So formulas opt out of the wrapping and
+ * scroll sideways within their own box, exactly as tables above already do, rather than
+ * pushing the page sideways.
+ */
+.rk-chat-markdown .katex {
+  overflow-wrap: normal;
+  /* KaTeX ships at 1.21× to match its own metrics; in running text that reads oversized. */
+  font-size: 1.08em;
+}
+
+.rk-chat-markdown .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Room for the scrollbar on the platforms that reserve space for one. */
+  padding-block: 0.3em;
+  margin-block: 0.6em;
+}
+
+.rk-chat-markdown .katex-display > .katex {
+  /* Left-aligned rather than centred: a scrolling box with centred content starts in the
+     middle of the formula, so the beginning of it is the part you cannot see. */
+  text-align: initial;
+}
+
+.rk-chat-markdown .katex-error {
+  /* KaTeX writes its error colour as an inline style, which a class cannot otherwise beat.
+     The default is a dark red that disappears against a dark theme. */
+  color: var(--destructive) !important;
+  white-space: pre-wrap;
+}

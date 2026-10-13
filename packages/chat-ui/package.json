@@ -14,8 +14,11 @@
   "dependencies": {
     "@rakazo/ui-tokens": "workspace:*",
     "@ronradtke/react-native-markdown-display": "^9.0.3",
+    "katex": "^0.16",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "rehype-katex": "^7",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6"
   },
   "peerDependencies": {
     "react": "19.2.3",

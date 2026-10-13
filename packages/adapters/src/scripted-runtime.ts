@@ -483,6 +483,30 @@ export function inferScript(
       { assistant: "writing that into my home now.", complete: true },
     ];
   }
+  if (lower.includes("write a formula")) {
+    // The emulator's stand-in for a maths answer, which is most of what a teacher asks for.
+    // Both notations in one reply on purpose: the models mix `$…$` with `\(…\)` freely, and
+    // the renderer is supposed to typeset either. The fenced block is the control — what is
+    // inside it has to stay text, or the LaTeX a teacher is being taught would vanish.
+    return [
+      {
+        assistant: [
+          "이차방정식의 해는 \\(x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}\\) 입니다.",
+          "",
+          "$$\\int_0^1 x^2 \\, dx = \\frac{1}{3}$$",
+          "",
+          "\\[\\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}\\]",
+          "",
+          "쓰는 법은 이렇습니다:",
+          "",
+          "```tex",
+          "\\(x^2\\)",
+          "```",
+        ].join("\n"),
+        complete: true,
+      },
+    ];
+  }
   if (lower.includes("remember")) {
     return [
       {
