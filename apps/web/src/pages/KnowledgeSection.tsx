@@ -11,6 +11,7 @@ import {
 } from "@rakazo/ui-web";
 import { useEffect, useRef, useState } from "react";
 import { downloadArtifactBytes } from "../lib/artifact-open";
+import { MEMORY_UI } from "../lib/deployment-flags";
 import { rpc } from "../lib/rpc";
 
 const fieldClass = "mt-2 w-full font-mono text-[13px] leading-relaxed";
@@ -33,27 +34,31 @@ export function KnowledgeSection({
   const { t } = useLingui();
   return (
     <section className="mt-6" data-testid="bot-knowledge">
-      <Tabs defaultValue="memory">
-        <TabsList aria-label={t`Knowledge`}>
-          <TabsTrigger value="memory">
-            <Trans>Memory</Trans>
-          </TabsTrigger>
-          <TabsTrigger value="skills">
-            <Trans>Skills</Trans>
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="memory">
-          <MemoryDocumentList
-            key={botId}
-            load={() => rpc.memory.list({ botId, scope: "bot" })}
-            exportFilename="memory.md"
-            testId="bot-knowledge-memory"
-          />
-        </TabsContent>
-        <TabsContent value="skills">
-          <AgentSkills onSkillsChange={onSkillsChange} />
-        </TabsContent>
-      </Tabs>
+      {MEMORY_UI ? (
+        <Tabs defaultValue="memory">
+          <TabsList aria-label={t`Knowledge`}>
+            <TabsTrigger value="memory">
+              <Trans>Memory</Trans>
+            </TabsTrigger>
+            <TabsTrigger value="skills">
+              <Trans>Skills</Trans>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="memory">
+            <MemoryDocumentList
+              key={botId}
+              load={() => rpc.memory.list({ botId, scope: "bot" })}
+              exportFilename="memory.md"
+              testId="bot-knowledge-memory"
+            />
+          </TabsContent>
+          <TabsContent value="skills">
+            <AgentSkills onSkillsChange={onSkillsChange} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <AgentSkills onSkillsChange={onSkillsChange} />
+      )}
     </section>
   );
 }

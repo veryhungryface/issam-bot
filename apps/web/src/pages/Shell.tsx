@@ -152,7 +152,7 @@ import {
   shouldNotifyBrowser,
 } from "../lib/browser-notifications";
 import { loadComputerScreen } from "../lib/computer-screen";
-import { HIDE_MODEL_PICKER, VOICE_OUTPUT } from "../lib/deployment-flags";
+import { HIDE_MODEL_PICKER, MEMORY_UI, VOICE_OUTPUT } from "../lib/deployment-flags";
 import { dictation } from "../lib/dictation";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { screenIframeSandbox as liveViewIframeSandbox } from "../lib/live-view";
@@ -3296,19 +3296,21 @@ export function ShellPage() {
                     <Trans>Models</Trans>
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start font-normal"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setMemorySettingsOpen(true);
-                  }}
-                >
-                  <span aria-hidden="true" className="text-muted-foreground">
-                    ◇
-                  </span>
-                  <Trans>Memory</Trans>
-                </Button>
+                {MEMORY_UI ? (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start font-normal"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setMemorySettingsOpen(true);
+                    }}
+                  >
+                    <span aria-hidden="true" className="text-muted-foreground">
+                      ◇
+                    </span>
+                    <Trans>Memory</Trans>
+                  </Button>
+                ) : null}
                 {VOICE_OUTPUT && !inGroup && active ? (
                   // Calling moved here when the conversation header lost its bar. It is a
                   // whole mode, not a glance at a panel, so it belongs with the settings
@@ -4398,7 +4400,7 @@ export function ShellPage() {
       </Suspense>
 
       <Suspense fallback={null}>
-        {memorySettingsOpen ? (
+        {MEMORY_UI && memorySettingsOpen ? (
           <MemorySettingsOverlay
             onClose={() => setMemorySettingsOpen(false)}
             config={memoryProviderConfig}
