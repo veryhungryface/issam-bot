@@ -27,7 +27,8 @@ test("composer / picker lists skills above actions", async ({ page }, testInfo) 
   await expect(skillButton).toBeVisible();
   await expect(chatSettings).toBeVisible();
   await expect(picker.getByRole("button", { name: "Settings: General" })).toBeVisible();
-  await expect(picker.getByRole("button", { name: "Settings: Usage" })).toBeVisible();
+  // `Settings: Usage` was a second name for the panel above, whose first section is usage.
+  await expect(picker.getByRole("button", { name: "Settings: Usage" })).toHaveCount(0);
 
   const skillBox = await skillButton.boundingBox();
   const actionBox = await chatSettings.boundingBox();

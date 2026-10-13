@@ -92,7 +92,8 @@ jobs:
           ssh "${ssh_args[@]}" \
             "cd /opt/issam-bot && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --force-recreate api worker"
 
-          ssh "${ssh_args[@]}" "cd /opt/issam-bot && sudo -n docker compose ps"
+          ssh "${ssh_args[@]}" \
+            "cd /opt/issam-bot && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml ps"
 
       - name: Say what to check
         run: |

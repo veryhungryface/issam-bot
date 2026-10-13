@@ -81,7 +81,6 @@ import {
   Clock,
   Copy,
   Cpu,
-  Gauge,
   Lock,
   LogOut,
   Maximize2,
@@ -476,7 +475,6 @@ export function ShellPage() {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [messagingSettingsOpen, setMessagingSettingsOpen] = useState(false);
   const [messagingSurfaceEnabled, setMessagingSurfaceEnabled] = useState(false);
-  const [accountSettingsFocusUsage, setAccountSettingsFocusUsage] = useState(false);
   const [modelsOpen, setModelsOpen] = useState(false);
   const [memorySettingsOpen, setMemorySettingsOpen] = useState(false);
   const [memoryProviderConfig, setMemoryProviderConfig] = useState<
@@ -3276,7 +3274,6 @@ export function ShellPage() {
                   aria-label={t`Settings`}
                   onClick={() => {
                     setMenuOpen(false);
-                    setAccountSettingsFocusUsage(false);
                     setAccountSettingsOpen(true);
                   }}
                 >
@@ -3347,18 +3344,6 @@ export function ShellPage() {
                 <Button
                   variant="ghost"
                   className="w-full justify-start font-normal"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setAccountSettingsFocusUsage(true);
-                    setAccountSettingsOpen(true);
-                  }}
-                >
-                  <Gauge size={16} strokeWidth={1.7} className="text-muted-foreground" />
-                  <Trans>Usage</Trans>
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start font-normal"
                   onClick={() =>
                     void authClient.signOut().then(() => {
                       clearSpaceSelection();
@@ -3372,17 +3357,7 @@ export function ShellPage() {
               </PopoverContent>
             ) : null}
           </Popover>
-          {credit ? (
-            <CreditPill
-              status={credit}
-              onClick={() => {
-                setMenuOpen(false);
-                refreshCredit();
-                setAccountSettingsFocusUsage(true);
-                setAccountSettingsOpen(true);
-              }}
-            />
-          ) : null}
+          {credit ? <CreditPill status={credit} /> : null}
         </div>
       </aside>
 
@@ -3499,11 +3474,6 @@ export function ShellPage() {
                   status={credit}
                   testId="credit-pill-compact"
                   className="app-no-drag pointer-events-auto border border-border/60 backdrop-blur-sm md:hidden"
-                  onClick={() => {
-                    refreshCredit();
-                    setAccountSettingsFocusUsage(true);
-                    setAccountSettingsOpen(true);
-                  }}
                 />
               ) : null}
             </div>
@@ -3627,17 +3597,7 @@ export function ShellPage() {
               return;
             }
             if (action === "settings-general") {
-              setAccountSettingsFocusUsage(false);
               setAccountSettingsOpen(true);
-              return;
-            }
-            if (action === "settings-usage") {
-              setAccountSettingsFocusUsage(true);
-              setAccountSettingsOpen(true);
-              void rpc.usage
-                .summary()
-                .then(setUsage)
-                .catch(() => undefined);
             }
           }}
           dictating={dictating}
@@ -4346,7 +4306,6 @@ export function ShellPage() {
             usage={usage}
             workspaceUsage={workspaceUsage}
             credit={credit}
-            focusUsage={accountSettingsFocusUsage}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}
             sandboxProvider={bootstrapMe?.sandboxProvider}
             messagingEnabled={messagingSurfaceEnabled}
@@ -4356,7 +4315,6 @@ export function ShellPage() {
             }}
             onClose={() => {
               setAccountSettingsOpen(false);
-              setAccountSettingsFocusUsage(false);
             }}
           />
         ) : null}
@@ -5684,8 +5642,6 @@ function slashActionLabel(id: SlashActionId) {
       return t`Chat Settings`;
     case "settings-general":
       return t`Settings: General`;
-    case "settings-usage":
-      return t`Settings: Usage`;
   }
 }
 

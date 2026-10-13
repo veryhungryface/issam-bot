@@ -1,5 +1,5 @@
 import type { AvatarStyle } from "@rakazo/contracts";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -50,7 +50,6 @@ import { UI_LOCALE_LABELS, UI_LOCALES, type UiLocale } from "../lib/ui-locale";
 export default function Account() {
   const { t, locale } = useI18n();
   const router = useRouter();
-  const { focus } = useLocalSearchParams<{ focus?: string }>();
   const [me, setMe] = useState<MobileMe | null>(null);
   const [password, setPassword] = useState("");
   const [localeSaving, setLocaleSaving] = useState(false);
@@ -207,12 +206,11 @@ export default function Account() {
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content}>
-        {focus === "usage" ? usageBlock : null}
         <View style={styles.profile}>
           <Text style={styles.name}>{me?.name || t("Your account")}</Text>
           {me?.email ? <Text style={styles.email}>{me.email}</Text> : null}
         </View>
-        {focus !== "usage" ? usageBlock : null}
+        {usageBlock}
 
         <Pressable
           accessibilityRole="button"

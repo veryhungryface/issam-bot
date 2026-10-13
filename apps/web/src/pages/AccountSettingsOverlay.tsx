@@ -53,7 +53,6 @@ export function AccountSettingsOverlay({
   usage,
   workspaceUsage,
   credit,
-  focusUsage,
   isDeploymentOwner = false,
   sandboxProvider,
   messagingEnabled = false,
@@ -65,7 +64,6 @@ export function AccountSettingsOverlay({
   usage?: { runs: number; inputTokens: number; outputTokens: number } | null;
   workspaceUsage?: WorkspaceUsageRow[] | null;
   credit?: CreditStatus | null;
-  focusUsage?: boolean;
   isDeploymentOwner?: boolean;
   sandboxProvider?: string | null;
   messagingEnabled?: boolean;
@@ -74,7 +72,6 @@ export function AccountSettingsOverlay({
 }) {
   const { t } = useLingui();
   const panelRef = useRef<HTMLDivElement>(null);
-  const usageRef = useRef<HTMLDivElement>(null);
   const [locale, setLocale] = useState<UiLocale>(() => getActiveUiLocale());
   const localeRequestRef = useRef(0);
   const [appearance, setAppearance] = useState<AppearancePreference>(() =>
@@ -102,7 +99,7 @@ export function AccountSettingsOverlay({
         ref={panelRef}
         data-testid="user-settings"
         showCloseButton={false}
-        initialFocus={() => (focusUsage ? usageRef.current : panelRef.current)}
+        initialFocus={() => panelRef.current}
         className="rk-scroll block max-h-[calc(100%-2rem)] w-[640px] overflow-y-auto overscroll-contain rounded-2xl p-6 sm:max-h-[calc(100%-5rem)] sm:max-w-[calc(100%-5rem)] sm:p-8"
       >
         <div className="flex items-start justify-between gap-6">
@@ -126,10 +123,8 @@ export function AccountSettingsOverlay({
         </section>
 
         <div
-          ref={usageRef}
-          tabIndex={-1}
           data-testid="usage-settings"
-          className="mt-5 rounded-xl border border-border px-4 py-4 outline-none"
+          className="mt-5 rounded-xl border border-border px-4 py-4"
         >
           <h3 className="text-[15px] font-medium text-foreground">사용량</h3>
           {credit ? (

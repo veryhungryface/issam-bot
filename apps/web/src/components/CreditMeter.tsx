@@ -1,14 +1,20 @@
 import type { CreditStatus } from "@rakazo/contracts";
-import { CREDIT_RATES, formatResetDay } from "@rakazo/core";
+import { formatResetDay } from "@rakazo/core";
 
 /**
  * The weekly credit, beside the account name and in the panel behind it.
  *
- * The pill is on screen all the time, so it has to say the one thing that matters in the
- * width of a few characters and then get out of the way. That thing is how much is left,
- * not how much is gone: "64% 남음" needs no arithmetic to act on, where "720원 썼어요"
- * does. The owner has no limit, so their pill shows the week's spend instead — the figure
- * they actually watch, since they are the one the invoice reaches.
+ * The pill is on screen all the time, so it says the one thing that matters in the width of
+ * a few characters and then gets out of the way. That thing is how much is left as a share,
+ * not as money: "10% 남음" needs no arithmetic to act on, where "920원 / 2,000원" asks the
+ * reader to do the division and hands every teacher a running invoice they never asked to
+ * see. Won stays in the owner's own limit screen (`CreditLimits`), which is where the
+ * figures are actually acted on.
+ *
+ * It is deliberately not a button. A percentage is a readout; when it was a door it was the
+ * third one onto a single screen — the account menu's Usage entry and the composer's
+ * `/Settings: Usage` were the others — and three ways into one panel reads as three
+ * different panels until you have pressed all three. Settings is the one way in now.
  */
 
 export function formatKrw(krw: number): string {
@@ -45,46 +51,44 @@ const TONE: Record<CreditStatus["state"], string> = {
  */
 export function CreditPill({
   status,
-  onClick,
   className = "",
   testId = "credit-pill",
 }: {
   status: CreditStatus;
-  onClick: () => void;
   className?: string;
   testId?: string;
 }) {
-  const label =
-    status.state === "unlimited"
-      ? formatKrw(status.spentKrw)
-      : status.state === "exhausted"
-        ? "한도 초과"
-        : `${status.remainingPercent}% 남음`;
-  const title =
-    status.state === "unlimited"
-      ? `이번 주 사용액 ${formatKrw(status.spentKrw)} · 한도 없음`
-      : `이번 주 ${formatKrw(status.spentKrw)} / ${formatKrw(status.limitKrw ?? 0)} 사용`;
+  // No limit, no meter. A percentage of no limit is not a small number, it is no number,
+  // and the owner's spend belongs in the usage section rather than on a pill that every
+  // screen carries. The owner used to get their week's won here; it was the one place the
+  // money showed up uninvited.
+  if (status.state === "unlimited") return null;
+  const percent = status.remainingPercent ?? 0;
+  const label = status.state === "exhausted" ? "한도 초과" : `${percent}% 남음`;
   return (
-    <button
-      type="button"
+    // Plain text, no ARIA: the label is the content, so a screen reader reads the same
+    // "10% 남음" everyone else sees, and the title adds when it comes back. It carried an
+    // aria-label while it was a button, where the text alone did not say what pressing it
+    // would do.
+    <span
       data-testid={testId}
       data-state={status.state}
-      onClick={onClick}
-      title={title}
-      aria-label={`사용량: ${label}`}
-      className={`shrink-0 rounded-full px-2 py-[3px] text-[11.5px] font-medium tabular-nums transition-colors hover:brightness-95 ${TONE[status.state]} ${className}`}
+      title={`${formatResetDay(new Date(status.windowEnd))}에 초기화`}
+      className={`shrink-0 rounded-full px-2 py-[3px] text-[11.5px] font-medium tabular-nums ${TONE[status.state]} ${className}`}
     >
       {label}
-    </button>
+    </span>
   );
 }
 
 /**
- * The detail behind the pill.
+ * The detail behind the pill, in the usage section of Settings.
  *
  * A percentage invites exactly one question — spent on what? — so this answers it in the
- * two lines the money actually went to, and names the day the allowance comes back. The
- * rate card is shown because a bill nobody can check is a bill nobody trusts.
+ * work that was actually done: runs, browser time, tokens. It answers in units the reader
+ * recognizes rather than in won, because a teacher cannot act on a bill and the number
+ * only ever made them cautious about asking a question. What the week costs is the owner's
+ * concern and sits in the owner's limit screen.
  */
 export function CreditDetail({ status }: { status: CreditStatus }) {
   const resetsAt = new Date(status.windowEnd);
@@ -96,9 +100,11 @@ export function CreditDetail({ status }: { status: CreditStatus }) {
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-[13px] text-muted-foreground">이번 주 사용량</span>
           <span className="text-[13px] tabular-nums text-foreground">
-            {limited
-              ? `${formatKrw(status.spentKrw)} / ${formatKrw(status.limitKrw ?? 0)}`
-              : `${formatKrw(status.spentKrw)} · 한도 없음`}
+            {!limited
+              ? "한도 없음"
+              : status.state === "exhausted"
+                ? "한도 초과"
+                : `${percent}% 남음`}
           </span>
         </div>
         {limited ? (
@@ -125,7 +131,7 @@ export function CreditDetail({ status }: { status: CreditStatus }) {
             <p className="m-0 text-[12.5px] text-muted-foreground">
               {status.state === "exhausted"
                 ? `한도를 모두 썼어요. ${formatResetDay(resetsAt)}에 다시 채워집니다.`
-                : `${formatKrw(status.remainingKrw ?? 0)} 남았어요 · ${formatResetDay(resetsAt)}에 초기화`}
+                : `${formatResetDay(resetsAt)}에 초기화됩니다.`}
             </p>
           </>
         ) : (
@@ -135,38 +141,17 @@ export function CreditDetail({ status }: { status: CreditStatus }) {
         )}
       </div>
 
-      <dl className="m-0 flex flex-col gap-1 border-t border-border pt-2 text-[12.5px]">
-        <div className="flex justify-between gap-3">
-          <dt className="m-0 text-muted-foreground">
-            봇 실행 {status.spent.runs.toLocaleString("ko-KR")}회
-          </dt>
-          <dd className="m-0 tabular-nums text-foreground/80">
-            {formatKrw(status.spent.modelKrw)}
-          </dd>
-        </div>
-        <div className="flex justify-between gap-3">
-          <dt className="m-0 text-muted-foreground">
-            브라우저 {formatMinutes(status.spent.browserSeconds)}
-            {status.spent.browserSessions > 0 ? ` · ${status.spent.browserSessions}세션` : ""}
-          </dt>
-          <dd className="m-0 tabular-nums text-foreground/80">
-            {formatKrw(status.spent.browserKrw)}
-          </dd>
-        </div>
-        <div className="flex justify-between gap-3 text-muted-foreground/80">
-          <dt className="m-0">
-            토큰 입력 {status.spent.inputTokens.toLocaleString("ko-KR")} / 출력{" "}
-            {status.spent.outputTokens.toLocaleString("ko-KR")}
-          </dt>
-        </div>
-      </dl>
-
-      <p className="m-0 text-[11.5px] leading-4 text-muted-foreground/70">
-        단가 기준 {CREDIT_RATES.effectiveFrom} · 현재 모델 입력 1M당 $
-        {CREDIT_RATES.fallbackTokenRates.usdPerMillionInputTokens}, 출력 1M당 $
-        {CREDIT_RATES.fallbackTokenRates.usdPerMillionOutputTokens}, 브라우저 1시간당 $
-        {CREDIT_RATES.usdPerBrowserHour} · $1 = {CREDIT_RATES.krwPerUsd.toLocaleString("ko-KR")}원
-      </p>
+      <ul className="m-0 flex list-none flex-col gap-1 border-t border-border pt-2 pl-0 text-[12.5px] text-muted-foreground">
+        <li className="m-0">봇 실행 {status.spent.runs.toLocaleString("ko-KR")}회</li>
+        <li className="m-0">
+          브라우저 {formatMinutes(status.spent.browserSeconds)}
+          {status.spent.browserSessions > 0 ? ` · ${status.spent.browserSessions}세션` : ""}
+        </li>
+        <li className="m-0 text-muted-foreground/80">
+          토큰 입력 {status.spent.inputTokens.toLocaleString("ko-KR")} / 출력{" "}
+          {status.spent.outputTokens.toLocaleString("ko-KR")}
+        </li>
+      </ul>
     </div>
   );
 }
