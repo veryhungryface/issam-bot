@@ -1,30 +1,57 @@
+import type { Browser, Page, TestInfo } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 /**
  * The weekly credit, from the outside.
  *
- * The promise is narrow and worth holding: the meter is beside the account name whenever
- * the sidebar is on screen, and one tap on it explains the number.
+ * The promise is narrow and worth holding: whenever the sidebar is on screen, an account
+ * with a limit can read what share of it is left beside its own name, and Settings — one
+ * place, not four — says what the week went to.
  *
- * Nothing here assumes who owns the deployment. The owner seat is claimed by whichever
- * account bootstraps first, and the suite shares a database with every other spec, so a
- * fresh signup is the owner on an empty database and an ordinary account on a used one.
- * The second test sidesteps that by making its own second account, which cannot hold the
- * seat whatever ran before it — the only way to assert the limited rendering and the
- * authorization boundary without depending on test order.
+ * Nothing here assumes who owns the deployment, and most of it cannot afford to. The owner
+ * seat is claimed by whichever account bootstraps first, the suite shares a database with
+ * every other spec, and an owner has no limit and so no pill at all. Every test that wants
+ * to see a pill therefore spends an account on claiming the seat first, so the account it
+ * actually drives is limited whatever ran before it.
  */
 
-test("the weekly credit sits beside the account name and opens its detail", async ({
-  page,
-}, testInfo) => {
-  const stamp = Date.now();
-  await signup(page, `credit-${stamp}@rakazo.test`, "password12", "Credit QA");
+/** Burn an account on the owner seat, so the next one to sign up is an ordinary user. */
+async function claimOwnerSeat(browser: Browser, stamp: number): Promise<void> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await signup(page, `credit-seat-${stamp}@rakazo.test`, "password12", "Credit Seat");
+  await completeOnboarding(page);
+  await context.close();
+}
+
+/** Open the one door onto the usage section, and hand back the detail inside it. */
+async function openUsage(page: Page) {
+  await page.getByTestId("user-menu-trigger").click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const section = page.getByTestId("usage-settings");
+  await expect(section).toBeVisible();
+  return section;
+}
+
+async function limitedAccount(browser: Browser, stamp: number, label: string, testInfo?: TestInfo) {
+  await claimOwnerSeat(browser, stamp);
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await signup(page, `credit-${label}-${stamp}@rakazo.test`, "password12", `Credit ${label}`);
   await completeOnboarding(page, testInfo);
+  return { context, page };
+}
+
+test("the weekly credit sits beside the account name, and says only the share", async ({
+  browser,
+}, testInfo) => {
+  const { context, page } = await limitedAccount(browser, Date.now(), "beside", testInfo);
 
   const aside = page.locator("aside").first();
   const pill = aside.getByTestId("credit-pill");
   await expect(pill).toBeVisible();
+  await expect(pill).toHaveText("100% 남음");
 
   // Beside the name, not under it: the same row, to the right of the trigger.
   const nameBox = await aside.getByTestId("user-menu-trigger").boundingBox();
@@ -38,31 +65,18 @@ test("the weekly credit sits beside the account name and opens its detail", asyn
     expect(pillBox.x).toBeGreaterThan(nameBox.x);
   }
 
-  await pill.click();
-  const detail = page.getByTestId("credit-detail").first();
-  await expect(detail).toBeVisible();
-  await expect(detail).toContainText("이번 주 사용량");
-  // The rate card is on screen, so the figure can be checked rather than trusted.
-  await expect(detail).toContainText("1,450");
-  await captureScreenshot(page, testInfo, "weekly-credit-detail");
+  // No money on a surface every screen carries, and nothing to press: the pill is a
+  // readout. It used to be the third door onto the usage panel.
+  await expect(pill).not.toContainText("원");
+  await expect(pill).toHaveJSProperty("tagName", "SPAN");
+  await captureScreenshot(page, testInfo, "weekly-credit-pill");
+  await context.close();
 });
 
 test("an account that does not own the deployment gets a limit it cannot change", async ({
   browser,
 }, testInfo) => {
-  const stamp = Date.now();
-
-  // Whoever owns the deployment, it is not the second account to appear here.
-  const firstContext = await browser.newContext();
-  const first = await firstContext.newPage();
-  await signup(first, `credit-first-${stamp}@rakazo.test`, "password12", "Credit First");
-  await completeOnboarding(first);
-  await firstContext.close();
-
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  await signup(page, `credit-second-${stamp}@rakazo.test`, "password12", "Credit Second");
-  await completeOnboarding(page, testInfo);
+  const { context, page } = await limitedAccount(browser, Date.now(), "second", testInfo);
 
   const pill = page.locator("aside").first().getByTestId("credit-pill");
   await expect(pill).toBeVisible();
@@ -70,11 +84,14 @@ test("an account that does not own the deployment gets a limit it cannot change"
   await expect(pill).toHaveText("100% 남음");
   await expect(pill).toHaveAttribute("data-state", "ok");
 
-  await pill.click();
-  const detail = page.getByTestId("credit-detail").first();
+  const section = await openUsage(page);
+  const detail = section.getByTestId("credit-detail");
   await expect(detail).toBeVisible();
-  await expect(detail).toContainText("2,000원");
+  await expect(detail).toContainText("100% 남음");
   await expect(detail).toContainText("초기화");
+  // What the week costs the school is not the teacher's business, in either direction: no
+  // won on the way in and none in the detail.
+  await expect(detail).not.toContainText("원");
   // Setting anyone's limit belongs to the deployment owner alone.
   await expect(page.getByTestId("credit-limits-open")).toHaveCount(0);
   await context.close();
@@ -85,14 +102,16 @@ test("a phone shows the meter without opening the drawer", async ({ browser }, t
   // starts off screen. "Always visible" has to mean the header copy on a phone, and this
   // is the test that would have caught shipping the feature invisible on mobile — which is
   // the only way most of these testers will ever see it.
+  const stamp = Date.now();
+  await claimOwnerSeat(browser, stamp);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
-  const stamp = Date.now();
   await signup(page, `credit-phone-${stamp}@rakazo.test`, "password12", "Credit Phone");
   await completeOnboarding(page, testInfo);
 
   const compact = page.getByTestId("credit-pill-compact");
   await expect(compact).toBeVisible();
+  await expect(compact).toHaveText("100% 남음");
 
   // The sidebar copy is in the document but parked off screen with the drawer.
   const drawerPill = page.locator("aside").first().getByTestId("credit-pill");
@@ -112,31 +131,20 @@ test("a phone shows the meter without opening the drawer", async ({ browser }, t
 
   // The shut state is the one worth having a picture of: it is what a tester sees.
   await captureScreenshot(page, testInfo, "weekly-credit-phone-header");
-
-  await compact.click();
-  const detail = page.getByTestId("credit-detail").first();
-  await expect(detail).toBeVisible();
-  await expect(detail).toContainText("이번 주 사용량");
-  await captureScreenshot(page, testInfo, "weekly-credit-phone");
   await context.close();
 });
 
-test("the settings panel fills its usage section in, however it was opened", async ({
-  page,
-}, testInfo) => {
+test("the settings panel fills its usage section in", async ({ page }, testInfo) => {
   // The report that prompted this: opening Settings from the gear showed a 사용량 heading
   // with nothing under it. The numbers only arrived if the reader had pressed the menu's
-  // Usage entry at some earlier point in the session, which nobody does. The panel now
-  // fetches on open, and this is the door that was broken.
+  // Usage entry at some earlier point in the session, which nobody does. The panel fetches
+  // on open now, and this is the door that was broken. It runs for owner and teacher alike,
+  // since both have a usage section even though only one of them has a pill.
   const stamp = Date.now();
   await signup(page, `credit-settings-${stamp}@rakazo.test`, "password12", "Credit Settings");
   await completeOnboarding(page, testInfo);
 
-  await page.getByTestId("user-menu-trigger").click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-
-  const section = page.getByTestId("usage-settings");
-  await expect(section).toBeVisible();
+  const section = await openUsage(page);
   const detail = section.getByTestId("credit-detail");
   await expect(detail).toBeVisible();
   await expect(detail).toContainText("이번 주 사용량");
@@ -145,14 +153,22 @@ test("the settings panel fills its usage section in, however it was opened", asy
   await captureScreenshot(page, testInfo, "weekly-credit-settings");
 });
 
-test("the menu's usage entry opens the same panel", async ({ page }, testInfo) => {
+test("there is one way into the usage section, not four", async ({ page }, testInfo) => {
+  // Settings, the menu's Usage entry, the pill, and the composer's `/Settings: Usage` all
+  // landed on this same panel. Four doors onto one room read as four rooms until you have
+  // opened all of them, which is what the complaint was.
   const stamp = Date.now();
-  await signup(page, `credit-menu-${stamp}@rakazo.test`, "password12", "Credit Menu");
+  await signup(page, `credit-doors-${stamp}@rakazo.test`, "password12", "Credit Doors");
   await completeOnboarding(page, testInfo);
 
   await page.getByTestId("user-menu-trigger").click();
-  await page.getByRole("button", { name: "Usage", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Usage", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
-  await expect(page.getByTestId("user-settings")).toBeVisible();
-  await expect(page.getByTestId("usage-settings").getByTestId("credit-detail")).toBeVisible();
+  // The composer's slash menu names the account panel once.
+  await page.getByRole("combobox", { name: /^Message/ }).fill("/Settings");
+  const picker = page.getByTestId("slash-picker");
+  await expect(picker.getByRole("button", { name: "Settings: General" })).toBeVisible();
+  await expect(picker.getByRole("button", { name: "Settings: Usage" })).toHaveCount(0);
 });

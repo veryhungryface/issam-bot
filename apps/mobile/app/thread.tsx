@@ -971,10 +971,7 @@ function Thread() {
       }
       return;
     }
-    router.push({
-      pathname: "/account",
-      params: action === "settings-usage" ? { focus: "usage" } : undefined,
-    });
+    router.push("/account");
   }
 
   const canSend =

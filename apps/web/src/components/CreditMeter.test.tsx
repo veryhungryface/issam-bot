@@ -28,7 +28,7 @@ function status(overrides: Partial<CreditStatus> = {}): CreditStatus {
 
 describe("the pill beside the name", () => {
   it("says how much is left, not how much is gone", () => {
-    const html = renderToStaticMarkup(<CreditPill status={status()} onClick={() => {}} />);
+    const html = renderToStaticMarkup(<CreditPill status={status()} />);
     // The visible label is the whole point of the pill, so the claim is about the text
     // between the tags, not about the markup — the amounts live in the tooltip, which the
     // next test is about.
@@ -36,14 +36,29 @@ describe("the pill beside the name", () => {
     expect(visible).toBe("64% 남음");
   });
 
-  it("still carries the amounts where a pointer can reach them", () => {
-    const html = renderToStaticMarkup(<CreditPill status={status()} onClick={() => {}} />);
-    expect(html).toContain("720원");
-    expect(html).toContain("2,000원");
+  it("keeps the money out of it entirely", () => {
+    const html = renderToStaticMarkup(<CreditPill status={status()} />);
+    // Not in the label and not in the tooltip either. A teacher reading a running total of
+    // what they have cost the school is a reason not to ask the next question; the share
+    // that is left is the only part they can act on.
+    expect(html).not.toContain("원");
+    expect(html).not.toContain("720");
+    expect(html).not.toContain("2,000");
+    // What the tooltip says instead: when it comes back.
+    expect(html).toContain("10월 19일(월)에 초기화");
+  });
+
+  it("is a readout, not a door", () => {
+    const html = renderToStaticMarkup(<CreditPill status={status()} />);
+    // It used to be a button, and the third one onto a single panel. Pressing a number
+    // that looks pressable and landing in Settings is worse than a number that plainly
+    // is not pressable.
+    expect(html).not.toContain("<button");
+    expect(html).toContain("<span");
   });
 
   it("stays quiet while the balance is healthy", () => {
-    const html = renderToStaticMarkup(<CreditPill status={status()} onClick={() => {}} />);
+    const html = renderToStaticMarkup(<CreditPill status={status()} />);
     expect(html).toContain("bg-muted");
     expect(html).not.toContain("destructive");
     expect(html).not.toContain("amber");
@@ -53,7 +68,6 @@ describe("the pill beside the name", () => {
     const html = renderToStaticMarkup(
       <CreditPill
         status={status({ state: "low", remainingPercent: 12, remainingKrw: 240, spentKrw: 1_760 })}
-        onClick={() => {}}
       />,
     );
     expect(html).toContain("12% 남음");
@@ -69,7 +83,6 @@ describe("the pill beside the name", () => {
           remainingKrw: 0,
           spentKrw: 2_400,
         })}
-        onClick={() => {}}
       />,
     );
     expect(html).toContain("한도 초과");
@@ -77,7 +90,7 @@ describe("the pill beside the name", () => {
     expect(html).toContain("destructive");
   });
 
-  it("shows the owner their spend, since a percentage of no limit says nothing", () => {
+  it("renders nothing at all for an account with no limit", () => {
     const html = renderToStaticMarkup(
       <CreditPill
         status={status({
@@ -88,12 +101,11 @@ describe("the pill beside the name", () => {
           limitSource: "owner",
           spentKrw: 3_851,
         })}
-        onClick={() => {}}
       />,
     );
-    expect(html).toContain("3,851원");
-    expect(html).toContain("한도 없음");
-    expect(html).not.toContain("남음");
+    // There is no share left of no limit. This used to show the owner their week in won,
+    // which was the one place money appeared without being asked for.
+    expect(html).toBe("");
   });
 
   it("can be rendered a second time for the phone, under its own name", () => {
@@ -102,7 +114,6 @@ describe("the pill beside the name", () => {
     const html = renderToStaticMarkup(
       <CreditPill
         status={status()}
-        onClick={() => {}}
         testId="credit-pill-compact"
         className="pointer-events-auto md:hidden"
       />,
@@ -117,20 +128,26 @@ describe("the pill beside the name", () => {
   });
 
   it("names its state for anything reading the page", () => {
-    const html = renderToStaticMarkup(<CreditPill status={status()} onClick={() => {}} />);
+    const html = renderToStaticMarkup(<CreditPill status={status()} />);
     expect(html).toContain('data-testid="credit-pill"');
     expect(html).toContain('data-state="ok"');
-    expect(html).toContain("aria-label");
+    // No aria-label: the visible text is the label, which is what a reader should hear.
+    expect(html).not.toContain("aria-label");
   });
 });
 
 describe("the detail behind it", () => {
-  it("answers what the money went to", () => {
+  it("answers what the week went to, in work rather than in money", () => {
     const html = renderToStaticMarkup(<CreditDetail status={status()} />);
     expect(html).toContain("봇 실행 23회");
-    expect(html).toContain("710원");
     expect(html).toContain("브라우저");
     expect(html).toContain("5세션");
+    expect(html).toContain("64% 남음");
+    // The won figures the rows used to carry, and the rate card under them, are the
+    // owner's business and live in the owner's limit screen.
+    expect(html).not.toContain("원");
+    expect(html).not.toContain("710");
+    expect(html).not.toContain("1,450");
   });
 
   it("names the day the allowance comes back", () => {
@@ -143,12 +160,6 @@ describe("the detail behind it", () => {
     const html = renderToStaticMarkup(<CreditDetail status={status()} />);
     expect(html).toContain("width:64%");
     expect(html).toContain('aria-valuenow="64"');
-  });
-
-  it("shows the rate card, so the figure can be checked rather than trusted", () => {
-    const html = renderToStaticMarkup(<CreditDetail status={status()} />);
-    expect(html).toContain("2026-10-12");
-    expect(html).toContain("1,450");
   });
 
   it("drops the bar entirely when there is no limit to measure against", () => {

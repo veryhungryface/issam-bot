@@ -1,7 +1,13 @@
+/**
+ * Where a slash can send the reader.
+ *
+ * `settings-usage` used to be here and pointed at the usage section of the account panel,
+ * which `settings-general` already opens — usage is the first section in it. Two commands
+ * onto one screen reads as two screens, so the destination is named once.
+ */
 export const SLASH_ACTIONS = [
   { id: "chat-settings" as const, label: "Chat Settings" },
   { id: "settings-general" as const, label: "Settings: General" },
-  { id: "settings-usage" as const, label: "Settings: Usage" },
 ] as const;
 
 export type SlashActionId = (typeof SLASH_ACTIONS)[number]["id"];

@@ -201,9 +201,10 @@ test("the memory screens are off, and the skills beside them stay", async ({ pag
 
   await page.getByTestId("user-menu-trigger").click();
   await expect(page.getByRole("button", { name: "Memory", exact: true })).toHaveCount(0);
-  // The entry it sat beside is still there, so this is the memory screen going and not the
-  // whole menu failing to open.
-  await expect(page.getByRole("button", { name: "Usage", exact: true })).toBeVisible();
+  // Settings is the anchor: something in this menu has to be visible, or an absent Memory
+  // would only prove the menu never opened. Usage used to play that part and has since been
+  // folded into Settings itself, which is exactly the trap this line exists to avoid.
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
 
   // Skills keep their place in bot settings; only the memory tab beside them goes.
