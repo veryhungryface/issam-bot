@@ -1,0 +1,104 @@
+name: Set default model
+
+# The model id lives in /opt/issam-bot/secret.env on the VPS, which is reachable only with
+# the deploy key — and that key is here, in Actions, not on anyone's laptop. Without this
+# workflow changing the model means first getting a key onto a machine, which is a worse
+# thing to own than a button.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model to run every bot on
+        required: true
+        type: choice
+        options:
+          - gpt-6-luna
+          - gpt-6-sol
+          - gpt-5.6-luna
+          - gpt-5.6-sol
+      host:
+        description: Target VPS address
+        required: false
+        default: 3.37.14.63
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two runs racing would leave the file holding one model and the containers another.
+  group: set-default-model
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Refuse a model the credit meter cannot price
+        env:
+          MODEL: ${{ inputs.model }}
+        run: |
+          set -euo pipefail
+          # The weekly meter turns tokens into won with a row per model in CREDIT_RATES.
+          # A model with no row is charged the fallback rate, which is a quiet way to bill
+          # everyone wrongly, so the choice list and that file have to agree.
+          if ! grep -q "\"${MODEL}\":" packages/core/src/credit.ts; then
+            echo "::error::${MODEL} has no CREDIT_RATES row in packages/core/src/credit.ts."
+            echo "Add the row and its prices first, or the weekly usage figures will be wrong."
+            exit 1
+          fi
+          echo "${MODEL} is priced in CREDIT_RATES."
+
+      - name: Configure deploy SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/issam_bot_deploy
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/issam_bot_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Swap the model and bring the app back up
+        env:
+          MODEL: ${{ inputs.model }}
+          HOST: ${{ inputs.host }}
+        run: |
+          set -euo pipefail
+          ssh_args=(-i ~/.ssh/issam_bot_deploy -o BatchMode=yes "deploy@${HOST}")
+
+          # Only ever print this one line. The file beside it holds every key we have.
+          echo "Before:"
+          ssh "${ssh_args[@]}" \
+            "sudo -n grep -E '^PI_DEFAULT_(MODEL|PROVIDER)=' /opt/issam-bot/secret.env"
+
+          # A dated copy, so a bad model is one scp-free command away from undone.
+          ssh "${ssh_args[@]}" \
+            "sudo -n cp /opt/issam-bot/secret.env /opt/issam-bot/secret.env.bak"
+
+          ssh "${ssh_args[@]}" \
+            "sudo -n sed -i 's|^PI_DEFAULT_MODEL=.*|PI_DEFAULT_MODEL=${MODEL}|' /opt/issam-bot/secret.env"
+
+          echo "After:"
+          ssh "${ssh_args[@]}" \
+            "sudo -n grep -E '^PI_DEFAULT_(MODEL|PROVIDER)=' /opt/issam-bot/secret.env"
+
+          # api serves the catalog, worker runs the bots. Both read the model at startup.
+          ssh "${ssh_args[@]}" \
+            "cd /opt/issam-bot && sudo -n docker compose --env-file /opt/issam-bot/secret.env -f docker-compose.yml up -d --force-recreate api worker"
+
+          ssh "${ssh_args[@]}" "cd /opt/issam-bot && sudo -n docker compose ps"
+
+      - name: Say what to check
+        run: |
+          echo "### Now send one message to a bot" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "The model id is passed to the provider unvalidated. If the account has no" >> "$GITHUB_STEP_SUMMARY"
+          echo "access to \`${{ inputs.model }}\`, every bot fails until it is changed back." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "To undo: run this workflow again with the previous model." >> "$GITHUB_STEP_SUMMARY"

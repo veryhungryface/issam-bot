@@ -101,3 +101,18 @@ FIFO within a workspace is the default, with fair scheduling across users so one
 occupy all three global slots. Queue position is advisory because cancellations, quota changes, and
 operator pauses can alter order. Expired or duplicate queue leases must be reclaimed after worker
 restart.
+
+## Changing the model
+
+The model id lives in `PI_DEFAULT_MODEL` in `/opt/issam-bot/secret.env` on the VPS. That
+file is reachable only over SSH as `deploy@`, with a key that exists in GitHub Actions and
+nowhere else — not on any laptop. So the way to change it is the **Set default model**
+workflow, run from the Actions tab: pick a model, run, then send one message to a bot.
+
+The workflow refuses a model that has no `CREDIT_RATES` row, because a model it cannot
+price is charged the fallback rate and every weekly figure quietly becomes wrong. Adding a
+model means adding its row here first.
+
+The provider never validates the id. If the account has no access to the model, every bot
+fails until the workflow is run again with the previous one, so the test message is not
+optional. The server keeps `secret.env.bak` from the last change.
