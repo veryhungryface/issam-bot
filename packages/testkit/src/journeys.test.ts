@@ -48,14 +48,11 @@ describeJourneys("required product journeys", () => {
 
   async function sendAndWait(app: App, cookie: string, botId: string, text: string) {
     const { runId } = await rpc<{ runId: string }>(app, cookie, "threads/send", { botId, text });
-    let terminal: { status: string; error: string | null } | null = null;
-    await waitForDatabase(async () => {
-      terminal = await prisma.run.findUnique({
-        where: { id: runId },
-        select: { status: true, error: true },
-      });
-      return Boolean(terminal && ["completed", "failed", "cancelled"].includes(terminal.status));
-    });
+    const terminal = await waitForDatabase(
+      `run ${runId} to finish`,
+      () => prisma.run.findUnique({ where: { id: runId }, select: { status: true, error: true } }),
+      (run) => Boolean(run && ["completed", "failed", "cancelled"].includes(run.status)),
+    );
     if (!terminal) throw new Error(`run ${runId} was not found after completion`);
     if (terminal.status !== "completed") {
       throw new Error(
@@ -96,14 +93,12 @@ describeJourneys("required product journeys", () => {
       }
     }
     for (const runId of targets) {
-      let terminal: { status: string; error: string | null } | null = null;
-      await waitForDatabase(async () => {
-        terminal = await prisma.run.findUnique({
-          where: { id: runId },
-          select: { status: true, error: true },
-        });
-        return Boolean(terminal && ["completed", "failed", "cancelled"].includes(terminal.status));
-      });
+      const terminal = await waitForDatabase(
+        `run ${runId} to finish`,
+        () =>
+          prisma.run.findUnique({ where: { id: runId }, select: { status: true, error: true } }),
+        (run) => Boolean(run && ["completed", "failed", "cancelled"].includes(run.status)),
+      );
       if (!terminal) throw new Error(`run ${runId} was not found after completion`);
       if (terminal.status !== "completed") {
         throw new Error(
@@ -720,14 +715,18 @@ describeJourneys("required product journeys", () => {
         payload: { key: "a" },
       });
 
-      await waitForDatabase(async () => {
-        const storedBot = await prisma.bot.findUniqueOrThrow({
-          where: { id: bot.id },
-          include: { computer: true },
-        });
-        const computer = storedBot.computer!;
-        return computer.controlLeaseId === null && computer.controlHolder === "none";
-      });
+      await waitForDatabase(
+        "the computer's control to be released",
+        async () => {
+          const storedBot = await prisma.bot.findUniqueOrThrow({
+            where: { id: bot.id },
+            include: { computer: true },
+          });
+          const computer = storedBot.computer!;
+          return { controlLeaseId: computer.controlLeaseId, controlHolder: computer.controlHolder };
+        },
+        (computer) => computer.controlLeaseId === null && computer.controlHolder === "none",
+      );
 
       expect(
         (await rpc<{ controlHolder: string }>(app, cookie, "computer/status", { botId: bot.id }))
@@ -1098,10 +1097,11 @@ describeJourneys("required product journeys", () => {
       name: "routine.wakeup",
       payload: { routineId: legacy.id, scheduledFor: legacyDueAt.toISOString() },
     });
-    await waitForDatabase(async () => {
-      const stored = await prisma.routine.findUnique({ where: { id: legacy.id } });
-      return stored?.active === false && stored.nextRunAt === null;
-    });
+    await waitForDatabase(
+      `routine ${legacy.id} to be switched off`,
+      () => prisma.routine.findUnique({ where: { id: legacy.id } }),
+      (stored) => stored?.active === false && stored.nextRunAt === null,
+    );
     expect(await prisma.run.count({ where: { botId: bot.id, trigger: "routine" } })).toBe(
       legacyRunsBefore + 1,
     );
@@ -1156,12 +1156,11 @@ describeJourneys("required product journeys", () => {
       data: { nextRunAt: groupDueAt },
     });
     await executor.wakeRoutine(groupRoutine.id, groupDueAt.toISOString());
-    await waitForDatabase(async () => {
-      const run = await prisma.run.findFirst({
-        where: { routineId: groupRoutine.id, trigger: "routine" },
-      });
-      return run?.threadId === group.threadId;
-    });
+    await waitForDatabase(
+      "the group routine to run on the group thread",
+      () => prisma.run.findFirst({ where: { routineId: groupRoutine.id, trigger: "routine" } }),
+      (run) => run?.threadId === group.threadId,
+    );
     const groupRun = await prisma.run.findFirstOrThrow({
       where: { routineId: groupRoutine.id, trigger: "routine" },
     });
@@ -1208,12 +1207,11 @@ describeJourneys("required product journeys", () => {
       data: { nextRunAt: dmDueAt },
     });
     await executor.wakeRoutine(dmRoutine.id, dmDueAt.toISOString());
-    await waitForDatabase(async () => {
-      const run = await prisma.run.findFirst({
-        where: { routineId: dmRoutine.id, trigger: "routine" },
-      });
-      return run?.threadId === dmThread.id;
-    });
+    await waitForDatabase(
+      "the direct-message routine to run on its own thread",
+      () => prisma.run.findFirst({ where: { routineId: dmRoutine.id, trigger: "routine" } }),
+      (run) => run?.threadId === dmThread.id,
+    );
     const dmRun = await prisma.run.findFirstOrThrow({
       where: { routineId: dmRoutine.id, trigger: "routine" },
     });
@@ -1842,10 +1840,15 @@ describeJourneys("required product journeys", () => {
       groupId: group.id,
       text: "@Research Writer ask me which city to use",
     });
-    await waitForDatabase(async () => {
-      const run = await prisma.run.findUnique({ where: { id: groupAsk.runId } });
-      return run?.status === "waiting_input";
-    });
+    await waitForDatabase(
+      `the group ask ${groupAsk.runId} to wait for input`,
+      () =>
+        prisma.run.findUnique({
+          where: { id: groupAsk.runId },
+          select: { status: true, error: true },
+        }),
+      (run) => run?.status === "waiting_input",
+    );
     const groupsWithActiveMember = await rpc<
       Array<{ id: string; members: Array<{ botId: string; status?: string }> }>
     >(app, ada, "groups/list");
@@ -1897,10 +1900,15 @@ describeJourneys("required product journeys", () => {
       messageId: askMessage!.id,
       answer: "Paris",
     });
-    await waitForDatabase(async () => {
-      const run = await prisma.run.findUnique({ where: { id: groupAsk.runId } });
-      return run?.status === "completed";
-    });
+    await waitForDatabase(
+      `the group ask ${groupAsk.runId} to finish`,
+      () =>
+        prisma.run.findUnique({
+          where: { id: groupAsk.runId },
+          select: { status: true, error: true },
+        }),
+      (run) => run?.status === "completed",
+    );
     const answerEvent = await prisma.event.findFirstOrThrow({
       where: {
         threadId: group.threadId,
@@ -2015,10 +2023,15 @@ describeJourneys("required product journeys", () => {
       text: "@Research Writer inspect the attachment",
       artifactIds: [artifact.id],
     });
-    await waitForDatabase(async () => {
-      const run = await prisma.run.findUnique({ where: { id: attached.runId } });
-      return Boolean(run && ["completed", "failed", "cancelled"].includes(run.status));
-    });
+    await waitForDatabase(
+      `the handed-off run ${attached.runId} to finish`,
+      () =>
+        prisma.run.findUnique({
+          where: { id: attached.runId },
+          select: { status: true, error: true },
+        }),
+      (run) => Boolean(run && ["completed", "failed", "cancelled"].includes(run.status)),
+    );
     expect(await prisma.run.findUniqueOrThrow({ where: { id: attached.runId } })).toMatchObject({
       botId: botD.id,
       status: "completed",
@@ -2753,14 +2766,28 @@ async function waitFor(app: App, cookie: string, botId: string, pred: (snap: Sna
   throw new Error(`timeout waiting for thread: ${JSON.stringify(last)}`);
 }
 
-// Same patience as waitFor above: both wait for a run to reach a terminal state,
-// and half the budget made the slowest journeys fail on a loaded CI runner while
-// passing everywhere else.
-async function waitForDatabase(pred: () => Promise<boolean>) {
+/**
+ * Wait for a row to reach a state, and say what it was doing if it never does.
+ *
+ * Reading and deciding are separate so a timeout can report the last row it saw. Every
+ * one of these used to give up with the same sentence and nothing else, which made a
+ * journey that failed once a week on CI impossible to tell apart from any other.
+ *
+ * Same patience as waitFor above: both wait for a run to reach a terminal state, and
+ * half the budget made the slowest journeys fail on a loaded CI runner while passing
+ * everywhere else.
+ */
+async function waitForDatabase<T>(
+  what: string,
+  read: () => Promise<T>,
+  done: (value: T) => boolean,
+): Promise<T> {
   const start = Date.now();
+  let last: T | undefined;
   while (Date.now() - start < 20_000) {
-    if (await pred()) return;
+    last = await read();
+    if (done(last)) return last;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error("timeout waiting for database state");
+  throw new Error(`timeout waiting for ${what}; last saw ${JSON.stringify(last ?? null)}`);
 }
