@@ -31,8 +31,8 @@ import { ComputerSessionUnavailableError } from "./computer-lifecycle.js";
 import { boundedComputerActions, computerObservation } from "./computer-support.js";
 import {
   formatElementLabel,
-  PAGE_ELEMENT_COLLECTOR,
   type PageElement,
+  pageElementCollector,
   prepareElements,
   refSelector,
 } from "./page-elements.js";
@@ -65,6 +65,8 @@ interface BrowserbaseBox {
   userControlling: boolean;
   controlToken?: string;
   screenLeaseId?: string;
+  /** Next unused page-element ref number, so a new document never reissues an old page's refs. */
+  nextPageRef?: number;
 }
 
 interface BrowserbaseProviderRef {
@@ -399,6 +401,25 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
       for (const action of request.actions) {
         const locator = page.locator(refSelector(action.ref));
         throwIfAborted(context);
+        // A ref that left the view, or one the page duplicated, would otherwise wait out the
+        // 8s action timeout and drop the run to screenshots. Hand back the current refs instead.
+        if ((await locator.count()) !== 1) {
+          await page
+            .waitForLoadState("domcontentloaded", { timeout: 15_000 })
+            .catch(() => undefined);
+          const snapshot = await this.collectPage(box, context);
+          const done =
+            completed > 0
+              ? ` The ${completed} action(s) before it were done; do not repeat them.`
+              : "";
+          return {
+            ok: false,
+            completed,
+            uncertain: false,
+            ...snapshot,
+            error: `${action.ref} is not on the page any more: it changed or scrolled since that snapshot, so nothing was done with ${action.ref}.${done} Continue with the refs in this snapshot.`,
+          };
+        }
         if (action.kind === "click") {
           await locator.click({ timeout: 8_000 });
         } else if (action.kind === "fill") {
@@ -441,13 +462,21 @@ export class BrowserbaseSandboxProvider implements SandboxProvider {
     text?: string;
   }> {
     const page = requiredPage(box);
-    const raw = (await page.evaluate(PAGE_ELEMENT_COLLECTOR)) as {
+    const raw = (await page.evaluate(pageElementCollector(box.nextPageRef ?? 1))) as {
       url: string;
       title: string;
       elements: PageElement[];
       text?: string;
+      nextRef?: number;
     };
     throwIfAborted(context);
+    if (
+      typeof raw.nextRef === "number" &&
+      Number.isSafeInteger(raw.nextRef) &&
+      raw.nextRef > (box.nextPageRef ?? 1)
+    ) {
+      box.nextPageRef = raw.nextRef;
+    }
     const elements = prepareElements(raw.elements);
     return {
       url: raw.url,

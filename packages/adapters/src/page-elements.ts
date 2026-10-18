@@ -24,7 +24,11 @@
 
 /** One actionable element as the model sees it. */
 export type PageElement = {
-  /** Stable within a snapshot; the page carries it as `data-rk`. */
+  /**
+   * The page carries it as `data-rk`. Kept while the element stays in view and never handed to
+   * another element, so a ref from an older snapshot either still means the same element or
+   * matches nothing.
+   */
   ref: string;
   role: string;
   name: string;
@@ -58,14 +62,35 @@ export const NO_ELEMENT_CHOICE = "none";
 /**
  * Collected in one page.evaluate so a table costs a single round trip. Returns elements in
  * visual order, each tagged with `data-rk` so acting needs no second lookup.
+ *
+ * A ref never means two things. Scrolling and snapshotting again used to number the new view
+ * from 1 while the old view kept its tags, so `[data-rk="1"]` matched two elements and every
+ * click on it failed Playwright's strict mode, sending the run to 7-9s screenshot steps. Now
+ * an element still in view keeps its ref, a new one takes the next unused number (never below
+ * `nextRef`, which the caller carries across navigations), and one that left the view loses
+ * its tag, so a ref from an older snapshot finds nothing instead of whatever took its number.
  */
-export const PAGE_ELEMENT_COLLECTOR = `(() => {
+export function pageElementCollector(nextRef: number): string {
+  const floor = Number.isSafeInteger(nextRef) && nextRef > 0 && nextRef < 1e9 ? nextRef : 1;
+  return `((floor) => {
   const SELECTOR = 'a[href], button, input, select, textarea, [role=button], [role=link], [role=tab], [role=checkbox], [role=combobox], [role=textbox], [contenteditable="true"]';
   const clean = (value) => (value || "").replace(/\\s+/g, " ").replace(/\\p{Cc}/gu, "").trim();
   const viewportHeight = window.innerHeight;
   const viewportWidth = window.innerWidth;
   const collected = [];
-  let index = 0;
+  // The page can write these too; a number it made up must not run the counter away.
+  const refNumber = (value) => {
+    const number = Number(value);
+    return Number.isSafeInteger(number) && number >= 1 && number < 1e9 ? number : 0;
+  };
+  const tagged = Array.from(document.querySelectorAll("[data-rk]"));
+  let next = Math.max(floor, refNumber(window.__rakazoNextRef), 1);
+  for (const element of tagged) {
+    const number = refNumber(element.getAttribute("data-rk"));
+    if (number >= next) next = number + 1;
+  }
+  const inView = new Set();
+  const used = new Set();
   for (const element of document.querySelectorAll(SELECTOR)) {
     const box = element.getBoundingClientRect();
     if (box.width < 8 || box.height < 8) continue;
@@ -102,10 +127,17 @@ export const PAGE_ELEMENT_COLLECTOR = `(() => {
       heading = node.previousElementSibling?.closest?.("h1,h2,h3") || null;
       node = node.parentElement;
     }
-    index += 1;
-    element.setAttribute("data-rk", String(index));
+    // A page that cloned a tagged node (carousels do) hands both copies the same number.
+    let number = refNumber(element.getAttribute("data-rk"));
+    if (!number || used.has(number)) {
+      number = next;
+      next += 1;
+      element.setAttribute("data-rk", String(number));
+    }
+    used.add(number);
+    inView.add(element);
     collected.push({
-      ref: "r" + index,
+      ref: "r" + number,
       role,
       name,
       placeholder: clean(element.getAttribute("placeholder")),
@@ -118,13 +150,19 @@ export const PAGE_ELEMENT_COLLECTOR = `(() => {
   // have to take a screenshot, which costs far more time and tokens than the words do.
   const readableRoot = document.querySelector("main, article, [role=main]") || document.body;
   const readable = clean(readableRoot ? readableRoot.innerText : "");
+  for (const element of tagged) {
+    if (!inView.has(element)) element.removeAttribute("data-rk");
+  }
+  window.__rakazoNextRef = next;
   return {
     url: location.href,
     title: document.title,
     elements: collected,
     text: readable.length > ${MAX_PAGE_TEXT} ? readable.slice(0, ${MAX_PAGE_TEXT}) + " […]" : readable,
+    nextRef: next,
   };
-})()`;
+})(${floor})`;
+}
 
 /** CSS selector for an element the collector tagged. */
 export function refSelector(ref: string): string {

@@ -1,3 +1,4 @@
+import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import {
   elementChoices,
@@ -6,7 +7,7 @@ import {
   MAX_ELEMENT_CHOICES,
   MAX_PAGE_TEXT,
   NO_ELEMENT_CHOICE,
-  PAGE_ELEMENT_COLLECTOR,
+  pageElementCollector,
   prepareElements,
   refSelector,
 } from "./page-elements.js";
@@ -132,21 +133,160 @@ describe("formatElementTable", () => {
   });
 });
 
-describe("PAGE_ELEMENT_COLLECTOR", () => {
+describe("pageElementCollector", () => {
   it("is a single self-contained expression, so one round trip collects the page", () => {
-    expect(PAGE_ELEMENT_COLLECTOR.startsWith("(() => {")).toBe(true);
-    expect(PAGE_ELEMENT_COLLECTOR.trimEnd().endsWith("})()")).toBe(true);
+    const collector = pageElementCollector(1);
+    expect(collector.startsWith("((floor) => {")).toBe(true);
+    expect(collector.trimEnd().endsWith("})(1)")).toBe(true);
     // The viewport filter and the tagging are what make the table actable; keep them.
-    expect(PAGE_ELEMENT_COLLECTOR).toContain("innerHeight");
-    expect(PAGE_ELEMENT_COLLECTOR).toContain("data-rk");
+    expect(collector).toContain("innerHeight");
+    expect(collector).toContain("data-rk");
   });
 
   it("collects what the page says, capped, so reading never needs a screenshot", () => {
     // Without text in the snapshot a model that must read an answer off the page falls back
     // to screenshots: measured in production at 7-9s per look against 2-3s for a snapshot.
-    expect(PAGE_ELEMENT_COLLECTOR).toContain("innerText");
-    expect(PAGE_ELEMENT_COLLECTOR).toContain("main, article, [role=main]");
-    expect(PAGE_ELEMENT_COLLECTOR).toContain(String(MAX_PAGE_TEXT));
+    const collector = pageElementCollector(1);
+    expect(collector).toContain("innerText");
+    expect(collector).toContain("main, article, [role=main]");
+    expect(collector).toContain(String(MAX_PAGE_TEXT));
     expect(MAX_PAGE_TEXT).toBeLessThanOrEqual(8_000);
+  });
+
+  it("only ever inlines a sane starting number", () => {
+    for (const bad of [0, -3, 1.5, Number.NaN, 2 ** 60]) {
+      expect(pageElementCollector(bad).trimEnd().endsWith("})(1)")).toBe(true);
+    }
+    expect(pageElementCollector(42).trimEnd().endsWith("})(42)")).toBe(true);
+  });
+});
+
+type Collected = { elements: { ref: string; name: string }[]; nextRef: number };
+
+/**
+ * A page of 60px buttons 100px apart in an 800x600 viewport. jsdom has no layout, so each
+ * button's box comes from its data-y minus the scroll offset.
+ */
+function scrollingPage(count = 40) {
+  const buttons = Array.from(
+    { length: count },
+    (_, index) => `<button style="opacity:1" data-y="${index * 100}">Item ${index}</button>`,
+  ).join("");
+  const dom = new JSDOM(`<!doctype html><main>${buttons}</main>`, {
+    runScripts: "outside-only",
+  });
+  const { window } = dom;
+  let scrollY = 0;
+  Object.defineProperty(window, "innerHeight", { value: 600, configurable: true });
+  Object.defineProperty(window, "innerWidth", { value: 800, configurable: true });
+  window.HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+    const top = Number(this.getAttribute("data-y") ?? 0) - scrollY;
+    return {
+      left: 0,
+      top,
+      right: 120,
+      bottom: top + 60,
+      width: 120,
+      height: 60,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    } as DOMRect;
+  };
+  Object.defineProperty(window.HTMLElement.prototype, "innerText", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.textContent ?? "";
+    },
+  });
+  return {
+    document: window.document,
+    scrollTo(y: number) {
+      scrollY = y;
+    },
+    collect(nextRef = 1): Collected {
+      return window.eval(pageElementCollector(nextRef)) as Collected;
+    },
+    /** What clicking this ref would hit, as Playwright's strict locator would see it. */
+    matches(ref: string): string[] {
+      return Array.from(window.document.querySelectorAll(refSelector(ref))).map(
+        (element) => element.textContent ?? "",
+      );
+    },
+  };
+}
+
+describe("page element refs across snapshots", () => {
+  it("never gives one ref to two elements after scrolling and snapshotting again", () => {
+    // The production failure: after a scroll the new view was numbered from 1 again while the
+    // old view kept its tags, and clicking r1 failed strict mode against two buttons.
+    const page = scrollingPage();
+    page.collect();
+    page.scrollTo(1_500);
+    const second = page.collect();
+
+    expect(second.elements.length).toBeGreaterThan(0);
+    for (const element of second.elements) {
+      expect(page.matches(element.ref)).toEqual([element.name]);
+    }
+  });
+
+  it("keeps the ref of an element that stays in view", () => {
+    const page = scrollingPage();
+    const first = page.collect();
+    page.scrollTo(200);
+    const second = page.collect();
+
+    const before = new Map(first.elements.map((element) => [element.name, element.ref]));
+    const stayed = second.elements.filter((element) => before.has(element.name));
+    expect(stayed.length).toBeGreaterThan(0);
+    for (const element of stayed) expect(element.ref).toBe(before.get(element.name));
+  });
+
+  it("lets a ref from an older snapshot match nothing once its element left the view", () => {
+    const page = scrollingPage();
+    const first = page.collect();
+    const gone = first.elements.find((element) => element.name === "Item 0");
+    page.scrollTo(1_500);
+    const second = page.collect();
+
+    expect(gone).toBeDefined();
+    expect(page.matches(gone!.ref)).toEqual([]);
+    // And no new element took over that number.
+    expect(second.elements.map((element) => element.ref)).not.toContain(gone!.ref);
+  });
+
+  it("numbers a new document from the floor the caller carried over", () => {
+    const page = scrollingPage(3);
+    const collected = page.collect(41);
+
+    expect(collected.elements.map((element) => element.ref)).toEqual(["r41", "r42", "r43"]);
+    expect(collected.nextRef).toBe(44);
+  });
+
+  it("gives a copy of a tagged element its own ref", () => {
+    const page = scrollingPage(3);
+    page.collect();
+    const original = page.document.querySelector("button");
+    const copy = original!.cloneNode(true) as HTMLElement;
+    copy.textContent = "Copy";
+    copy.setAttribute("data-y", "400");
+    page.document.querySelector("main")!.append(copy);
+    const second = page.collect();
+
+    const refs = second.elements.map((element) => element.ref);
+    expect(new Set(refs).size).toBe(refs.length);
+    for (const element of second.elements) {
+      expect(page.matches(element.ref)).toEqual([element.name]);
+    }
+  });
+
+  it("does not let a number the page made up run the counter away", () => {
+    const page = scrollingPage(2);
+    page.document.querySelector("button")!.setAttribute("data-rk", "99999999999");
+    const collected = page.collect();
+
+    expect(collected.elements.map((element) => element.ref)).toEqual(["r1", "r2"]);
+    expect(collected.nextRef).toBe(3);
   });
 });

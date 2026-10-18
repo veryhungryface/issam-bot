@@ -244,6 +244,39 @@ describe("page browser safety", () => {
     ).toMatchObject({ ok: false, uncertain: true, completed: 1 });
   });
 
+  it("keeps the model on page tools when only a ref went stale", async () => {
+    const provider = new ComputerBrowserProvider({
+      liveDriver: async () => ({
+        ok: false,
+        completed: 1,
+        uncertain: false,
+        url: "https://example.test/list",
+        title: "목록",
+        tree: 'r12: #1 button "다음"',
+        elements: [{ ref: "r12", role: "button", name: "다음" }],
+        error: "r1 is not on the page any more",
+      }),
+    });
+    const result = await provider.act(
+      computer,
+      {
+        actions: [
+          { kind: "click", ref: "r12" },
+          { kind: "click", ref: "r1" },
+        ],
+      },
+      baseContext,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      completed: 1,
+      uncertain: false,
+      tree: 'r12: #1 button "다음"',
+      error: "r1 is not on the page any more",
+    });
+    expect(result.fallback).toBeUndefined();
+  });
+
   it("propagates cancellation instead of suggesting another action", async () => {
     const signal = AbortSignal.abort();
     const driver = vi.fn(async () => ({ ok: true }));

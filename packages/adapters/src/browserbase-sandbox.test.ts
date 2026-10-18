@@ -302,6 +302,83 @@ describe("BrowserbaseSandboxProvider", () => {
     expect(fixture.keyboardInsertText).toHaveBeenCalledWith("한글 비밀번호");
   });
 
+  it("answers a stale ref with the current refs instead of sending the run to screenshots", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1", timeoutSeconds: 300, region: "ap-southeast-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.evaluate.mockResolvedValue({
+      url: "https://example.com/list",
+      title: "목록",
+      elements: [{ ref: "r12", role: "button", name: "다음", placeholder: "", x: 0, y: 100 }],
+      nextRef: 13,
+    });
+    // r1 scrolled out of view after the snapshot it came from.
+    fixture.countFor.mockImplementation(async (selector?: string) =>
+      selector === '[data-rk="1"]' ? 0 : 1,
+    );
+
+    const acted = await provider.pageBrowser!(
+      computer,
+      {
+        command: "act",
+        actions: [
+          { kind: "click", ref: "r12" },
+          { kind: "click", ref: "r1" },
+        ],
+      },
+      adapterContext(),
+    );
+
+    expect(acted).toMatchObject({ ok: false, completed: 1, uncertain: false });
+    expect(acted.fallback).toBeUndefined();
+    expect(acted.tree).toContain('r12: #1 button "다음"');
+    expect(acted.error).toContain("r1 is not on the page any more");
+    expect(acted.error).toContain("do not repeat them");
+    // The first click ran; the stale one was never attempted.
+    expect(fixture.clickRef).toHaveBeenCalledTimes(1);
+  });
+
+  it("carries the next ref number to the next page, so a new document never reissues old refs", async () => {
+    const fixture = browserFixture();
+    const api = apiFixture();
+    const provider = new BrowserbaseSandboxProvider(
+      { apiKey: "test-key", projectId: "project-1", timeoutSeconds: 300, region: "ap-southeast-1" },
+      api.client,
+      fixture.sdk,
+    );
+    const computer = await provider.provision(
+      { botId: "bot-1", homePath: "/unused" },
+      adapterContext(),
+    );
+    await provider.prepare(computer, adapterContext());
+    fixture.evaluate.mockResolvedValue({ url: "https://example.com/", title: "x", elements: [] });
+    fixture.evaluate.mockResolvedValueOnce({
+      url: "https://example.com/",
+      title: "x",
+      elements: [],
+      nextRef: 58,
+    });
+
+    await provider.pageBrowser!(computer, { command: "snapshot" }, adapterContext());
+    await provider.pageBrowser!(
+      computer,
+      { command: "navigate", url: "https://example.com/next" },
+      adapterContext(),
+    );
+
+    const lastScript = (fixture.evaluate.mock.calls.at(-1) as unknown[] | undefined)?.[0];
+    expect(String(lastScript)).toMatch(/\}\)\(58\)$/);
+  });
+
   it("hands the screen back rather than acting under the user, and refuses private targets", async () => {
     const fixture = browserFixture();
     const api = apiFixture();
@@ -818,6 +895,8 @@ function browserFixture() {
   const clickRef = vi.fn(async () => undefined);
   const fillRef = vi.fn(async () => undefined);
   const locatorFor = vi.fn();
+  /** How many elements a selector matches; one, unless a test says the page changed. */
+  const countFor = vi.fn(async (_selector?: string) => 1);
   const screenshot = vi.fn(async () => Buffer.from([1, 2, 3]));
   const page = {
     isClosed: vi.fn(() => false),
@@ -834,6 +913,7 @@ function browserFixture() {
       locatorFor(selector);
       return {
         ariaSnapshot: vi.fn(async () => '- heading "Example"'),
+        count: () => countFor(selector),
         click: clickRef,
         fill: fillRef,
         first: vi.fn(() => ({
@@ -878,6 +958,7 @@ function browserFixture() {
     fillRef,
     browserClose,
     locatorFor,
+    countFor,
     fillField,
     pressField,
     goTo: (url: string) => {
