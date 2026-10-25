@@ -109,6 +109,7 @@ import {
   nextCronDateAcrossStrict,
   resolveWeeklyCreditKrw,
   USER_ROUTINE_KIND,
+  validateRoutineFrequency,
 } from "@rakazo/core";
 import {
   appendEventInTransaction,
@@ -2240,6 +2241,12 @@ export function createRouter(deps: RouterDeps) {
             message: "One-shot schedules must be created from chat.",
           });
         }
+        // Checked before the schedule is stored, not before it is armed: an inactive
+        // routine saved at six wakes a day only has to be switched on to start spending.
+        const tooFrequent = validateRoutineFrequency(input.crons, input.timezone);
+        if (tooFrequent) {
+          throw new ORPCError("BAD_REQUEST", { message: tooFrequent });
+        }
         const bot = await repos.getBot(context.actor, input.botId);
         // Validate every recurring cron even when inactive; @once and webhook-only have no next date.
         let nextRunAt: Date | null = null;
@@ -2302,6 +2309,12 @@ export function createRouter(deps: RouterDeps) {
           throw new ORPCError("BAD_REQUEST", {
             message: "A one-time schedule can't be combined with other schedules.",
           });
+        }
+        // The effective schedule, not just a changed one: a routine already holding a
+        // too-frequent cron must not be re-armed by a rename or a toggle.
+        const tooFrequent = validateRoutineFrequency(crons, timezone);
+        if (tooFrequent) {
+          throw new ORPCError("BAD_REQUEST", { message: tooFrequent });
         }
         if (active && isOneShotRoutineCrons(crons)) {
           if (!isOneShotRoutineCrons(existing.crons)) {

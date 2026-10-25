@@ -325,3 +325,74 @@ function localSchedule(iso: string, timezone: string) {
     minute: Number(value("minute")),
   };
 }
+
+test("the panel will not take a routine that wakes more than twice a day", async ({
+  page,
+}, testInfo) => {
+  // Two stock-watchers on a four-hourly cron spent one teacher's whole weekly credit in six
+  // days and then locked her out, having sent her not one message. This is the schedule
+  // that did it, refused at the surface she would have typed it into.
+  const stamp = Date.now();
+  await signup(page, `routine-cadence-${stamp}@rakazo.test`, "password12", "Routine Cadence");
+  await completeOnboarding(page);
+  const botId = activeBotId(page);
+
+  await page.getByTitle("Agent computer").click();
+  await page.getByRole("button", { name: "Create Routine" }).click();
+  await page.locator("label:has-text('Name') input").fill("재고 확인");
+  await page.locator("label:has-text('Instruction') textarea").fill("재고가 있으면 알려줘");
+
+  // The hourly preset is not on the menu any more: an option the server refuses is not one.
+  await page.getByRole("button", { name: "Add trigger" }).click();
+  await page.getByRole("menuitem", { name: "On a schedule" }).hover();
+  await expect(page.getByRole("menuitem", { name: "Every day", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Every hour", exact: true })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Advanced...", exact: true }).click();
+
+  await page.getByLabel("Cron expression").fill("0 */4 * * *");
+  // The count is on screen before Save is ever pressed, which is the whole point: nothing
+  // in this panel used to say what a schedule would cost.
+  await expect(page.getByText("하루 6번 실행됩니다")).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+
+  await expect(page.getByRole("alert")).toContainText("하루 2번까지만");
+  expect(await rpc<Routine[]>(page, "routines/list", { botId })).toEqual([]);
+  await captureScreenshot(page, testInfo, "routine-cadence-refused");
+
+  // Twice a day saves, and says so.
+  await page.getByLabel("Cron expression").fill("0 9,21 * * *");
+  await expect(page.getByText("하루 2번 실행됩니다")).toBeVisible();
+  await saveAndReturn(page, "routines/create");
+  const saved = await rpc<Routine[]>(page, "routines/list", { botId });
+  expect(saved).toHaveLength(1);
+  expect(saved[0]?.crons).toEqual(["0 9,21 * * *"]);
+});
+
+test("two daily schedules are fine, three are not", async ({ page }) => {
+  // The ceiling is on the routine, not on one schedule block. Each "every day" row looks
+  // innocent on its own, so the editor counts them together and so does the server.
+  const stamp = Date.now();
+  await signup(page, `routine-sum-${stamp}@rakazo.test`, "password12", "Routine Sum");
+  await completeOnboarding(page);
+  const botId = activeBotId(page);
+
+  await page.getByTitle("Agent computer").click();
+  await page.getByRole("button", { name: "Create Routine" }).click();
+  await page.locator("label:has-text('Name') input").fill("세 번 깨우기");
+  await page.locator("label:has-text('Instruction') textarea").fill("확인해줘");
+
+  await addScheduleTrigger(page, "Every day");
+  await expect(page.getByText("하루 1번 실행됩니다")).toBeVisible();
+
+  // A second row at a different hour: still inside the ceiling.
+  await addScheduleTrigger(page, "Every day");
+  await page.getByLabel("Time of day").nth(1).selectOption("9:00 PM");
+  await expect(page.getByText("하루 2번 실행됩니다")).toBeVisible();
+
+  await addScheduleTrigger(page, "Every day");
+  await page.getByLabel("Time of day").nth(2).selectOption("3:00 PM");
+  await expect(page.getByText("하루 3번 실행됩니다")).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("하루 2번까지만");
+  expect(await rpc<Routine[]>(page, "routines/list", { botId })).toEqual([]);
+});

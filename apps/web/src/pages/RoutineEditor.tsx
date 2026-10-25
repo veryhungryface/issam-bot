@@ -8,7 +8,9 @@ import {
   defaultCronPreset,
   formatCron,
   isOneShotRoutineCrons,
+  MAX_ROUTINE_RUNS_PER_DAY,
   presetFromCron,
+  routineFrequency,
 } from "@rakazo/core";
 import {
   Button,
@@ -42,8 +44,9 @@ export function routineNeedsOneShotArm(
   return isOneShotRoutineCrons(crons) && !routine.nextRunAt && !routine.lastRunAt;
 }
 
+// "Every hour" is gone: 24 wakes a day cannot be saved, and an option the server refuses
+// is not an option. RoutineSchedule's own list drops it for the same reason.
 const SCHEDULE_PRESETS: CronFreq[] = [
-  "Every hour",
   "Every day",
   "Weekdays",
   "Every week",
@@ -202,6 +205,14 @@ export function RoutineEditor({
   const { t } = useLingui();
   const fieldId = useId();
   const hasTriggers = draft.schedules.length > 0 || draft.webhookEnabled;
+  // Counted in the routine's own timezone, the one shown beside "When to run", so the day
+  // the reader is told about is the day the server will count.
+  const wakes = (() => {
+    if (draft.schedules.length === 0) return null;
+    const { perDay, truncated } = routineFrequency(draft.schedules.map(cronFromPreset), timezone);
+    if (perDay === 0) return null;
+    return { perDay, truncated, over: perDay > MAX_ROUTINE_RUNS_PER_DAY };
+  })();
   const canTest = Boolean(editing) && !saving && !running;
   const needsOneShotArm =
     editing != null && routineNeedsOneShotArm(editing, draft.schedules.map(cronFromPreset));
@@ -305,6 +316,19 @@ export function RoutineEditor({
           <Trans>When to run</Trans>
           <span className="text-xs text-muted-foreground/70">{timezone}</span>
         </div>
+        {/* Counted across every schedule on the routine, because the ceiling is too: three
+            blocks of "every day" is three wakes a day, and each block on its own looks
+            innocent. Plain Korean, the way CreditMeter writes it — not a lingui id, so it
+            neither enters the catalog nor leaks a Korean msgid into the other locales. */}
+        {wakes ? (
+          <p
+            className={`mt-1.5 text-[12.5px] ${wakes.over ? "text-destructive" : "text-muted-foreground/80"}`}
+          >
+            {wakes.over
+              ? `${wakes.truncated ? "하루에 수없이" : `하루 ${wakes.perDay}번`} 실행됩니다. 하루 ${MAX_ROUTINE_RUNS_PER_DAY}번까지만 저장할 수 있어요.`
+              : `하루 ${wakes.perDay}번 실행됩니다. 실행될 때마다 사용량이 듭니다.`}
+          </p>
+        ) : null}
 
         <div className="mt-2 space-y-2">
           {draft.schedules.map((preset, index) => (
