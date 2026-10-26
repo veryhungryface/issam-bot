@@ -133,3 +133,92 @@ export function formatBrowserJobReport(input: {
 export function formatBrowserJobHandoff(deviceName: string): string {
   return `${deviceName}에 작업을 보냈습니다. 끝나면 결과가 이 대화에 올라옵니다.`;
 }
+
+/**
+ * The pairing code.
+ *
+ * A teacher pairing a browser needs three things to reach this server: where it is, which
+ * device row they minted, and the token. Three fields typed into an extension by hand is
+ * three chances to mistype one and read "연결 실패" with no idea which. So they travel as a
+ * single string, long and ugly and copied in one click.
+ *
+ * Not encryption, and not meant to be: the token is in here in the clear. It is a carrier,
+ * so treat the whole string exactly as carefully as the token inside it.
+ */
+export const BROWSER_DEVICE_PAIRING_PREFIX = "issam1.";
+
+export type BrowserDevicePairing = {
+  /** Origin of this deployment, no trailing slash — the extension appends `/api/v1/...`. */
+  apiBase: string;
+  deviceId: string;
+  token: string;
+};
+
+function base64url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromBase64url(text: string): Uint8Array | null {
+  if (!/^[A-Za-z0-9_-]+$/.test(text)) return null;
+  const padded = text.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    const binary = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * An http(s) origin a device may be pointed at, or `null`.
+ *
+ * Plain http only for a local development host. The token rides in the Authorization header
+ * of every poll, so http to anywhere else hands it to whoever is on the school's network.
+ */
+export function normalizeBrowserDeviceApiBase(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (url.username || url.password || url.search || url.hash) return null;
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
+  if (url.pathname !== "/") return null;
+  return url.origin;
+}
+
+export function encodeBrowserDevicePairing(input: BrowserDevicePairing): string {
+  const apiBase = normalizeBrowserDeviceApiBase(input.apiBase);
+  if (!apiBase) throw new Error("API base must be an https origin");
+  if (!input.deviceId || !input.token) throw new Error("deviceId and token are required");
+  const json = JSON.stringify({ a: apiBase, d: input.deviceId, t: input.token });
+  return BROWSER_DEVICE_PAIRING_PREFIX + base64url(new TextEncoder().encode(json));
+}
+
+/** The pairing back out of a pasted string, or `null` for anything that is not one. */
+export function decodeBrowserDevicePairing(value: unknown): BrowserDevicePairing | null {
+  if (typeof value !== "string") return null;
+  // Pasted out of a chat message or a sticky note, so tolerate stray whitespace.
+  const code = value.trim().replace(/\s+/g, "");
+  if (!code.startsWith(BROWSER_DEVICE_PAIRING_PREFIX)) return null;
+  const bytes = fromBase64url(code.slice(BROWSER_DEVICE_PAIRING_PREFIX.length));
+  if (!bytes) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const { a, d, t } = parsed as Record<string, unknown>;
+  const apiBase = normalizeBrowserDeviceApiBase(a);
+  if (!apiBase || typeof d !== "string" || !d || typeof t !== "string" || !t) return null;
+  return { apiBase, deviceId: d, token: t };
+}

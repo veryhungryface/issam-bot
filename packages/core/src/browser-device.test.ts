@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   BROWSER_DEVICE_ONLINE_WINDOW_MS,
+  BROWSER_DEVICE_PAIRING_PREFIX,
   BROWSER_JOB_CLAIM_TIMEOUT_MS,
   BROWSER_JOB_PROMPT_MAX,
   BROWSER_JOB_QUEUE_TIMEOUT_MS,
   browserJobHasExpired,
+  decodeBrowserDevicePairing,
+  encodeBrowserDevicePairing,
   formatBrowserJobHandoff,
   formatBrowserJobReport,
   isBrowserDeviceOnline,
   isBrowserJobReportableStatus,
+  normalizeBrowserDeviceApiBase,
   normalizeBrowserDeviceName,
   normalizeBrowserJobPrompt,
   normalizeBrowserJobResult,
@@ -128,5 +132,65 @@ describe("what the teacher is told", () => {
     });
     expect(failed).toContain("실패");
     expect(failed).toContain("로그인 화면에서 막혔어요.");
+  });
+});
+
+describe("the pairing code", () => {
+  const pairing = {
+    apiBase: "https://issam-bot.vercel.app",
+    deviceId: "dev_abc123",
+    token: "tok-0123456789abcdef",
+  };
+
+  it("survives the trip through a teacher's clipboard", () => {
+    const code = encodeBrowserDevicePairing(pairing);
+    expect(code.startsWith(BROWSER_DEVICE_PAIRING_PREFIX)).toBe(true);
+    expect(decodeBrowserDevicePairing(code)).toEqual(pairing);
+    // Pasted out of a chat message, it arrives wrapped, spaced, or with a newline in it.
+    expect(decodeBrowserDevicePairing(`  ${code.slice(0, 12)} ${code.slice(12)}\n`)).toEqual(
+      pairing,
+    );
+  });
+
+  it("refuses anything that is not one of ours rather than half-reading it", () => {
+    for (const bad of [
+      "",
+      "   ",
+      "issam1.",
+      "issam1.not!base64",
+      // Valid base64url of valid JSON that is simply not a pairing.
+      `${BROWSER_DEVICE_PAIRING_PREFIX}eyJ4IjoxfQ`,
+      "https://issam-bot.vercel.app",
+      undefined,
+      42,
+    ]) {
+      expect(decodeBrowserDevicePairing(bad)).toBeNull();
+    }
+  });
+
+  it("will not carry a token to a host that cannot keep it secret", () => {
+    // The token is in the Authorization header of every poll. Plain http to anything but a
+    // development host hands it to whoever is on the school's network.
+    expect(normalizeBrowserDeviceApiBase("http://school.example.com")).toBeNull();
+    expect(normalizeBrowserDeviceApiBase("http://localhost:5173")).toBe("http://localhost:5173");
+    expect(normalizeBrowserDeviceApiBase("https://issam-bot.vercel.app/")).toBe(
+      "https://issam-bot.vercel.app",
+    );
+    // Credentials, a query or a path would all end up spliced into every request URL.
+    expect(normalizeBrowserDeviceApiBase("https://user:pw@issam-bot.vercel.app")).toBeNull();
+    expect(normalizeBrowserDeviceApiBase("https://issam-bot.vercel.app/?token=x")).toBeNull();
+    expect(normalizeBrowserDeviceApiBase("https://issam-bot.vercel.app/api")).toBeNull();
+    expect(() => encodeBrowserDevicePairing({ ...pairing, apiBase: "ftp://x.test" })).toThrow();
+  });
+
+  it("does not decode a code whose token was emptied", () => {
+    expect(
+      decodeBrowserDevicePairing(
+        `${BROWSER_DEVICE_PAIRING_PREFIX}${btoa('{"a":"https://a.test","d":"d","t":""}')
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "")}`,
+      ),
+    ).toBeNull();
   });
 });
