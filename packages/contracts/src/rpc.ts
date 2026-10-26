@@ -14,6 +14,8 @@ import {
   BotMcpServerSchema,
   BotSchema,
   BotSectionSchema,
+  BrowserDevicePairedSchema,
+  BrowserDeviceSchema,
   CapabilityInstallSchema,
   ComputerModeSchema,
   ComputerReleaseReasonSchema,
@@ -437,6 +439,13 @@ export const appContract = {
         }),
       )
       .output(z.object({ runId: Id })),
+  },
+  browserDevices: {
+    list: oc.input(z.object({})).output(z.array(BrowserDeviceSchema)),
+    /** Mint a device and its token. The token is returned once and never again. */
+    pair: oc.input(z.object({ name: z.string().min(1).max(60) })).output(BrowserDevicePairedSchema),
+    /** Unpair. The row stays so finished tasks keep the name of the machine that ran them. */
+    revoke: oc.input(z.object({ deviceId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   scratchpad: {
     list: oc

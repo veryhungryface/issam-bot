@@ -76,6 +76,7 @@ import { requestLogging } from "@rakazo/logging/hono";
 import { MarkdownMemoryStore } from "@rakazo/memory";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { mountBrowserDeviceHttpRoutes } from "./browser-device.js";
 import { type AppEnv, loadEnv } from "./env.js";
 import { healthRoutes } from "./health.js";
 import { createMessagingInboundHandler } from "./messaging-inbound.js";
@@ -484,6 +485,7 @@ export async function createApp(
     return actor;
   });
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
+  mountBrowserDeviceHttpRoutes(app, { prisma, secrets, events, jobs });
   // Messaging webhooks only exist when the surface is enabled.
   if (messaging) {
     const inbound = createMessagingInboundHandler({

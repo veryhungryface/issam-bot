@@ -712,6 +712,33 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "my_browser_list",
+    description:
+      "List the teacher's own Chrome browsers that are paired with this deployment, and whether each one is awake right now. Call this before my_browser_task when you do not know which machines exist.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "my_browser_task",
+    description:
+      "Hand one whole task to the teacher's OWN Chrome through their browser extension, and save what it produces into the folder they chose on that machine. Use this only when the work needs the teacher's own signed-in sessions (school systems they are logged into) or must leave a file on their PC. For anything on the open web, use the computer browser instead — it is faster and does not touch their accounts. Write the instruction as one complete task in the teacher's language, not a single click: the extension runs it end to end and reports back. The task does not run instantly; the extension asks the teacher to approve it first, and the result arrives in this chat as a separate message, so do not wait for it or promise a time.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description:
+            "The whole task, in the teacher's language: what to open, what to do, and what to save into their folder.",
+        },
+        deviceId: {
+          type: "string",
+          description:
+            "Which paired browser, from my_browser_list. Required only when more than one is awake.",
+        },
+      },
+      required: ["prompt"],
+    },
+  },
+  {
     name: "skill_read",
     description:
       "Load a Claude Agent Skill (SKILL.md recipe) by exact name. Call this when a catalog skill matches the user's request, then follow it immediately.",

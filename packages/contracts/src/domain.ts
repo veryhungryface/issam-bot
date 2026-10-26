@@ -311,6 +311,28 @@ export const CreateRoutineInput = z
     }
   });
 
+/**
+ * A teacher's own Chrome, paired through the browser extension.
+ *
+ * `online` is derived from the last poll rather than stored: the extension cannot be asked
+ * whether it is there, so "recently heard from" is the only honest answer available.
+ */
+export const BrowserDeviceSchema = z.object({
+  id: Id,
+  name: z.string(),
+  online: z.boolean(),
+  lastSeenAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type BrowserDevice = z.infer<typeof BrowserDeviceSchema>;
+
+/** The pairing answer. The token is in it once, here, and is never readable again. */
+export const BrowserDevicePairedSchema = z.object({
+  device: BrowserDeviceSchema,
+  /** Shown to the teacher to paste into the extension. Stored only as ciphertext. */
+  token: z.string(),
+});
+
 export const ScratchpadItemStatusSchema = z.enum(["open", "parked", "done"]);
 export type ScratchpadItemStatus = z.infer<typeof ScratchpadItemStatusSchema>;
 
