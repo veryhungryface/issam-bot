@@ -13,6 +13,9 @@ export default defineConfig({
       "apps/mobile/lib/**/*.test.ts",
       "apps/api/src/**/*.test.ts",
       "apps/www/src/**/*.test.ts",
+      // The browser-extension bridge ships as plain ESM (it is dropped into a built
+      // extension, so there is no build step to run it through).
+      "extensions/*/src/**/*.test.ts",
     ],
     testTimeout: 30_000,
     hookTimeout: 60_000,
