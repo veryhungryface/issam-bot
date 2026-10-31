@@ -21,6 +21,7 @@ import {
 } from "react";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
 import { SuccessPop } from "../components/ai/primitives";
+import { BrowserDeviceSettings } from "../components/BrowserDeviceSettings";
 import {
   ComputersUnavailableHint,
   computersAreUnavailable,
@@ -190,6 +191,8 @@ export function AccountSettingsOverlay({
             </Button>
           </section>
         ) : null}
+
+        <BrowserDeviceSettings />
 
         <section className="mt-5 rounded-xl border border-border px-4 py-4">
           <h3 className="text-[15px] font-medium text-foreground">

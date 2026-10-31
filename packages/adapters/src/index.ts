@@ -7,6 +7,7 @@ export * from "./bot-messages.js";
 export * from "./bot-secrets.js";
 export * from "./box-emulator.js";
 export * from "./box-sandbox.js";
+export * from "./browser-device-tools.js";
 export * from "./browser-emulator.js";
 export * from "./browser-provider-factory.js";
 export * from "./browser-tools.js";

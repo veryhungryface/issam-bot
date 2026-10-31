@@ -214,7 +214,10 @@ export interface SendUserMessageInput {
   userId: string;
   blocks: MessageBlock[];
   prompt: string;
-  trigger: "user" | "follow_up" | "webhook" | "messaging";
+  // `browser_device` is a task the teacher's own Chrome finished and reported back. It is
+  // its own value rather than a reuse of `webhook` so the runs table says what happened:
+  // a row that lies about its origin costs somebody an investigation later.
+  trigger: "user" | "follow_up" | "webhook" | "messaging" | "browser_device";
   clientNonce?: string;
   linkMessageToRun?: boolean;
 }

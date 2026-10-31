@@ -160,6 +160,7 @@ import {
   requestWithBotSecret,
   sameSecretDestination,
 } from "./bot-secrets.js";
+import { createBrowserJobFromTool, listBrowserDevicesFromTool } from "./browser-device-tools.js";
 import { createBrowserProvider } from "./browser-provider-factory.js";
 import {
   browserActFromTool,
@@ -3054,6 +3055,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
               name: args.name ? String(args.name) : undefined,
             });
             return finish(cancelled);
+          }
+          if (name === "my_browser_list") {
+            return listBrowserDevicesFromTool(deps, {
+              spaceId: run.spaceId,
+              userId: run.userId,
+            });
+          }
+          if (name === "my_browser_task") {
+            const handed = await createBrowserJobFromTool(deps, {
+              spaceId: run.spaceId,
+              userId: run.userId,
+              botId: bot.id,
+              threadId: thread.id,
+              prompt: args.prompt,
+              deviceId: args.deviceId ? String(args.deviceId) : undefined,
+            });
+            return finish(handed);
           }
           if (name === "skill_read") {
             return skillReadFromTool(

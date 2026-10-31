@@ -97,6 +97,7 @@ import {
 import {
   ACTIVE_RUN_STATUSES,
   AttachmentValidationError,
+  BROWSER_DEVICE_SECRET_KIND,
   CHECK_IN_ROUTINE_KIND,
   containsSecret,
   costBreakdownKrw,
@@ -104,9 +105,11 @@ import {
   creditWeek,
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
+  isBrowserDeviceOnline,
   isMessagingEmail,
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
+  normalizeBrowserDeviceName,
   resolveWeeklyCreditKrw,
   USER_ROUTINE_KIND,
   validateRoutineFrequency,
@@ -2489,6 +2492,101 @@ export function createRouter(deps: RouterDeps) {
           getLogger().error("routine testRun enqueue", error);
         });
         return { runId: run.id };
+      }),
+    },
+    browserDevices: {
+      list: authed.browserDevices.list.handler(async ({ context }) => {
+        const now = new Date();
+        const devices = await deps.prisma.browserDevice.findMany({
+          // A device is one person's own machine. Space scoping alone would let a colleague
+          // see, and later drive, a browser signed in as somebody else.
+          where: { spaceId: context.actor.spaceId, userId: context.actor.userId, revokedAt: null },
+          orderBy: { createdAt: "asc" },
+        });
+        return devices.map((device) => ({
+          id: device.id,
+          name: device.name,
+          online: isBrowserDeviceOnline(device.lastSeenAt, now),
+          lastSeenAt: device.lastSeenAt?.toISOString() ?? null,
+          createdAt: device.createdAt.toISOString(),
+        }));
+      }),
+      pair: authed.browserDevices.pair.handler(async ({ context, input }) => {
+        const name = normalizeBrowserDeviceName(input.name);
+        if (!name) throw new ORPCError("BAD_REQUEST", { message: "Name is required" });
+        const plaintext = randomBytes(32).toString("base64url");
+        const stored = await deps.secrets.put(plaintext, {
+          operationId: "browserDevices.pair",
+          traceId: "browserDevices.pair",
+          spaceId: context.actor.spaceId,
+          userId: context.actor.userId,
+          signal: context.signal ?? new AbortController().signal,
+        });
+        // One transaction: a device row whose secret never landed would answer 401 forever
+        // and look like a pairing the teacher simply got wrong.
+        const device = await deps.prisma.$transaction(async (tx) => {
+          await tx.secret.create({
+            data: {
+              id: stored.id,
+              userId: context.actor.userId,
+              spaceId: context.actor.spaceId,
+              kind: BROWSER_DEVICE_SECRET_KIND,
+              ciphertext: stored.ciphertext,
+            },
+          });
+          return tx.browserDevice.create({
+            data: {
+              spaceId: context.actor.spaceId,
+              userId: context.actor.userId,
+              name,
+              secretId: stored.id,
+            },
+          });
+        });
+        return {
+          device: {
+            id: device.id,
+            name: device.name,
+            online: false,
+            lastSeenAt: null,
+            createdAt: device.createdAt.toISOString(),
+          },
+          // The only time this string exists outside the ciphertext.
+          token: plaintext,
+        };
+      }),
+      revoke: authed.browserDevices.revoke.handler(async ({ context, input }) => {
+        const device = await deps.prisma.browserDevice.findFirst({
+          where: {
+            id: input.deviceId,
+            spaceId: context.actor.spaceId,
+            userId: context.actor.userId,
+            revokedAt: null,
+          },
+          select: { id: true, secretId: true },
+        });
+        if (!device) throw new IsolationError();
+        const updated = await deps.prisma.browserDevice.updateMany({
+          where: { id: device.id, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        if (updated.count === 0) throw new IsolationError();
+        // Destroy the token, not just the permission to use it. Unpairing is what a teacher
+        // does when a laptop is lost, and a secret left at rest is a secret that can leak.
+        await deps.prisma.secret.deleteMany({
+          where: {
+            id: device.secretId,
+            spaceId: context.actor.spaceId,
+            userId: context.actor.userId,
+            kind: BROWSER_DEVICE_SECRET_KIND,
+          },
+        });
+        // Work already handed over stops being claimable the moment the token dies.
+        await deps.prisma.browserJob.updateMany({
+          where: { deviceId: input.deviceId, status: { in: ["queued", "claimed"] } },
+          data: { status: "expired", finishedAt: new Date() },
+        });
+        return { ok: true as const };
       }),
     },
     scratchpad: {

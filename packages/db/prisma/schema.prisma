@@ -31,6 +31,8 @@ model User {
   actionAutoReviewPreferences ActionAutoReviewPreference[]
   createdSpaces               Space[]                      @relation("SpaceCreator")
   botSecrets BotSecret[]
+  browserDevices              BrowserDevice[]
+  browserJobs                 BrowserJob[]
 
   @@unique([email])
   @@map("user")
@@ -197,6 +199,8 @@ model Space {
   secrets                     Secret[]
   chatGroups                  ChatGroup[]
   botSecrets BotSecret[]
+  browserDevices              BrowserDevice[]
+  browserJobs                 BrowserJob[]
 
   @@unique([id, organizationId])
   @@index([organizationId, createdAt])
@@ -1032,6 +1036,67 @@ model Secret {
 
   @@index([userId, spaceId])
   @@map("secrets")
+}
+
+/// A teacher's own Chrome, reachable through the browser extension they installed.
+///
+/// The deployment's own browser is a remote Browserbase session with nothing logged in.
+/// This is the opposite: the teacher's real browser, already signed in to the school
+/// systems. That is the whole point of it and also the whole risk, so a device is owned by
+/// exactly one user in one space, it holds no standing permission beyond that, and the
+/// extension asks its owner before it runs anything.
+model BrowserDevice {
+  id         String       @id @default(cuid())
+  spaceId    String
+  space      Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// What the teacher calls this machine, e.g. "교무실 노트북".
+  name       String
+  /// The paired token, encrypted at rest. Shown to the teacher once, at pairing.
+  secretId   String       @unique
+  /// Last time the extension polled. Absent until it first calls home.
+  lastSeenAt DateTime?
+  /// Set when the teacher unpairs. The row stays so finished jobs keep their device.
+  revokedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  jobs       BrowserJob[]
+
+  @@index([spaceId, userId])
+  @@map("browser_devices")
+}
+
+/// One task handed to a teacher's own browser, and what came back.
+///
+/// Whole tasks, not browser steps: the extension polls every few seconds, so a per-click
+/// round trip would take minutes to do what one instruction does in one pass. The bot
+/// writes an instruction, the extension's own agent carries it out and saves what it
+/// produced into the folder the teacher picked, and the result comes back here.
+model BrowserJob {
+  id         String        @id @default(cuid())
+  spaceId    String
+  space      Space         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  deviceId   String
+  device     BrowserDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  botId      String
+  threadId   String
+  /// The instruction, in the teacher's language, as the bot wrote it.
+  prompt     String
+  /// queued | claimed | done | error | expired
+  status     String        @default("queued")
+  /// What the extension reported: a summary, and what it saved where.
+  result     String?
+  claimedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([deviceId, status, createdAt])
+  @@index([spaceId, createdAt])
+  @@map("browser_jobs")
 }
 
 model McpServer {
