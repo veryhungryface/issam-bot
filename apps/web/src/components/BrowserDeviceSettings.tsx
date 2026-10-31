@@ -206,8 +206,10 @@ export function BrowserDeviceSettings() {
           크롬 연결
         </Button>
       </div>
-      <p className="mt-2 text-[12.5px] text-muted-foreground/80">
-        여러 대를 연결할 수 있습니다. 봇은 켜져 있는 크롬에만 작업을 보냅니다.
+      <p className="mt-2 text-[12.5px] leading-[1.5] text-muted-foreground/80">
+        여러 대를 연결할 수 있습니다. 봇은 켜져 있는 크롬에만 작업을 보냅니다. 확장 프로그램에서
+        QR을 띄워 휴대폰으로 찍는 쪽이 더 간단합니다 — 위의 코드는 QR을 쓸 수 없을 때를 위한
+        방법입니다.
       </p>
       {error ? (
         <p role="alert" className="mt-3 text-[12.5px] text-destructive">

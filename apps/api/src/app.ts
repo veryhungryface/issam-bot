@@ -77,6 +77,7 @@ import { MarkdownMemoryStore } from "@rakazo/memory";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mountBrowserDeviceHttpRoutes } from "./browser-device.js";
+import { mountBrowserPairHttpRoutes } from "./browser-pair.js";
 import { type AppEnv, loadEnv } from "./env.js";
 import { healthRoutes } from "./health.js";
 import { createMessagingInboundHandler } from "./messaging-inbound.js";
@@ -486,6 +487,8 @@ export async function createApp(
   });
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
   mountBrowserDeviceHttpRoutes(app, { prisma, secrets, events, jobs });
+  // Open routes, because a browser that has never paired has nothing to authenticate with.
+  mountBrowserPairHttpRoutes(app, { prisma, secrets, webOrigin: env.webOrigin });
   // Messaging webhooks only exist when the surface is enabled.
   if (messaging) {
     const inbound = createMessagingInboundHandler({

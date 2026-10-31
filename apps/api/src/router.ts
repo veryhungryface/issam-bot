@@ -144,6 +144,11 @@ import {
 import { getLogger } from "@rakazo/logging";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
+import {
+  claimBrowserPairSession,
+  describeBrowserPairSession,
+  mintBrowserDevice,
+} from "./browser-pair.js";
 import { provisionComputerForBoot } from "./computer-boot.js";
 import {
   executionBlocksUserTakeover,
@@ -2514,47 +2519,60 @@ export function createRouter(deps: RouterDeps) {
       pair: authed.browserDevices.pair.handler(async ({ context, input }) => {
         const name = normalizeBrowserDeviceName(input.name);
         if (!name) throw new ORPCError("BAD_REQUEST", { message: "Name is required" });
-        const plaintext = randomBytes(32).toString("base64url");
-        const stored = await deps.secrets.put(plaintext, {
-          operationId: "browserDevices.pair",
-          traceId: "browserDevices.pair",
+        const minted = await mintBrowserDevice(deps, {
           spaceId: context.actor.spaceId,
           userId: context.actor.userId,
-          signal: context.signal ?? new AbortController().signal,
-        });
-        // One transaction: a device row whose secret never landed would answer 401 forever
-        // and look like a pairing the teacher simply got wrong.
-        const device = await deps.prisma.$transaction(async (tx) => {
-          await tx.secret.create({
-            data: {
-              id: stored.id,
-              userId: context.actor.userId,
-              spaceId: context.actor.spaceId,
-              kind: BROWSER_DEVICE_SECRET_KIND,
-              ciphertext: stored.ciphertext,
-            },
-          });
-          return tx.browserDevice.create({
-            data: {
-              spaceId: context.actor.spaceId,
-              userId: context.actor.userId,
-              name,
-              secretId: stored.id,
-            },
-          });
+          name,
+          signal: context.signal,
         });
         return {
           device: {
-            id: device.id,
-            name: device.name,
+            id: minted.device.id,
+            name: minted.device.name,
             online: false,
             lastSeenAt: null,
-            createdAt: device.createdAt.toISOString(),
+            createdAt: minted.device.createdAt.toISOString(),
           },
           // The only time this string exists outside the ciphertext.
-          token: plaintext,
+          token: minted.token,
         };
       }),
+      describePairSession: authed.browserDevices.describePairSession.handler(async ({ input }) =>
+        describeBrowserPairSession(deps, { sessionId: input.sessionId }),
+      ),
+      claimPairSession: authed.browserDevices.claimPairSession.handler(
+        async ({ context, input }) => {
+          const claimed = await claimBrowserPairSession(
+            { ...deps, webOrigin: deps.env.webOrigin },
+            {
+              sessionId: input.sessionId,
+              name: input.name,
+              spaceId: context.actor.spaceId,
+              userId: context.actor.userId,
+              signal: context.signal,
+            },
+          );
+          if (!claimed.ok) {
+            throw new ORPCError("BAD_REQUEST", {
+              message:
+                claimed.reason === "name"
+                  ? "컴퓨터 이름을 입력해 주세요."
+                  : claimed.reason === "taken"
+                    ? "이 QR은 이미 다른 기기가 가져갔습니다. 컴퓨터에서 새 QR을 띄워 주세요."
+                    : "QR이 만료됐습니다. 컴퓨터에서 새 QR을 띄워 주세요.",
+            });
+          }
+          return {
+            device: {
+              id: claimed.deviceId,
+              name: claimed.deviceName,
+              online: false,
+              lastSeenAt: null,
+              createdAt: new Date().toISOString(),
+            },
+          };
+        },
+      ),
       revoke: authed.browserDevices.revoke.handler(async ({ context, input }) => {
         const device = await deps.prisma.browserDevice.findFirst({
           where: {
