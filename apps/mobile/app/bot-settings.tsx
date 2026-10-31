@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BotAvatar } from "../components/bot-avatar";
 import { ComputerModePicker } from "../components/computer-mode-picker";
+import { SavedLoginsSection } from "../components/SavedLoginsSection";
 import { type MobileBot, rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
@@ -178,6 +179,7 @@ export default function BotSettingsScreen() {
           ))}
         </ScrollView>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        <SavedLoginsSection botId={botId} />
         {error ? <Text style={{ color: tokens.destructive, marginTop: 16 }}>{error}</Text> : null}
         <Pressable
           onPress={() => void save()}
