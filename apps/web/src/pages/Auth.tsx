@@ -5,6 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { authClient } from "../lib/auth";
+import { safeReturnPath } from "../lib/return-to";
 import { clearSpaceSelection } from "../lib/rpc";
 
 type AuthMode = "in" | "up" | "forgot";
@@ -104,7 +105,11 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         return;
       }
       clearSpaceSelection();
-      navigate(mode === "up" ? "/onboarding" : "/app");
+      // A scanned QR sends a signed-out teacher through here on the way to `/pair/<id>`, and
+      // the pairing is the only reason they opened anything. Signing up still goes to
+      // onboarding: there is no space to pair a browser into yet.
+      const next = mode === "up" ? null : safeReturnPath(searchParams.get("next"));
+      navigate(next ?? (mode === "up" ? "/onboarding" : "/app"));
     } catch {
       setError(t`Could not reach the server`);
     } finally {

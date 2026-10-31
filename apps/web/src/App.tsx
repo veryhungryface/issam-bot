@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Button, Skeleton } from "@rakazo/ui-web";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
 import { authClient } from "./lib/auth";
 import { notifyNativeShellPainted } from "./lib/native-shell";
@@ -26,6 +26,9 @@ const OnboardingPage = lazy(() =>
 );
 const WelcomePage = lazy(() =>
   import("./pages/Welcome").then((module) => ({ default: module.WelcomePage })),
+);
+const BrowserPairPage = lazy(() =>
+  import("./pages/BrowserPair").then((module) => ({ default: module.BrowserPairPage })),
 );
 
 export function App() {
@@ -95,6 +98,15 @@ export function App() {
             path="/mcp/oauth/callback"
             element={user ? <McpOAuthCallbackPage /> : <Navigate to="/sign-in" replace />}
           />
+          {/*
+            Reached by pointing a phone camera at a QR on a computer, so a signed-out teacher
+            is the normal case rather than the edge one — sign-in has to come back here
+            instead of dropping them into the app with the pairing forgotten.
+          */}
+          <Route
+            path="/pair/:sessionId"
+            element={user ? <BrowserPairPage /> : <SignInThenReturn />}
+          />
           <Route path="/app" element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />} />
           <Route
             path="/app/g/:groupId"
@@ -108,6 +120,19 @@ export function App() {
       </Suspense>
     </div>
   );
+}
+
+/**
+ * Sign in, then come back here.
+ *
+ * Every other signed-out route in this app goes to `/sign-in` and forgets where it was,
+ * because a teacher who opens the app signed out wanted the app. A scanned QR is the
+ * exception: the destination is the whole reason the page was opened.
+ */
+function SignInThenReturn() {
+  const location = useLocation();
+  const target = `${location.pathname}${location.search}`;
+  return <Navigate to={`/sign-in?next=${encodeURIComponent(target)}`} replace />;
 }
 
 /**

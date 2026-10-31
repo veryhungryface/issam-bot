@@ -8,6 +8,7 @@ export * from "./avatar-shape.js";
 export * from "./bot-messages.js";
 export * from "./bot-sections.js";
 export * from "./browser-device.js";
+export * from "./browser-pair.js";
 export * from "./check-in.js";
 export * from "./cloud-agent.js";
 export * from "./compose-update.js";

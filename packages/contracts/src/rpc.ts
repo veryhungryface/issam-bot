@@ -446,6 +446,31 @@ export const appContract = {
     pair: oc.input(z.object({ name: z.string().min(1).max(60) })).output(BrowserDevicePairedSchema),
     /** Unpair. The row stays so finished tasks keep the name of the machine that ran them. */
     revoke: oc.input(z.object({ deviceId: Id })).output(z.object({ ok: z.literal(true) })),
+    /**
+     * What a scanned QR is offering, before anything is minted.
+     *
+     * The id comes out of a QR on a computer's screen, so it is not secret and this answers
+     * for any signed-in teacher. There is nothing in it to protect: a label they typed on
+     * their own computer, and whether the code is still good.
+     */
+    describePairSession: oc.input(z.object({ sessionId: z.string().min(1).max(64) })).output(
+      z.object({
+        status: z.enum(["pending", "claimed", "used", "expired"]),
+        label: z.string().nullable(),
+      }),
+    ),
+    /**
+     * Take a scanned QR: mint the device and leave the token where only that computer can
+     * reach it. The computer still has to accept, so this is an offer, not a pairing.
+     */
+    claimPairSession: oc
+      .input(
+        z.object({
+          sessionId: z.string().min(1).max(64),
+          name: z.string().min(1).max(60),
+        }),
+      )
+      .output(z.object({ device: BrowserDeviceSchema })),
   },
   scratchpad: {
     list: oc

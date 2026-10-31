@@ -33,6 +33,7 @@ model User {
   botSecrets BotSecret[]
   browserDevices              BrowserDevice[]
   browserJobs                 BrowserJob[]
+  browserPairSessions         BrowserPairSession[]
 
   @@unique([email])
   @@map("user")
@@ -201,6 +202,7 @@ model Space {
   botSecrets BotSecret[]
   browserDevices              BrowserDevice[]
   browserJobs                 BrowserJob[]
+  browserPairSessions         BrowserPairSession[]
 
   @@unique([id, organizationId])
   @@index([organizationId, createdAt])
@@ -1062,9 +1064,52 @@ model BrowserDevice {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
   jobs       BrowserJob[]
+  /// Set when this device was minted by a scanned QR rather than a pasted code.
+  pairSession BrowserPairSession?
 
   @@index([spaceId, userId])
   @@map("browser_devices")
+}
+
+/// A QR on a computer's screen, waiting for a phone to scan it.
+///
+/// The pasted code carries everything in one string, which works when one screen both mints
+/// and reads it. A QR is the other way round: the computer shows and the phone reads, so the
+/// token travels phone to computer and needs somewhere to meet. This is that place, and it
+/// lives for minutes.
+///
+/// What the QR carries is only this row's id, and a QR on a screen in a staff room is not a
+/// secret. So the id alone buys nothing: the extension keeps a verifier it never shows, the
+/// server stores only its hash, and the token is handed to whoever can present the verifier —
+/// the one computer that drew the QR.
+model BrowserPairSession {
+  /// Random rather than a cuid: this is the whole of what the QR says and anyone who can see
+  /// the screen can read it, so it must be unguessable, not merely unique.
+  id          String         @id
+  /// sha256 of the extension's verifier, base64url. Never the verifier itself.
+  challenge   String
+  /// What the teacher called this computer in the extension, so the phone needs no typing.
+  label       String?
+  /// pending → claimed (a phone took it) → used (the computer collected it), or expired.
+  status      String         @default("pending")
+  /// The device the phone minted. Null until it is claimed; revoked if the computer declines.
+  deviceId    String?        @unique
+  device      BrowserDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  /// The pairing code, encrypted under this row's id, from the claim until it is collected.
+  ciphertext  String?
+  /// Who scanned it, so the computer can say whose 아이쌤봇 is asking before it says yes.
+  claimedById String?
+  claimedBy   User?          @relation(fields: [claimedById], references: [id], onDelete: Cascade)
+  spaceId     String?
+  space       Space?         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  claimedAt   DateTime?
+  collectedAt DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime       @default(now())
+
+  @@index([status, expiresAt])
+  @@index([createdAt])
+  @@map("browser_pair_sessions")
 }
 
 /// One task handed to a teacher's own browser, and what came back.
