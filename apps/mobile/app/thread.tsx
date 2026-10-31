@@ -54,6 +54,7 @@ import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
 import { AskActions } from "../components/AskActions";
+import { BrowserLoginCard } from "../components/BrowserLoginCard";
 import { BotAvatar } from "../components/bot-avatar";
 import {
   MarkdownArtifactPreview,
@@ -2218,6 +2219,38 @@ const MessageBubble = memo(function MessageBubble({
     (block): block is Extract<MessageBlock, { kind: "app_connect" }> =>
       block.kind === "app_connect",
   );
+  const browserLoginBlocks = message.blocks.filter(
+    (block): block is Extract<MessageBlock, { kind: "browser_login" }> =>
+      block.kind === "browser_login",
+  );
+  // Built once and dropped into every branch below: a sign-in the teacher never sees is a
+  // run that waits forever, so these must not depend on which shape the message took.
+  const messageCards = (
+    <>
+      {appConnectBlocks.map((block, index) => (
+        <AppConnectCard
+          key={`${block.provider}-${index}`}
+          botId={cardBotId}
+          block={block}
+          accessibilityActions={actionProps.accessibilityActions}
+          onAccessibilityAction={actionProps.onAccessibilityAction}
+        />
+      ))}
+      {browserLoginBlocks.map((block, index) => (
+        <BrowserLoginCard
+          key={`${block.origin}-${index}`}
+          block={block}
+          botId={cardBotId}
+          botName={memberName(members, message.botId) ?? botName ?? t("this bot")}
+          runId={message.runId}
+          messageId={message.id}
+          canAnswer={canAnswer}
+          accessibilityActions={actionProps.accessibilityActions}
+          onAccessibilityAction={actionProps.onAccessibilityAction}
+        />
+      ))}
+    </>
+  );
   const ask = message.blocks.find(
     (block): block is Extract<MessageBlock, { kind: "ask" }> =>
       block.kind === "ask" && !isApprovalAskBlock(block) && !block.actions?.length,
@@ -2231,15 +2264,7 @@ const MessageBubble = memo(function MessageBubble({
           canAnswer={canAnswer}
           onAnswer={(answer) => onAnswer(message, answer)}
         />
-        {appConnectBlocks.map((block, index) => (
-          <AppConnectCard
-            key={`${block.provider}-${index}`}
-            botId={cardBotId}
-            block={block}
-            accessibilityActions={actionProps.accessibilityActions}
-            onAccessibilityAction={actionProps.onAccessibilityAction}
-          />
-        ))}
+        {messageCards}
       </View>
     );
   }
@@ -2490,19 +2515,7 @@ const MessageBubble = memo(function MessageBubble({
     );
   }
   if (appConnectBlocks.length > 0 && appConnectBlocks.length === message.blocks.length) {
-    return (
-      <View style={{ gap: 8, width: "100%" }}>
-        {appConnectBlocks.map((block, index) => (
-          <AppConnectCard
-            key={`${block.provider}-${index}`}
-            botId={cardBotId}
-            block={block}
-            accessibilityActions={actionProps.accessibilityActions}
-            onAccessibilityAction={actionProps.onAccessibilityAction}
-          />
-        ))}
-      </View>
-    );
+    return <View style={{ gap: 8, width: "100%" }}>{messageCards}</View>;
   }
   const askBlock = message.blocks.find(
     (block) => block.kind === "ask" && Boolean(block.actions?.length),
@@ -2575,15 +2588,7 @@ const MessageBubble = memo(function MessageBubble({
             </Text>
           )}
         </View>
-        {appConnectBlocks.map((block, index) => (
-          <AppConnectCard
-            key={`${block.provider}-${index}`}
-            botId={cardBotId}
-            block={block}
-            accessibilityActions={actionProps.accessibilityActions}
-            onAccessibilityAction={actionProps.onAccessibilityAction}
-          />
-        ))}
+        {messageCards}
       </View>
     );
   }
@@ -2721,15 +2726,7 @@ const MessageBubble = memo(function MessageBubble({
             </Pressable>
           ),
         )}
-        {appConnectBlocks.map((block, index) => (
-          <AppConnectCard
-            key={`${block.provider}-${index}`}
-            botId={cardBotId}
-            block={block}
-            accessibilityActions={actionProps.accessibilityActions}
-            onAccessibilityAction={actionProps.onAccessibilityAction}
-          />
-        ))}
+        {messageCards}
       </View>
     );
   }
@@ -2748,15 +2745,7 @@ const MessageBubble = memo(function MessageBubble({
           actionProps={actionProps}
         />
       ))}
-      {appConnectBlocks.map((block, index) => (
-        <AppConnectCard
-          key={`${block.provider}-${index}`}
-          botId={cardBotId}
-          block={block}
-          accessibilityActions={actionProps.accessibilityActions}
-          onAccessibilityAction={actionProps.onAccessibilityAction}
-        />
-      ))}
+      {messageCards}
     </View>
   );
 });
