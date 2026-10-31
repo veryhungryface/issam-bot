@@ -45,7 +45,15 @@ export const BROWSER_PAIR_ID_BYTES = 16;
 /** Length of the verifier the extension keeps to itself, in bytes before base64url. */
 export const BROWSER_PAIR_VERIFIER_BYTES = 32;
 
-/** Enough pending sessions in one minute to be a script rather than a staff room. */
+/**
+ * Enough sessions in one minute to be a script rather than a staff room.
+ *
+ * Counted across the whole deployment, not per caller: the point is to bound how many rows an
+ * endpoint that cannot authenticate anybody is able to create, and a per-IP count behind two
+ * proxies would be a number this server cannot actually trust. The cost of counting it this way
+ * is that a flood stops everyone drawing a QR for a minute — annoying, and the pasted code still
+ * works, which is the other reason that path stays.
+ */
 export const BROWSER_PAIR_BURST_LIMIT = 60;
 export const BROWSER_PAIR_BURST_WINDOW_MS = 60_000;
 
