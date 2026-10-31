@@ -8,6 +8,7 @@ import {
   nextCronDate,
   ONCE_ROUTINE_CRON,
   USER_ROUTINE_KIND,
+  validateRoutineFrequency,
 } from "@rakazo/core";
 import type { PrismaClient, ThreadEvents } from "@rakazo/db";
 
@@ -119,7 +120,7 @@ export function resolveScheduleTiming(
         error: "Use runAt, delayMinutes, or delaySeconds for one-shot schedules.",
       };
     }
-    const intervalError = validateRepeatingCron(cron);
+    const intervalError = validateRepeatingCron(cron, timezone);
     if (intervalError) return { ok: false, error: intervalError };
     try {
       const nextRunAt = nextCronDate(cron, new Date(), timezone);
@@ -144,7 +145,7 @@ export function resolveScheduleTiming(
     return { ok: false, error: "minimum interval is 1 minute" };
   }
   const cron = cronFromPreset({ freq: "Interval", n: every, unit });
-  const intervalError = validateRepeatingCron(cron);
+  const intervalError = validateRepeatingCron(cron, timezone);
   if (intervalError) return { ok: false, error: intervalError };
   try {
     const nextRunAt = nextCronDate(cron, new Date(), timezone);
@@ -154,7 +155,7 @@ export function resolveScheduleTiming(
   }
 }
 
-function validateRepeatingCron(cron: string): string | null {
+function validateRepeatingCron(cron: string, timezone: string): string | null {
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) return "cron must be a 5-field cron expression.";
   const minuteExpr = parts[0] ?? "*";
@@ -165,7 +166,10 @@ function validateRepeatingCron(cron: string): string | null {
       return "minimum interval is 1 minute";
     }
   }
-  return null;
+  // The same ceiling the routine panel enforces. A bot asked in chat to "check every
+  // hour" has to be turned down here too, or the guardrail only covers the surface the
+  // teacher happened not to use.
+  return validateRoutineFrequency([cron], timezone);
 }
 
 export interface ScheduleToolDeps {

@@ -10,8 +10,22 @@ import {
 import { Input, NativeSelect, NativeSelectOption } from "@rakazo/ui-web";
 import { Clock } from "lucide-react";
 
-const UNITS: CronUnit[] = ["minutes", "hours", "days"];
-const NUMBERS = [1, 2, 3, 5, 10, 15, 30, 45];
+/**
+ * Only the units and amounts that can stay inside MAX_ROUTINE_RUNS_PER_DAY.
+ *
+ * The picker used to offer minutes beside hours and days, and "every hour" above them, so
+ * the two cheapest-looking clicks in the panel were the two most expensive schedules it
+ * could produce — 1,440 and 24 wakes a day. Nothing on screen said what a wake cost. An
+ * option the server will refuse is not a choice, so it is not offered; a routine already
+ * holding one still shows its own value, below.
+ */
+const UNITS: CronUnit[] = ["hours", "days"];
+const NUMBERS_BY_UNIT: Record<CronUnit, number[]> = {
+  minutes: [],
+  hours: [12],
+  days: [1, 2, 3, 5, 10, 15, 30],
+};
+const OFFERED_FREQS: CronFreq[] = CRON_FREQS.filter((freq) => freq !== "Every hour");
 const TIMES = [
   "6:00 AM",
   "7:00 AM",
@@ -109,7 +123,15 @@ export function RoutineSchedule({
   const { t } = useLingui();
   const { lead, detail } = describeCronPresetLocalized(value);
   const times = TIMES.includes(value.time) ? TIMES : [...TIMES, value.time];
-  const numbers = NUMBERS.includes(value.n) ? NUMBERS : [...NUMBERS, value.n].sort((a, b) => a - b);
+  // A saved routine keeps whatever it already holds in every list it appears in, so opening
+  // an older schedule shows what it actually does instead of silently snapping to a legal
+  // value the moment the panel renders.
+  const allowedNumbers = NUMBERS_BY_UNIT[value.unit] ?? [];
+  const numbers = allowedNumbers.includes(value.n)
+    ? allowedNumbers
+    : [...allowedNumbers, value.n].sort((a, b) => a - b);
+  const units = UNITS.includes(value.unit) ? UNITS : [...UNITS, value.unit];
+  const freqs = OFFERED_FREQS.includes(value.freq) ? OFFERED_FREQS : [...OFFERED_FREQS, value.freq];
 
   function patch(partial: Partial<CronPreset>) {
     onChange({ ...value, ...partial });
@@ -137,7 +159,7 @@ export function RoutineSchedule({
       aria-label={t`Interval unit`}
       onChange={(event) => patch({ unit: event.target.value as CronUnit })}
     >
-      {UNITS.map((unit) => (
+      {units.map((unit) => (
         <NativeSelectOption key={unit} value={unit}>
           {cronUnitLabel(unit)}
         </NativeSelectOption>
@@ -183,7 +205,7 @@ export function RoutineSchedule({
             patch({ freq });
           }}
         >
-          {CRON_FREQS.map((freq) => (
+          {freqs.map((freq) => (
             <NativeSelectOption key={freq} value={freq}>
               {cronFreqLabel(freq)}
             </NativeSelectOption>
@@ -198,7 +220,7 @@ export function RoutineSchedule({
         {value.freq === "Advanced" ? (
           <Input
             value={value.cron}
-            placeholder="*/3 * * * *"
+            placeholder="0 9,21 * * *"
             aria-label={t`Cron expression`}
             onChange={(event) => patch({ cron: event.target.value })}
             className="h-7 min-w-[120px] flex-1 font-mono text-[13px] md:text-[13px]"

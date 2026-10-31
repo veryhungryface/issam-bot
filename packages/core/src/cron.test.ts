@@ -6,12 +6,15 @@ import {
   formatCron,
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
+  MAX_ROUTINE_RUNS_PER_DAY,
   nextCronDate,
   nextCronDateAcross,
   nextCronDateAcrossStrict,
   ONCE_ROUTINE_CRON,
   presetFromCron,
   resolveRoutineNextRunAt,
+  routineFrequency,
+  validateRoutineFrequency,
 } from "./cron.js";
 
 function preset(partial: Partial<CronPreset> & Pick<CronPreset, "freq">): CronPreset {
@@ -266,5 +269,89 @@ describe("nextCronDateAcrossStrict", () => {
     const from = new Date("2026-08-24T00:00:00.000Z");
     expect(nextCronDateAcrossStrict([ONCE_ROUTINE_CRON], from, "UTC")).toBeNull();
     expect(nextCronDateAcrossStrict([], from, "UTC")).toBeNull();
+  });
+});
+
+describe("routine frequency", () => {
+  // Monday, mid-morning Korean time: a weekday, so the Weekdays cron has a day to land on.
+  const from = new Date("2026-10-19T01:00:00.000Z");
+
+  it("counts the wakes the schedule that emptied a teacher's credit actually made", () => {
+    // `0 */4 * * *`, twice over: the two stock-watchers, as they ran in production.
+    expect(routineFrequency(["0 */4 * * *"], "Asia/Seoul", from).perDay).toBe(6);
+    expect(validateRoutineFrequency(["0 */4 * * *"], "Asia/Seoul", from)).toContain("하루 6번");
+  });
+
+  it("counts every cron on the routine together, because each one is its own wake", () => {
+    // Two schedules of one a day is two wakes a day, not one — the cost is per wake.
+    const twice = routineFrequency(["0 9 * * *", "0 21 * * *"], "Asia/Seoul", from);
+    expect(twice.perDay).toBe(2);
+    expect(validateRoutineFrequency(["0 9 * * *", "0 21 * * *"], "Asia/Seoul", from)).toBeNull();
+
+    const thrice = ["0 9 * * *", "0 15 * * *", "0 21 * * *"];
+    expect(routineFrequency(thrice, "Asia/Seoul", from).perDay).toBe(3);
+    expect(validateRoutineFrequency(thrice, "Asia/Seoul", from)).not.toBeNull();
+  });
+
+  it("allows everything at or under the ceiling", () => {
+    for (const crons of [["0 9 * * *"], ["0 */12 * * *"], ["0 0 */3 * *"], ["30 9 * * 1"]]) {
+      expect(validateRoutineFrequency(crons, "Asia/Seoul", from)).toBeNull();
+      expect(routineFrequency(crons, "Asia/Seoul", from).perDay).toBeLessThanOrEqual(
+        MAX_ROUTINE_RUNS_PER_DAY,
+      );
+    }
+  });
+
+  it("refuses to quote a number it only partly counted", () => {
+    // Every minute is 1,440 a day; the walk stops long before that, so the message says
+    // "much more often" rather than naming the floor it happened to stop at.
+    const every = routineFrequency(["* * * * *"], "Asia/Seoul", from);
+    expect(every.truncated).toBe(true);
+    const message = validateRoutineFrequency(["* * * * *"], "Asia/Seoul", from);
+    expect(message).toContain("훨씬 잦아요");
+    expect(message).not.toMatch(/하루 \d+번이에요/);
+  });
+
+  it("counts days in the routine's own timezone, not UTC", () => {
+    // 09:00 and 23:00 Seoul is twice on one Korean day; read as UTC the second lands at
+    // 14:00 the day before, and the pair would look like one a day and slip through.
+    const crons = ["0 9 * * *", "0 23 * * *"];
+    expect(routineFrequency(crons, "Asia/Seoul", from).perDay).toBe(2);
+    expect(routineFrequency(crons, "UTC", from).perDay).toBe(2);
+    // The boundary case: 00:30 and 23:30 Seoul are the same Korean day, 15:30 and 14:30 UTC
+    // on two different UTC days.
+    const edge = ["30 0 * * *", "30 23 * * *"];
+    expect(routineFrequency(edge, "Asia/Seoul", from).perDay).toBe(2);
+  });
+
+  it("ignores one-shots and unparseable crons", () => {
+    expect(routineFrequency([ONCE_ROUTINE_CRON], "Asia/Seoul", from).perDay).toBe(0);
+    expect(validateRoutineFrequency([ONCE_ROUTINE_CRON], "Asia/Seoul", from)).toBeNull();
+    expect(validateRoutineFrequency([], "Asia/Seoul", from)).toBeNull();
+    // Malformed crons are rejected by nextCronDateAcrossStrict, not here; this must not
+    // throw on the way past them.
+    expect(routineFrequency(["not-a-cron"], "Asia/Seoul", from).perDay).toBe(0);
+  });
+
+  it("falls back to UTC for a timezone it cannot read instead of throwing", () => {
+    expect(routineFrequency(["0 */4 * * *"], "Mars/Olympus", from).perDay).toBe(6);
+  });
+
+  it("turns down the hourly preset the picker used to offer", () => {
+    expect(
+      validateRoutineFrequency(
+        [cronFromPreset(preset({ freq: "Every hour" }))],
+        "Asia/Seoul",
+        from,
+      ),
+    ).not.toBeNull();
+    // And the interval default now lands inside the limit.
+    expect(
+      validateRoutineFrequency(
+        [cronFromPreset({ freq: "Interval", n: 12, unit: "hours" })],
+        "Asia/Seoul",
+        from,
+      ),
+    ).toBeNull();
   });
 });

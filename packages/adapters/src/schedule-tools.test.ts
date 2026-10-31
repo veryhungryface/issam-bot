@@ -19,21 +19,30 @@ describe("resolveScheduleTiming", () => {
     });
   });
 
-  it("accepts every 1 minute", () => {
-    const result = resolveScheduleTiming({ every: 1, unit: "minutes" });
+  it("accepts the densest schedule the daily ceiling allows", () => {
+    const result = resolveScheduleTiming({ every: 12, unit: "hours" });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.cron).toBe("*/1 * * * *");
+    expect(result.cron).toBe("0 */12 * * *");
     expect(result.oneShot).toBe(false);
     expect(result.nextRunAt.getTime()).toBeGreaterThan(Date.now());
   });
 
-  it("accepts cron every minute", () => {
-    const result = resolveScheduleTiming({ cron: "*/1 * * * *" });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.cron).toBe("*/1 * * * *");
-    expect(result.oneShot).toBe(false);
+  it("refuses a schedule over the daily ceiling, asked for either way", () => {
+    // A minute apart used to be accepted here. The cost of a wake is the same whether the
+    // bot was asked in chat or the schedule was typed into the panel, so both are refused.
+    for (const schedule of [
+      { every: 1, unit: "minutes" },
+      { every: 1, unit: "hours" },
+      { cron: "*/1 * * * *" },
+      { cron: "0 */4 * * *" },
+      { cron: "0 9,15,21 * * *" },
+    ]) {
+      const result = resolveScheduleTiming(schedule);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain("하루 2번까지만");
+    }
   });
 
   it("creates one-shot schedules with @once cron", () => {
@@ -179,17 +188,17 @@ describe("schedule tool persistence", () => {
       threadId: "thread-1",
       name: "Morning joke",
       prompt: "Tell a joke",
-      schedule: { every: 1, unit: "minutes" },
+      schedule: { every: 12, unit: "hours" },
     });
 
-    expect(result).toMatchObject({ ok: true, routineId: "routine-1", cron: "*/1 * * * *" });
+    expect(result).toMatchObject({ ok: true, routineId: "routine-1", cron: "0 */12 * * *" });
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           spaceId: "ws-1",
           userId: "user-1",
           threadId: "thread-1",
-          crons: ["*/1 * * * *"],
+          crons: ["0 */12 * * *"],
           active: true,
         }),
       }),
@@ -230,7 +239,7 @@ describe("schedule tool persistence", () => {
       threadId: "thread-1",
       name: "Morning joke",
       prompt: "Tell a joke",
-      schedule: { every: 1, unit: "minutes" },
+      schedule: { every: 12, unit: "hours" },
     });
 
     expect(result).toMatchObject({ ok: true, routineId: "routine-1" });
@@ -268,7 +277,7 @@ describe("schedule tool persistence", () => {
       threadId: "thread-1",
       name: "Morning joke",
       prompt: "Tell a joke",
-      schedule: { every: 1, unit: "minutes" },
+      schedule: { every: 12, unit: "hours" },
     });
 
     expect(result).toEqual({ error: "Could not schedule the reminder. Try again." });
@@ -308,7 +317,7 @@ describe("schedule tool persistence", () => {
       threadId: "thread-1",
       name: "Morning joke",
       prompt: "Tell a joke",
-      schedule: { every: 1, unit: "minutes" },
+      schedule: { every: 12, unit: "hours" },
     });
 
     expect(result).toEqual({ error: "Could not schedule the reminder. Try again." });
@@ -353,7 +362,7 @@ describe("schedule tool persistence", () => {
         threadId: "thread-1",
         name: "Morning joke",
         prompt: "Tell a joke",
-        schedule: { every: 1, unit: "minutes" },
+        schedule: { every: 12, unit: "hours" },
       }),
     ).rejects.toThrow("deactivate failed");
   });

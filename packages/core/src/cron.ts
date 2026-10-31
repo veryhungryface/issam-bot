@@ -53,7 +53,10 @@ export type CronPresetInput = {
 };
 
 export function defaultCronPreset(): CronPreset {
-  return { freq: "Every day", n: 3, unit: "minutes", time: "9:00 AM", cron: "" };
+  // The interval defaults sit at the ceiling MAX_ROUTINE_RUNS_PER_DAY allows, so switching
+  // the picker to Interval lands on a schedule that saves. It used to default to every
+  // three minutes, which is 480 wakes a day.
+  return { freq: "Every day", n: 12, unit: "hours", time: "9:00 AM", cron: "" };
 }
 
 export function cronFromPreset(input: CronPresetInput): string {
@@ -262,4 +265,119 @@ function stepValue(expr: string): number | null {
 
 function isInt(expr: string): boolean {
   return /^\d+$/.test(expr);
+}
+
+/**
+ * How often a routine may wake, at most.
+ *
+ * A wake that finds nothing to report still costs full price: the bot boots a browser,
+ * reads the page, decides there is nothing to say, and bills the tokens and the browser
+ * seconds anyway. Two stock-watchers on a four-hourly cron — six wakes a day each — spent one
+ * teacher's entire weekly credit in six days and then locked her out of the product, while
+ * sending her not one message. Her prompt had asked for silence when the item was sold out,
+ * so the silence was correct and the bill was the only thing she ever saw of it.
+ *
+ * Twice a day is the ceiling because the schedule picker offered "every hour" and a
+ * one-minute interval beside it with nothing to say what either would cost, and because at
+ * this rate a week of wakes is a fraction of the weekly credit rather than all of it.
+ * Check-in routines are system-owned, keep their own cadence, and are written straight to
+ * the table by `check-in.ts`; this governs the schedules people write.
+ */
+export const MAX_ROUTINE_RUNS_PER_DAY = 2;
+
+/** Days of schedule to walk when counting. Long enough that a weekly cron shows its one. */
+const FREQUENCY_SCAN_DAYS = 8;
+
+/**
+ * Firings to enumerate per cron before giving up.
+ *
+ * `* * * * *` would fire 11,520 times across the window. Counting all of them to learn it
+ * is over the limit is wasted work, so the walk stops early and says so — the caller must
+ * not then quote the number as if it were the whole truth.
+ */
+const FREQUENCY_SCAN_CEILING = 1_500;
+
+export interface RoutineFrequency {
+  /** Firings on the busiest local day in the window. */
+  perDay: number;
+  /** True when the walk stopped early, so `perDay` is a floor, not the count. */
+  truncated: boolean;
+}
+
+/**
+ * How many times a routine's schedules fire on their busiest local day.
+ *
+ * Counted across every cron on the routine together, because the cost is paid per wake and
+ * a routine wakes once for each. Local days, not UTC ones: a teacher who says "twice a day"
+ * means twice between one Korean midnight and the next. One-shot slots and crons that do
+ * not parse are skipped — the first does not recur and the second is rejected elsewhere.
+ */
+export function routineFrequency(
+  crons: string[],
+  timezone = "UTC",
+  from: Date = new Date(),
+): RoutineFrequency {
+  const zone = validTimezoneOrUtc(timezone);
+  const localDay = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const horizon = new Date(from.getTime() + FREQUENCY_SCAN_DAYS * 24 * 60 * 60_000);
+  const perDay = new Map<string, number>();
+  let busiest = 0;
+  let truncated = false;
+
+  for (const cron of crons) {
+    if (isOneShotRoutineCron(cron)) continue;
+    let schedule: Cron;
+    try {
+      schedule = new Cron(cron, { paused: true, timezone: zone });
+    } catch {
+      continue;
+    }
+    let cursor = from;
+    let steps = 0;
+    for (;;) {
+      if (steps >= FREQUENCY_SCAN_CEILING) {
+        truncated = true;
+        break;
+      }
+      let next: Date | null;
+      try {
+        next = schedule.nextRun(cursor);
+      } catch {
+        break;
+      }
+      if (!next || next > horizon) break;
+      const key = localDay.format(next);
+      const count = (perDay.get(key) ?? 0) + 1;
+      perDay.set(key, count);
+      if (count > busiest) busiest = count;
+      cursor = next;
+      steps += 1;
+    }
+  }
+
+  return { perDay: busiest, truncated };
+}
+
+/**
+ * Why these schedules cannot be saved, or `null` when they can.
+ *
+ * Korean, because this string is what the person reading the schedule editor sees: the web
+ * routine panel renders the server's message verbatim, the same way the weekly credit
+ * message in `credit.ts` reaches them.
+ */
+export function validateRoutineFrequency(
+  crons: string[],
+  timezone = "UTC",
+  from: Date = new Date(),
+): string | null {
+  const { perDay, truncated } = routineFrequency(crons, timezone, from);
+  if (perDay <= MAX_ROUTINE_RUNS_PER_DAY) return null;
+  const limit = `루틴은 하루 ${MAX_ROUTINE_RUNS_PER_DAY}번까지만 실행할 수 있어요.`;
+  const now = truncated ? "지금 설정은 그보다 훨씬 잦아요." : `지금 설정은 하루 ${perDay}번이에요.`;
+  return `${limit} ${now} 간격을 넓혀 주세요.`;
 }
