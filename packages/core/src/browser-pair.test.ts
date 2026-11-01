@@ -5,6 +5,7 @@ import {
   BROWSER_PAIR_VERIFIER_BYTES,
   browserPairExpired,
   browserPairSecondsLeft,
+  browserPairSessionFromScan,
   browserPairUrl,
   normalizeBrowserPairChallenge,
   normalizeBrowserPairId,
@@ -68,5 +69,37 @@ describe("expiry", () => {
     const expiresAt = new Date(now.getTime() - 1);
     expect(browserPairExpired({ expiresAt }, now)).toBe(true);
     expect(browserPairSecondsLeft(expiresAt, now)).toBe(0);
+  });
+});
+
+describe("browserPairSessionFromScan", () => {
+  const origin = "https://issam-bot.vercel.app";
+  const id = Buffer.alloc(BROWSER_PAIR_ID_BYTES, 0x41).toString("base64url");
+
+  it("reads the id out of our own pairing link", () => {
+    expect(browserPairSessionFromScan(`${origin}/pair/${id}`, origin)).toBe(id);
+    expect(browserPairSessionFromScan(`  ${origin}/pair/${id}  `, origin)).toBe(id);
+  });
+
+  it("refuses a link to anywhere else, which is most of what a camera sees", () => {
+    expect(browserPairSessionFromScan(`https://evil.test/pair/${id}`, origin)).toBeNull();
+    expect(browserPairSessionFromScan(`http://issam-bot.vercel.app/pair/${id}`, origin)).toBeNull();
+    expect(browserPairSessionFromScan(`${origin}:8443/pair/${id}`, origin)).toBeNull();
+  });
+
+  it("refuses our origin with a different path", () => {
+    expect(browserPairSessionFromScan(`${origin}/app`, origin)).toBeNull();
+    expect(browserPairSessionFromScan(`${origin}/pair/${id}/more`, origin)).toBeNull();
+    expect(browserPairSessionFromScan(`${origin}/pair/`, origin)).toBeNull();
+  });
+
+  it("refuses an id of the wrong shape even on the right path", () => {
+    expect(browserPairSessionFromScan(`${origin}/pair/short`, origin)).toBeNull();
+  });
+
+  it("refuses what is not a url at all", () => {
+    expect(browserPairSessionFromScan("WIFI:S=staffroom;T=WPA;P=hunter2;;", origin)).toBeNull();
+    expect(browserPairSessionFromScan(id, origin)).toBeNull();
+    expect(browserPairSessionFromScan(null, origin)).toBeNull();
   });
 });
