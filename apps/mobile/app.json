@@ -37,6 +37,14 @@
           "microphonePermission": false
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "컴퓨터 화면의 연결 QR을 찍어 크롬을 연결할 때 카메라를 사용합니다.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
       "expo-sharing",
       "./plugins/with-worklets-headers"
     ],

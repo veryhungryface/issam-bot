@@ -224,6 +224,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Hi, this is how I'll sound when I read replies out loud.": "你好，这是我朗读回复时的声音。",
   "I’m done": "我完成了",
   "If you heard that, voice is ready.": "如果你听到了，说明语音已就绪。",
+  "My Chrome": "我的 Chrome",
+  "Scan the QR on your computer so bots can work in your own browser":
+    "扫描电脑屏幕上的二维码，让机器人在你自己的浏览器中工作",
   Integrations: "集成",
   "If an account exists for that address, we sent a password reset link.":
     "如果该地址已有账户，我们已发送密码重置链接。",

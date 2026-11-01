@@ -232,6 +232,9 @@ export const KO_MESSAGES: Record<string, string> = {
     "안녕하세요. 답변을 소리 내어 읽을 때 이런 목소리로 들립니다.",
   "I’m done": "조작 끝내기",
   "If you heard that, voice is ready.": "샘플이 들렸다면 음성 설정이 완료되었습니다.",
+  "My Chrome": "내 크롬에 일 맡기기",
+  "Scan the QR on your computer so bots can work in your own browser":
+    "컴퓨터 화면의 QR을 찍어, 봇이 내 브라우저에서 일하게 합니다",
   Integrations: "앱·도구 연동",
   "If an account exists for that address, we sent a password reset link.":
     "해당 주소로 계정이 있다면 비밀번호 재설정 링크를 보냈습니다.",

@@ -100,3 +100,27 @@ export function browserPairUrl(origin: string, sessionId: string): string {
 export function browserPairSecondsLeft(expiresAt: Date, now: Date = new Date()): number {
   return Math.max(0, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
 }
+
+/**
+ * The session id out of something a camera read, or `null`.
+ *
+ * A scanner is pointed at the world and will happily hand back a poster, a wifi code or a link
+ * to somewhere else entirely. So this accepts one shape only: a `/pair/<id>` link on the
+ * deployment the phone is already signed in to. Anything else — another origin, a path with
+ * more to it, an id of the wrong shape — is not our QR, and the screen says so rather than
+ * sending a stranger's string to the server.
+ */
+export function browserPairSessionFromScan(value: unknown, origin: string): string | null {
+  if (typeof value !== "string") return null;
+  let url: URL;
+  let base: URL;
+  try {
+    url = new URL(value.trim());
+    base = new URL(origin);
+  } catch {
+    return null;
+  }
+  if (url.origin !== base.origin) return null;
+  const match = /^\/pair\/([^/]+)$/.exec(url.pathname);
+  return match ? normalizeBrowserPairId(decodeURIComponent(match[1] ?? "")) : null;
+}
